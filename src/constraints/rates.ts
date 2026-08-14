@@ -138,7 +138,7 @@ export function rivalSpeed(state: GameState, rival: Rival): RatioPerSecond {
   // 이미 끝난 경쟁사는 더 이상 진행하지 않습니다
   if (rival.status === 'collapsed' || rival.status === 'achieved') return 0;
 
-  return rival.baseSpeed * rival.momentum * personalityMultiplier(state, rival) * lateBoost(rival);
+  return rival.baseSpeed * rival.momentum * personalityMultiplier(state, rival) * lateBoost(state, rival);
 }
 
 /**
@@ -180,10 +180,31 @@ function personalityMultiplier(state: GameState, rival: Rival): Multiplier {
 /**
  * 경쟁사도 같은 지점에서 자기개선에 들어갑니다.
  * 플레이어만 후반에 빨라지면 경주가 싱거워지기 때문입니다.
+ *
+ * 처음에는 후반에 들어서는 순간 배수가 계단처럼 뛰었습니다. 그러면 45%를 넘는
+ * 순간 경쟁사가 갑자기 튀어나가 손쓸 새도 없이 끝나버립니다.
+ * 지금은 플레이어의 자율 연구 보너스와 똑같이 '얼마나 깊이 왔는지'에 비례해
+ * 서서히 붙습니다 — 45%에서 1배, 결승선에서 rivalLateBoost 배.
  */
-function lateBoost(rival: Rival): Multiplier {
+function lateBoost(state: GameState, rival: Rival): Multiplier {
   if (rival.researchProgress < PHASE2.startProgress) return 1;
-  return PHASE2.rivalLateBoost;
+
+  const span = RESEARCH.goal - PHASE2.startProgress;
+  if (span <= 0) return PHASE2.rivalLateBoost;
+
+  const rivalDepth = clamp((rival.researchProgress - PHASE2.startProgress) / span, 0, 1);
+
+  // 경쟁사의 깊이와 내 깊이를 반씩 섞습니다.
+  //
+  // 경쟁사 깊이만 쓰면 못하는 사람이 두 번 벌을 받습니다 — 느려서 늦게 도착하는데
+  // 그동안 경쟁사는 먼저 가속해 있으니 후반 화면을 구경도 못 하고 끝납니다
+  // (재보니 후반 도달이 40판 중 30판에서 19판으로 떨어졌습니다).
+  // 반대로 내 깊이만 쓰면, 뒤처져 있다가 추월하는 잘하는 사람에게는 가속이
+  // 거의 안 붙어서 원래 문제인 '추월하면 그대로 끝'이 그대로 남습니다.
+  // 반반이 두 경우 모두를 살립니다.
+  const depth = (rivalDepth + selfImproveDepth(state)) / 2;
+
+  return 1 + (PHASE2.rivalLateBoost - 1) * depth;
 }
 
 /* ===========================================================================
