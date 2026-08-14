@@ -29,7 +29,10 @@ export {
   powerCostPerSecond,
   datacenterPrice,
   researcherPrice,
+  fundingBlock,
   fundingOffer,
+  fundingReadyAt,
+  fundingRequiredProgress,
 } from './pricing';
 
 // ── 설비 한계 ──

@@ -21,14 +21,6 @@ import type { GameState, Money, Multiplier, RatioPerSecond, Rival } from '../typ
 import { activeGpus } from './capacity';
 import { powerCostPerSecond } from './pricing';
 
-/**
- * 속도형 경쟁사가 막판 스퍼트를 시작하는 진행도 기준.
- *
- * ※ 이 값만은 balance.ts 에 자리가 없어서 여기에 두었습니다.
- *   나중에 조절하고 싶어지면 balance.ts 의 RIVAL_CURVE 로 옮기는 게 좋습니다.
- */
-const SPEED_SPRINT_FROM_PROGRESS = 0.7;
-
 /** 값을 최소~최대 사이로 가둡니다 (예: 안전 수준은 0~1을 벗어날 수 없음) */
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -151,7 +143,9 @@ function personalityMultiplier(state: GameState, rival: Rival): Multiplier {
       );
     }
     case 'speed':
-      return rival.researchProgress >= SPEED_SPRINT_FROM_PROGRESS ? RIVAL_CURVE.speedSprint : 1;
+      return rival.researchProgress >= RIVAL_CURVE.speedSprintFromProgress
+        ? RIVAL_CURVE.speedSprint
+        : 1;
     case 'capital':
       return 1;
     default:

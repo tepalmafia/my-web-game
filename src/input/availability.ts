@@ -30,7 +30,10 @@ import {
   checkRequirement,
   computeDerived,
   datacenterPrice,
+  fundingBlock,
   fundingOffer,
+  fundingReadyAt,
+  fundingRequiredProgress,
   gpuCapacity,
   gpuUnitPrice,
   powerContractUpfront,
@@ -42,7 +45,7 @@ import {
 } from '../constraints';
 import type { LimitViolation } from '../constraints';
 import type { EventChoice, GameAction, GameState, Money, PanelId, PlayerDelta } from '../types';
-import { formatCompact, formatMegawatts, formatMoney, formatPercent } from './format';
+import { formatCompact, formatDuration, formatMegawatts, formatMoney, formatPercent } from './format';
 import { researcherHireCost } from './limits';
 import {
   withDatacenters,
@@ -252,14 +255,31 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
 
     case 'raiseFunding': {
       const offer = fundingOffer(state);
-      const detail =
-        offer === null
-          ? '더 내줄 지분이 남지 않았습니다'
-          : `자금 +${formatMoney(offer.amount)} · 지분 ${formatPercent(offer.equityCost)} 내줌`;
+      const why = fundingBlock(state);
+
+      // 못 받는 이유마다 안내 문구가 다릅니다.
+      // 지분 소진은 영영 끝이지만, 시간·성과 부족은 기다리면 열리는 조건이라
+      // "얼마나 더 있어야 하는지"를 숫자로 알려줘야 답답하지 않습니다.
+      let detail: string;
+      if (offer !== null) {
+        detail = `자금 +${formatMoney(offer.amount)} · 지분 ${formatPercent(offer.equityCost)} 내줌`;
+      } else if (why === 'tooSoon') {
+        detail = `다음 라운드까지 ${formatDuration(Math.max(0, fundingReadyAt(state) - state.elapsed))} 남음`;
+      } else if (why === 'needProgress') {
+        detail = `진행도 ${formatPercent(fundingRequiredProgress(state))} 이상이어야 다음 투자를 받습니다`;
+      } else {
+        detail = '더 내줄 지분이 남지 않았습니다';
+      }
 
       const blocked = operationBlock(state, 'funding');
       if (blocked !== null) return block(blocked, null, detail);
 
+      if (why === 'tooSoon') {
+        return block('투자자들이 아직 다음 라운드를 열지 않았습니다', null, detail);
+      }
+      if (why === 'needProgress') {
+        return block('성과가 더 쌓여야 다음 투자를 받을 수 있습니다', null, detail);
+      }
       // 지분을 다 팔았으면 더 이상 투자를 받을 수 없습니다
       if (offer === null) return block(reasonFor({ kind: 'equityExhausted' }), null, detail);
 

@@ -12,7 +12,7 @@
  */
 
 import { DATACENTER, FUNDING, GPU, POWER, RESEARCHER } from '../balance';
-import type { GameState, Megawatts, Money, Ratio } from '../types';
+import type { GameState, Megawatts, Money, Ratio, Seconds } from '../types';
 
 /**
  * GPU 한 장의 현재 가격.
@@ -62,23 +62,53 @@ export function researcherPrice(state: GameState): Money {
   return RESEARCHER.basePrice * Math.pow(RESEARCHER.priceGrowth, state.player.researchers);
 }
 
-/**
- * 지금 받을 수 있는 투자 조건 (들어오는 금액과 내주는 지분).
- *
- * 라운드가 올라갈수록 금액도 커지지만 내주는 지분도 함께 커집니다.
- * 이번 투자를 받으면 내 지분이 최소선(FUNDING.minEquity) 밑으로 내려가는 경우
- * null 을 돌려줍니다 = "더 이상 팔 지분이 없다".
- * → 돈이 필요할 때마다 투자 버튼만 연타하는 플레이를 막는 장치입니다.
- */
-export function fundingOffer(state: GameState): { amount: Money; equityCost: Ratio } | null {
-  const round = Math.max(0, state.player.fundingRound);
+/** 투자를 지금 받을 수 없는 이유 */
+export type FundingBlock =
+  /** 내줄 지분이 남지 않음 — 이 판에서는 두 번 다시 받을 수 없습니다 */
+  | 'equityExhausted'
+  /** 아직 이르다 — 시간이 더 지나야 합니다 */
+  | 'tooSoon'
+  /** 성과가 부족하다 — 진행도를 더 올려야 합니다 */
+  | 'needProgress';
 
-  const amount = FUNDING.baseAmount * Math.pow(FUNDING.amountGrowth, round);
+/** 다음 라운드를 받으려면 최소 몇 초가 지나야 하는지 */
+export function fundingReadyAt(state: GameState): Seconds {
+  return Math.max(0, state.player.fundingRound) * FUNDING.roundIntervalSeconds;
+}
+
+/** 다음 라운드를 받으려면 진행도가 최소 얼마여야 하는지 */
+export function fundingRequiredProgress(state: GameState): Ratio {
+  return Math.max(0, state.player.fundingRound) * FUNDING.progressPerRound;
+}
+
+/**
+ * 지금 투자를 받을 수 없는 이유를 알려줍니다. 받을 수 있으면 null.
+ *
+ * 조건이 세 개인 이유: 지분만 제한하면 시작하자마자 버튼을 연타해서
+ * 게임 전체 자금을 한 번에 다 받아버릴 수 있기 때문입니다.
+ * 시간과 성과 조건이 라운드를 게임 전체에 고르게 흩뿌려 줍니다.
+ */
+export function fundingBlock(state: GameState): FundingBlock | null {
+  const round = Math.max(0, state.player.fundingRound);
   const equityCost = FUNDING.baseEquityCost * Math.pow(FUNDING.equityCostGrowth, round);
 
   // 이번 라운드를 받고 나면 남는 지분
-  const remaining = state.player.equityRetained - equityCost;
-  if (remaining < FUNDING.minEquity) return null;
+  if (state.player.equityRetained - equityCost < FUNDING.minEquity) return 'equityExhausted';
+  if (state.elapsed < fundingReadyAt(state)) return 'tooSoon';
+  if (state.player.researchProgress < fundingRequiredProgress(state)) return 'needProgress';
+  return null;
+}
+
+/**
+ * 지금 받을 수 있는 투자 조건. 받을 수 없는 상황이면 null 을 돌려줍니다.
+ * 화면과 상태 변경 양쪽이 이 함수를 거치므로, 여기서 null 이면 실제로 돈이 들어오지 않습니다.
+ */
+export function fundingOffer(state: GameState): { amount: Money; equityCost: Ratio } | null {
+  if (fundingBlock(state) !== null) return null;
+
+  const round = Math.max(0, state.player.fundingRound);
+  const amount = FUNDING.baseAmount * Math.pow(FUNDING.amountGrowth, round);
+  const equityCost = FUNDING.baseEquityCost * Math.pow(FUNDING.equityCostGrowth, round);
 
   return { amount, equityCost };
 }
