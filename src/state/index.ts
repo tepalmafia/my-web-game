@@ -1,0 +1,939 @@
+/**
+ * ===========================================================================
+ *  state — 게임의 두뇌 (이 폴더의 정문)
+ * ===========================================================================
+ *
+ *  화면(버튼)은 게임 상태를 직접 고치지 않습니다. 대신 "투자를 유치하겠다" 같은
+ *  신호(액션)만 보내고, 그 신호를 받아 다음 상태를 만드는 일을 여기서 합니다.
+ *
+ *      지금 상태 + 액션  →  reducer  →  새 상태
+ *
+ *  ★ 지켜야 할 두 가지 규칙
+ *
+ *    1) 들어온 상태를 절대 고치지 않습니다.
+ *       항상 새 객체를 만들어 돌려줍니다. (React 가 화면을 다시 그리는 기준이라
+ *       원본을 몰래 고치면 화면이 갱신되지 않는 버그가 생깁니다)
+ *
+ *    2) 숫자와 계산은 여기서 만들지 않습니다.
+ *       모든 숫자는 balance.ts, 모든 계산은 constraints 폴더에서 가져옵니다.
+ *       이 파일이 하는 일은 "가져온 값을 더하고 빼서 새 상태를 조립하는 것"뿐입니다.
+ *       → 밸런스를 고치고 싶으면 balance.ts 만 보면 됩니다.
+ *
+ *  ─ 화면에서 쓰는 법
+ *      const [state, dispatch] = useReducer(reducer, createInitialState('아우로라 AI', 12345));
+ *      dispatch({ type: 'startGame', labName: '내 연구소', rngSeed: 12345 });
+ *
+ *    createInitialState 가 돌려주는 상태는 '시작 화면(title)' 상태입니다.
+ *    startGame 액션을 받아야 비로소 시간이 흐르기 시작합니다.
+ */
+
+import {
+  EVENTS,
+  MARKET,
+  RESEARCH,
+  RIVALS,
+  SAFETY,
+  SPEED_OPTIONS,
+  START,
+  UNLOCK,
+} from '../balance';
+import {
+  accidentChancePerSecond,
+  checkAffordable,
+  checkGpuPurchase,
+  checkOutcome,
+  checkRequirement,
+  computeDerived,
+  datacenterPrice,
+  fundingOffer,
+  gpuCapacity,
+  gpuUnitPrice,
+  netPerSecond,
+  powerAvailable,
+  powerContractUpfront,
+  powerDemand,
+  researchRate,
+  researcherPrice,
+  rivalSpeed,
+} from '../constraints';
+import { formatCount, formatMoney, formatPower, groupDigits } from '../constraints/format';
+import { isRunning } from '../constraints/running';
+import type {
+  GameAction,
+  GameEvent,
+  GameOutcome,
+  GameState,
+  LogEntry,
+  LogTone,
+  MarketDelta,
+  MarketState,
+  Megawatts,
+  PanelId,
+  PlayerDelta,
+  PlayerState,
+  Ratio,
+  Rival,
+  RivalDelta,
+  RivalId,
+  RivalStatus,
+  Seconds,
+  UnlockState,
+} from '../types';
+import { EVENT_POOL } from './events';
+import { nextRandom, pickIndex, randomRange } from './rng';
+
+/**
+ * 로그창에 남겨두는 최대 줄 수.
+ * 게임 규칙과 상관없는 '화면과 메모리' 문제라 balance.ts 가 아니라 여기에 둡니다.
+ * (25분 동안 쌓이는 줄을 전부 들고 있을 이유가 없습니다)
+ */
+const MAX_LOG_LINES = 60;
+
+/* ===========================================================================
+ *  작은 도구들 — 이 파일 안에서만 씁니다
+ * ======================================================================== */
+
+/**
+ * 비율 값을 0~1 사이로 가둡니다.
+ * 여기서 쓰는 0 과 1 은 밸런스 숫자가 아니라 types.ts 가 정한 비율의 정의
+ * (0 = 0%, 1 = 100%) 그 자체입니다.
+ */
+function clampRatio(value: number): Ratio {
+  return Math.max(0, Math.min(1, value));
+}
+
+/** 진행도를 0 ~ 목표치 사이로 가둡니다. 목표치는 balance.ts 가 정합니다 */
+function clampProgress(value: number): Ratio {
+  return Math.max(0, Math.min(RESEARCH.goal, value));
+}
+
+/** 안전 수준을 balance.ts 가 허용한 범위 안으로 가둡니다 */
+function clampSafety(value: number): Ratio {
+  return Math.max(SAFETY.minLevel, Math.min(1, value));
+}
+
+/** 0~1 비율을 '90%' 같은 글자로 바꿉니다 (로그에 보여줄 때만 씁니다) */
+function percentText(ratio: Ratio): string {
+  return `${groupDigits(ratio * 100)}%`;
+}
+
+/** 아직 로그창에 넣기 전의 문장 한 줄 */
+interface PendingLog {
+  text: string;
+  tone: LogTone;
+}
+
+/**
+ * 로그 여러 줄을 한꺼번에 붙인 새 로그 목록을 만듭니다.
+ *
+ * · 최신 줄이 배열 맨 앞에 옵니다 (화면에서 위가 최신)
+ * · 줄 번호(id)는 1씩 올라갑니다
+ * · 너무 길어지지 않게 MAX_LOG_LINES 줄까지만 남깁니다
+ */
+function appendLogs(
+  log: LogEntry[],
+  nextLogId: number,
+  at: Seconds,
+  lines: PendingLog[],
+): { log: LogEntry[]; nextLogId: number } {
+  if (lines.length === 0) return { log, nextLogId };
+
+  let merged = log;
+  let id = nextLogId;
+  for (const line of lines) {
+    merged = [{ id, at, text: line.text, tone: line.tone }, ...merged];
+    id += 1;
+  }
+  return { log: merged.slice(0, MAX_LOG_LINES), nextLogId: id };
+}
+
+/* ===========================================================================
+ *  1. 시작 상태 만들기
+ * ======================================================================== */
+
+/**
+ * 새 게임의 첫 상태를 만듭니다.
+ *
+ * 모든 시작값은 balance.ts 의 START 에서 가져오고, 경쟁사 3곳은 RIVALS 템플릿에서
+ * 그대로 찍어냅니다. 처음에는 '투자 유치'와 'GPU 구매' 두 항목만 열려 있고,
+ * 나머지는 조건을 만족할 때마다 하나씩 열립니다.
+ *
+ * 돌려주는 상태는 아직 '시작 화면(title)'입니다.
+ * startGame 액션을 받아야 시간이 흐르기 시작합니다.
+ *
+ * rngSeed 는 이 판의 주사위 씨앗입니다. 같은 씨앗으로 시작하면 사건 순서까지
+ * 똑같은 판이 그대로 재현됩니다.
+ */
+export function createInitialState(labName: string, rngSeed: number): GameState {
+  const trimmed = labName.trim();
+
+  const player: PlayerState = {
+    labName: trimmed.length > 0 ? trimmed : START.labName,
+    money: START.money,
+    gpus: START.gpus,
+    // 전력 계약과 진행도는 '아직 아무것도 하지 않은 상태'라 0에서 출발합니다
+    powerContracted: 0,
+    researchProgress: 0,
+    datacenters: START.datacenters,
+    researchers: START.researchers,
+    fundingRound: 0,
+    equityRetained: START.equity,
+    safety: START.safety,
+  };
+
+  // 경쟁사는 전부 같은 출발선(진행도 0)에서 평소 속도로 시작합니다.
+  // momentum 1 은 '아무 보정도 붙어 있지 않다'는 뜻입니다.
+  const rivals: Rival[] = RIVALS.map((template) => ({
+    id: template.id,
+    name: template.name,
+    personality: template.personality,
+    researchProgress: 0,
+    reportedProgress: 0,
+    baseSpeed: template.baseSpeed,
+    momentum: 1,
+    status: 'racing',
+  }));
+
+  const unlocks: UnlockState = {
+    funding: true,
+    gpu: true,
+    power: false,
+    datacenter: false,
+    researchers: false,
+    rivals: false,
+    safety: false,
+  };
+
+  const market: MarketState = {
+    gpuPrice: MARKET.normalGpuPrice,
+    powerPrice: MARKET.normalPowerPrice,
+    distortionRemaining: 0,
+  };
+
+  const opening = appendLogs([], 1, 0, [
+    {
+      text: '투자를 유치하고 GPU를 사서 훈련을 시작하세요. 경쟁 연구소 세 곳이 이미 달리고 있습니다.',
+      tone: 'info',
+    },
+  ]);
+
+  return {
+    phase: 'title',
+    outcome: null,
+    outcomeRivalId: null,
+    paused: false,
+    activeEvent: null,
+
+    elapsed: 0,
+    tick: 0,
+    // 배속은 플레이어가 고를 수 있는 첫 번째 값(=기본 속도)으로 시작합니다
+    speed: SPEED_OPTIONS[0],
+
+    player,
+    rivals,
+
+    unlocks,
+    market,
+    nextEventIn: EVENTS.firstAt,
+    seenEventIds: [],
+
+    log: opening.log,
+    nextLogId: opening.nextLogId,
+    rngSeed,
+  };
+}
+
+/* ===========================================================================
+ *  2. reducer — 액션 하나를 받아 새 상태를 만듭니다
+ * ======================================================================== */
+
+/**
+ * 게임의 모든 변화가 지나가는 단 하나의 문입니다.
+ *
+ * types.ts 에 적힌 12가지 액션을 전부 처리하며,
+ * 지금 할 수 없는 일(자금 부족, 아직 안 열린 항목, 일시정지 중 등)이 들어오면
+ * 아무 일도 하지 않고 받은 상태를 그대로 돌려줍니다.
+ * → 화면 쪽에서 "누를 수 있나"를 미리 확인하지 않아도 게임이 망가지지 않습니다.
+ */
+export function reducer(state: GameState, action: GameAction): GameState {
+  switch (action.type) {
+    case 'startGame':
+      return startGame(action.labName, action.rngSeed);
+    case 'tick':
+      return runTick(state, action.deltaSeconds);
+    case 'raiseFunding':
+      return raiseFunding(state);
+    case 'buyGpu':
+      return buyGpu(state, action.count);
+    case 'contractPower':
+      return contractPower(state, action.megawatts);
+    case 'buildDatacenter':
+      return buildDatacenter(state);
+    case 'hireResearcher':
+      return hireResearcher(state, action.count);
+    case 'setSafety':
+      return setSafety(state, action.value);
+    case 'resolveEvent':
+      return resolveEvent(state, action.choiceIndex);
+    case 'setPaused':
+      return state.paused === action.paused ? state : { ...state, paused: action.paused };
+    case 'setSpeed':
+      return setSpeed(state, action.speed);
+    case 'restart':
+      return restart(state);
+    default:
+      return state;
+  }
+}
+
+/* ===========================================================================
+ *  3. 시간이 흐른다 — tick
+ * ======================================================================== */
+
+/**
+ * 0.1초가 흘렀을 때 벌어지는 모든 일을 순서대로 처리합니다.
+ *
+ *   ① 시간   → ② 연구 진행 → ③ 돈 → ④ 시장 회복 → ⑤ 경쟁사 진행
+ *   → ⑥ 사고 판정 → ⑦ 새 항목 해금 → ⑧ 사건 발생 → ⑨ 승패 판정
+ *
+ * deltaSeconds 에는 배속이 이미 반영되어 들어옵니다.
+ * (2배속이면 화면 쪽 타이머가 두 배의 시간을 넣어 보냅니다)
+ */
+function runTick(state: GameState, deltaSeconds: Seconds): GameState {
+  // ⓐ 시간이 흐르지 않는 상황(시작 화면·종료·일시정지·사건 창)이면 아무 일도 없습니다
+  if (!isRunning(state)) return state;
+  // 0 이하이거나 숫자가 아닌 시간이 들어오면 그냥 무시합니다
+  if (!(deltaSeconds > 0)) return state;
+
+  const dt = deltaSeconds;
+  const lines: PendingLog[] = [];
+  let seed = state.rngSeed;
+
+  // ⓑ 흐른 시간과 계산 횟수
+  const elapsed = state.elapsed + dt;
+  const tickCount = state.tick + 1;
+
+  // ⓒ 연구 진행 (목표치를 넘지 않게 자릅니다)
+  const progress = clampProgress(state.player.researchProgress + researchRate(state) * dt);
+
+  // ⓓ 돈 (수입 − 지출). 마이너스가 되면 아래 ⑨에서 파산으로 판정됩니다
+  const money = state.player.money + netPerSecond(state) * dt;
+
+  const player: PlayerState = { ...state.player, researchProgress: progress, money };
+
+  // ⓔ 흔들린 시장 가격이 평상시로 돌아오는 중
+  let market = state.market;
+  if (market.distortionRemaining > 0) {
+    const remaining = market.distortionRemaining - dt;
+    if (remaining <= 0) {
+      market = {
+        gpuPrice: MARKET.normalGpuPrice,
+        powerPrice: MARKET.normalPowerPrice,
+        distortionRemaining: 0,
+      };
+      lines.push({ text: '시장 가격이 평상시 수준으로 돌아왔습니다.', tone: 'info' });
+    } else {
+      market = { ...market, distortionRemaining: remaining };
+    }
+  }
+
+  // ⓕ 경쟁사들의 한 걸음
+  const rivals: Rival[] = [];
+  for (const rival of state.rivals) {
+    // 이미 탈락했거나 달성한 곳은 더 이상 움직이지 않습니다
+    if (rival.status === 'collapsed' || rival.status === 'achieved') {
+      rivals.push(rival);
+      continue;
+    }
+
+    // 사고 확률과 추정치 오차는 경쟁사마다 다르며 balance.ts 의 템플릿에 적혀 있습니다
+    const template = RIVALS.find((item) => item.id === rival.id);
+    const accidentPerSecond = template === undefined ? 0 : template.accidentPerSecond;
+    const reportNoise = template === undefined ? 0 : template.reportNoise;
+
+    const advanced = clampProgress(rival.researchProgress + rivalSpeed(state, rival) * dt);
+    // 아래에서 '탈락'이나 '달성'으로 바뀔 수 있으므로 상태의 종류를 넓게 열어둡니다
+    let status: RivalStatus = rival.status;
+
+    // 속도형 경쟁사는 스스로 사고를 내고 경주에서 빠질 수 있습니다
+    if (accidentPerSecond > 0) {
+      const roll = nextRandom(seed);
+      seed = roll.seed;
+      if (roll.value < accidentPerSecond * dt) {
+        status = 'collapsed';
+        lines.push({
+          text: `${rival.name}이(가) 훈련 사고로 경주에서 이탈했습니다.`,
+          tone: 'good',
+        });
+      }
+    }
+
+    // 사고 없이 목표에 닿았다면 달성 상태가 됩니다 (승패는 아래 ⑨에서 확정)
+    if (status !== 'collapsed' && advanced >= RESEARCH.goal) {
+      status = 'achieved';
+    }
+
+    // 상황판에 보이는 값은 '추정치'라 진짜 값 주변에서 조금 흔들립니다
+    const shake = randomRange(seed, -reportNoise, reportNoise);
+    seed = shake.seed;
+
+    rivals.push({
+      ...rival,
+      researchProgress: advanced,
+      reportedProgress: clampRatio(advanced + shake.value),
+      status,
+    });
+  }
+
+  // ⓖ 내 연구소의 사고 판정 — 안전을 낮춰둔 만큼 확률이 올라갑니다
+  const accidentChance = accidentChancePerSecond(state);
+  if (accidentChance > 0) {
+    const roll = nextRandom(seed);
+    seed = roll.seed;
+    if (roll.value < accidentChance * dt) {
+      lines.push({
+        text: '검증을 건너뛴 훈련에서 통제 불능 사고가 발생했습니다. 모든 연구가 여기서 멈춥니다.',
+        tone: 'bad',
+      });
+      const logged = appendLogs(state.log, state.nextLogId, elapsed, lines);
+      return {
+        ...state,
+        phase: 'ended',
+        outcome: 'catastrophe',
+        outcomeRivalId: null,
+        elapsed,
+        tick: tickCount,
+        player,
+        rivals,
+        market,
+        log: logged.log,
+        nextLogId: logged.nextLogId,
+        rngSeed: seed,
+      };
+    }
+  }
+
+  // ⓗ 새로 열리는 항목이 있는지 확인 (한 번 열린 항목은 다시 닫지 않습니다)
+  const probe: GameState = { ...state, elapsed, tick: tickCount, player, rivals, market };
+  let unlocks = state.unlocks;
+  for (const rule of unlockRules(probe)) {
+    if (unlocks[rule.panel]) continue;
+    if (!rule.met) continue;
+    unlocks = { ...unlocks, [rule.panel]: true };
+    lines.push({ text: rule.text, tone: rule.tone });
+  }
+
+  // ⓘ 다음 사건이 터질 때가 되었는지
+  let nextEventIn = state.nextEventIn - dt;
+  let activeEvent: GameEvent | null = state.activeEvent;
+  let seenEventIds = state.seenEventIds;
+
+  if (nextEventIn <= 0) {
+    // 지금 시각에 나올 수 있고, 한 번뿐인 사건이면 아직 안 나온 것만 고릅니다
+    const candidates = EVENT_POOL.filter(
+      (candidate) =>
+        candidate.earliestAt <= elapsed &&
+        !(candidate.once && seenEventIds.includes(candidate.id)),
+    );
+
+    // 고를 사건이 있든 없든 다음 사건까지의 시간은 다시 정합니다
+    const gap = randomRange(seed, EVENTS.minGap, EVENTS.maxGap);
+    seed = gap.seed;
+    nextEventIn = gap.value;
+
+    if (candidates.length > 0) {
+      const picked = pickIndex(seed, candidates.length);
+      seed = picked.seed;
+      if (picked.index >= 0) {
+        const chosen = candidates[picked.index];
+        activeEvent = chosen;
+        seenEventIds = seenEventIds.includes(chosen.id)
+          ? seenEventIds
+          : [...seenEventIds, chosen.id];
+        lines.push({ text: `사건 발생 — ${chosen.title}`, tone: 'warn' });
+      }
+    }
+  }
+
+  // ⓙ 승패 판정
+  const advancedState: GameState = {
+    ...state,
+    elapsed,
+    tick: tickCount,
+    player,
+    rivals,
+    unlocks,
+    market,
+    nextEventIn,
+    activeEvent,
+    seenEventIds,
+    rngSeed: seed,
+  };
+
+  const result = checkOutcome(advancedState);
+  if (result === null) {
+    const logged = appendLogs(state.log, state.nextLogId, elapsed, lines);
+    return { ...advancedState, log: logged.log, nextLogId: logged.nextLogId };
+  }
+
+  // 게임이 끝났다면 사건 창은 띄우지 않고 결과 화면으로 넘어갑니다
+  lines.push(outcomeLine(advancedState, result.outcome, result.rivalId));
+  const logged = appendLogs(state.log, state.nextLogId, elapsed, lines);
+  return {
+    ...advancedState,
+    phase: 'ended',
+    outcome: result.outcome,
+    outcomeRivalId: result.rivalId,
+    activeEvent: null,
+    log: logged.log,
+    nextLogId: logged.nextLogId,
+  };
+}
+
+/** 해금 규칙 하나 (어떤 항목이, 언제 열리고, 그때 뭐라고 알릴지) */
+interface UnlockRule {
+  panel: PanelId;
+  met: boolean;
+  text: string;
+  tone: LogTone;
+}
+
+/**
+ * balance.ts 의 UNLOCK 조건을 지금 상태에 대입해 "열릴 때가 되었는가"를 확인합니다.
+ * 조건 자체(진행도 몇 %, 전력이 모자란 순간 등)는 전부 balance.ts 가 정하고,
+ * 여기서는 그 조건을 읽어 판단만 합니다.
+ */
+function unlockRules(state: GameState): UnlockRule[] {
+  const progress = state.player.researchProgress;
+
+  return [
+    {
+      // UNLOCK.power: 필요한 전력이 쓸 수 있는 전력을 넘어선 순간 (= GPU가 놀기 시작할 때)
+      panel: 'power',
+      met: powerDemand(state) > powerAvailable(state),
+      text: '전력이 모자라 GPU 일부가 놀고 있습니다 — 전력 계약 항목이 열렸습니다.',
+      tone: 'warn',
+    },
+    {
+      // UNLOCK.datacenter: 보유 GPU가 수용 한도에 닿는 순간
+      panel: 'datacenter',
+      met: state.player.gpus >= gpuCapacity(state),
+      text: 'GPU를 둘 자리가 가득 찼습니다 — 데이터센터 건설 항목이 열렸습니다.',
+      tone: 'warn',
+    },
+    {
+      panel: 'researchers',
+      met: progress >= UNLOCK.researchers.value,
+      text: '연구 규모가 커졌습니다 — 연구원 채용 항목이 열렸습니다.',
+      tone: 'info',
+    },
+    {
+      panel: 'rivals',
+      met: progress >= UNLOCK.rivals.value,
+      text: '경쟁사 동향을 파악할 수 있게 되었습니다 — 경쟁사 상황판이 열렸습니다.',
+      tone: 'info',
+    },
+    {
+      panel: 'safety',
+      met: progress >= UNLOCK.safety.value,
+      text: '안전 검증 수준을 조절할 수 있게 되었습니다 — 무리하면 사고가 납니다.',
+      tone: 'warn',
+    },
+  ];
+}
+
+/** 게임이 끝난 이유를 로그 한 줄로 만듭니다 */
+function outcomeLine(state: GameState, outcome: GameOutcome, rivalId: RivalId | null): PendingLog {
+  switch (outcome) {
+    case 'agiAchieved':
+      return { text: `${state.player.labName}이(가) 가장 먼저 AGI에 도달했습니다.`, tone: 'good' };
+    case 'rivalWon': {
+      const winner = state.rivals.find((rival) => rival.id === rivalId);
+      const name = winner === undefined ? '경쟁 연구소' : winner.name;
+      return { text: `${name}이(가) 먼저 AGI에 도달했습니다.`, tone: 'bad' };
+    }
+    case 'bankrupt':
+      return { text: '자금이 바닥나 연구소를 더 이상 운영할 수 없습니다.', tone: 'bad' };
+    case 'catastrophe':
+      return { text: '통제 불능 사고로 연구가 중단되었습니다.', tone: 'bad' };
+    default:
+      return { text: '게임이 끝났습니다.', tone: 'info' };
+  }
+}
+
+/* ===========================================================================
+ *  4. 버튼 하나하나가 하는 일
+ * ======================================================================== */
+
+/** 시작 화면에서 연구소 이름을 정하고 게임에 들어갑니다 */
+function startGame(labName: string, rngSeed: number): GameState {
+  const fresh = createInitialState(labName, rngSeed);
+  const logged = appendLogs(fresh.log, fresh.nextLogId, 0, [
+    { text: `${fresh.player.labName} 가동을 시작합니다.`, tone: 'good' },
+  ]);
+  return { ...fresh, phase: 'playing', log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/**
+ * 투자 유치.
+ * 이번 라운드에 들어오는 금액과 내주는 지분은 constraints 의 fundingOffer 가 정합니다.
+ * 팔 지분이 남지 않았으면(fundingOffer 가 null) 아무 일도 하지 않습니다.
+ */
+function raiseFunding(state: GameState): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.funding) return state;
+
+  const offer = fundingOffer(state);
+  if (offer === null) return state;
+
+  const round = state.player.fundingRound + 1;
+  const player: PlayerState = {
+    ...state.player,
+    money: state.player.money + offer.amount,
+    equityRetained: clampRatio(state.player.equityRetained - offer.equityCost),
+    fundingRound: round,
+  };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: `${round}차 투자 유치 — ${formatMoney(offer.amount)}를 확보했습니다. 남은 지분 ${percentText(
+        player.equityRetained,
+      )}.`,
+      tone: 'good',
+    },
+  ]);
+
+  return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/**
+ * GPU 구매.
+ * 살 수 있는지(진행 중인가·자리가 있는가·돈이 되는가)는 checkGpuPurchase 가 판단합니다.
+ * 전력이 모자라도 사는 것 자체는 막지 않습니다 — 대신 산 GPU 일부가 놀게 됩니다.
+ */
+function buyGpu(state: GameState, count: number): GameState {
+  const wanted = Math.floor(count);
+  if (wanted <= 0) return state;
+  if (checkGpuPurchase(state, wanted) !== null) return state;
+
+  const cost = gpuUnitPrice(state) * wanted;
+  const player: PlayerState = {
+    ...state.player,
+    money: state.player.money - cost,
+    gpus: state.player.gpus + wanted,
+  };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    { text: `GPU ${formatCount(wanted)}장을 들였습니다 (${formatMoney(cost)}).`, tone: 'info' },
+  ]);
+
+  return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/**
+ * 전력 계약.
+ * 계약할 때 한 번 내는 설치비는 powerContractUpfront 가 계산합니다.
+ * 계약한 뒤에는 실제로 쓰든 안 쓰든 매초 요금이 나갑니다(그 계산은 constraints 담당).
+ */
+function contractPower(state: GameState, megawatts: Megawatts): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.power) return state;
+  if (!(megawatts > 0)) return state;
+
+  const cost = powerContractUpfront(state, megawatts);
+  if (checkAffordable(state, cost) !== null) return state;
+
+  const player: PlayerState = {
+    ...state.player,
+    money: state.player.money - cost,
+    powerContracted: state.player.powerContracted + megawatts,
+  };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: `전력 ${formatPower(megawatts)}를 새로 계약했습니다 (설치비 ${formatMoney(cost)}).`,
+      tone: 'info',
+    },
+  ]);
+
+  return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/** 데이터센터 한 동을 짓습니다. 건설비는 지을수록 비싸집니다(datacenterPrice 가 계산) */
+function buildDatacenter(state: GameState): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.datacenter) return state;
+
+  const price = datacenterPrice(state);
+  if (checkAffordable(state, price) !== null) return state;
+
+  const player: PlayerState = {
+    ...state.player,
+    money: state.player.money - price,
+    datacenters: state.player.datacenters + 1,
+  };
+  const after: GameState = { ...state, player };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: `데이터센터 ${formatCount(player.datacenters)}동째를 완공했습니다 (${formatMoney(
+        price,
+      )}). GPU 자리가 ${formatCount(gpuCapacity(after))}장으로 늘었습니다.`,
+      tone: 'good',
+    },
+  ]);
+
+  return { ...after, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/**
+ * 연구원 채용.
+ *
+ * 한 명 뽑을 때마다 다음 사람의 몸값이 올라가기 때문에(researcherPrice),
+ * 여러 명을 한 번에 뽑을 때는 한 명씩 값을 다시 계산해서 더합니다.
+ * 도중에 돈이 모자라면 거기까지만 뽑고 멈춥니다.
+ */
+function hireResearcher(state: GameState, count: number): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.researchers) return state;
+
+  const wanted = Math.floor(count);
+  if (wanted <= 0) return state;
+
+  let money = state.player.money;
+  let researchers = state.player.researchers;
+  let hired = 0;
+
+  for (let i = 0; i < wanted; i += 1) {
+    const probe: GameState = { ...state, player: { ...state.player, money, researchers } };
+    const price = researcherPrice(probe);
+    if (checkAffordable(probe, price) !== null) break;
+
+    money -= price;
+    researchers += 1;
+    hired += 1;
+  }
+
+  // 한 명도 못 뽑았으면 아무 일도 없었던 것으로 합니다
+  if (hired === 0) return state;
+
+  const spent = state.player.money - money;
+  const player: PlayerState = { ...state.player, money, researchers };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: `연구원 ${formatCount(hired)}명을 영입했습니다 (${formatMoney(spent)}).`,
+      tone: 'good',
+    },
+  ]);
+
+  return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/**
+ * 안전 검증 수준 조절.
+ * 낮출수록 훈련이 빨라지지만 사고 확률이 함께 올라갑니다.
+ * (얼마나 빨라지고 얼마나 위험해지는지는 전부 constraints 가 계산합니다)
+ */
+function setSafety(state: GameState, value: Ratio): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.safety) return state;
+
+  const level = clampSafety(value);
+  if (level === state.player.safety) return state;
+
+  const lowered = level < state.player.safety;
+  const player: PlayerState = { ...state.player, safety: level };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: lowered
+        ? `안전 검증 수준을 ${percentText(level)}로 낮췄습니다. 훈련이 빨라지는 대신 사고 위험이 올라갑니다.`
+        : `안전 검증 수준을 ${percentText(level)}로 올렸습니다.`,
+      tone: lowered ? 'warn' : 'info',
+    },
+  ]);
+
+  return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/** 게임 배속 변경. balance.ts 의 SPEED_OPTIONS 에 있는 값만 받아들입니다 */
+function setSpeed(state: GameState, speed: number): GameState {
+  if (!SPEED_OPTIONS.includes(speed)) return state;
+  if (state.speed === speed) return state;
+  return { ...state, speed };
+}
+
+/**
+ * 처음부터 다시 하기.
+ * 같은 씨앗으로 다시 시작하면 사건 순서까지 똑같은 판이 반복되므로
+ * 씨앗을 한 칸 굴려서 새로운 판을 만듭니다. (연구소 이름은 그대로 물려받습니다)
+ */
+function restart(state: GameState): GameState {
+  const rolled = nextRandom(state.rngSeed);
+  return createInitialState(state.player.labName, rolled.seed);
+}
+
+/* ===========================================================================
+ *  5. 사건 선택지 처리
+ * ======================================================================== */
+
+/**
+ * 사건 창에서 버튼 하나를 눌렀을 때.
+ *
+ * 그 선택지에 적힌 변화(내 연구소 / 시장 / 경쟁사)를 그대로 적용하고,
+ * 정해진 문장을 로그에 남긴 뒤 사건 창을 닫습니다.
+ * 조건(requires)을 만족하지 못하는 선택지는 아무 일도 하지 않습니다.
+ */
+function resolveEvent(state: GameState, choiceIndex: number): GameState {
+  const event = state.activeEvent;
+  if (event === null) return state;
+  if (choiceIndex < 0 || choiceIndex >= event.choices.length) return state;
+
+  const choice = event.choices[choiceIndex];
+  if (choice.requires !== undefined && checkRequirement(state, choice.requires) !== null) {
+    return state;
+  }
+
+  let seed = state.rngSeed;
+
+  const player =
+    choice.player === undefined ? state.player : applyPlayerDelta(state, choice.player);
+  const market =
+    choice.market === undefined ? state.market : applyMarketDelta(state.market, choice.market);
+
+  let rivals = state.rivals;
+  if (choice.rivals !== undefined) {
+    const applied = applyRivalDelta(state, choice.rivals, seed);
+    rivals = applied.rivals;
+    seed = applied.seed;
+  }
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    { text: choice.logText, tone: choice.logTone },
+  ]);
+
+  return {
+    ...state,
+    activeEvent: null,
+    player,
+    market,
+    rivals,
+    rngSeed: seed,
+    log: logged.log,
+    nextLogId: logged.nextLogId,
+  };
+}
+
+/**
+ * 선택지에 적힌 '내 연구소의 변화'를 적용합니다.
+ *
+ * 전부 증감(더하기·빼기)이며, 적히지 않은 항목은 건드리지 않습니다.
+ * 말이 안 되는 값이 되지 않도록 한계선 안으로 가둡니다.
+ * (자리보다 많은 GPU, 마이너스 인원, 100%를 넘는 지분 등)
+ */
+function applyPlayerDelta(state: GameState, delta: PlayerDelta): PlayerState {
+  const before = state.player;
+
+  // 데이터센터를 먼저 반영해야 GPU 자리 한도를 제대로 계산할 수 있습니다
+  const datacenters = Math.max(0, Math.floor(before.datacenters + (delta.datacenters ?? 0)));
+  const capacityProbe: GameState = { ...state, player: { ...before, datacenters } };
+
+  return {
+    ...before,
+    money: before.money + (delta.money ?? 0),
+    gpus: Math.max(
+      0,
+      Math.min(gpuCapacity(capacityProbe), Math.floor(before.gpus + (delta.gpus ?? 0))),
+    ),
+    powerContracted: Math.max(0, before.powerContracted + (delta.powerContracted ?? 0)),
+    researchProgress: clampProgress(before.researchProgress + (delta.researchProgress ?? 0)),
+    datacenters,
+    researchers: Math.max(0, Math.floor(before.researchers + (delta.researchers ?? 0))),
+    equityRetained: clampRatio(before.equityRetained + (delta.equityRetained ?? 0)),
+    safety: clampSafety(before.safety + (delta.safety ?? 0)),
+  };
+}
+
+/**
+ * 선택지에 적힌 '시장의 변화'를 적용합니다.
+ * 가격 배수는 적힌 값으로 바뀌고, durationSeconds 만큼 지나면
+ * tick 에서 자동으로 평상시 값으로 되돌아옵니다.
+ */
+function applyMarketDelta(market: MarketState, delta: MarketDelta): MarketState {
+  return {
+    gpuPrice: delta.gpuPrice ?? market.gpuPrice,
+    powerPrice: delta.powerPrice ?? market.powerPrice,
+    distortionRemaining: delta.durationSeconds ?? market.distortionRemaining,
+  };
+}
+
+/**
+ * 선택지에 적힌 '경쟁사의 변화'를 적용합니다.
+ *
+ * 누구에게 적용할지는 세 가지입니다.
+ *   all    → 아직 달리고 있는 모든 경쟁사
+ *   leader → 지금 가장 앞선 한 곳 (누가 1등인지는 constraints 가 계산)
+ *   random → 무작위 한 곳 (반드시 씨앗 난수를 써서 판이 재현되게 합니다)
+ *
+ * 이미 탈락했거나 AGI에 도달한 곳은 영향을 받지 않습니다.
+ */
+function applyRivalDelta(
+  state: GameState,
+  delta: RivalDelta,
+  seed: number,
+): { rivals: Rival[]; seed: number } {
+  const eligible = state.rivals.filter(
+    (rival) => rival.status !== 'collapsed' && rival.status !== 'achieved',
+  );
+  if (eligible.length === 0) return { rivals: state.rivals, seed };
+
+  let nextSeed = seed;
+  let targets: RivalId[] = [];
+
+  switch (delta.target) {
+    case 'all':
+      targets = eligible.map((rival) => rival.id);
+      break;
+    case 'leader': {
+      const leader = computeDerived(state).leadingRival;
+      targets = leader === null ? [] : [leader.id];
+      break;
+    }
+    case 'random': {
+      const picked = pickIndex(nextSeed, eligible.length);
+      nextSeed = picked.seed;
+      if (picked.index >= 0) targets = [eligible[picked.index].id];
+      break;
+    }
+    default:
+      targets = [];
+      break;
+  }
+
+  const rivals = state.rivals.map((rival) =>
+    targets.includes(rival.id) ? applyOneRivalDelta(rival, delta) : rival,
+  );
+
+  return { rivals, seed: nextSeed };
+}
+
+/** 경쟁사 한 곳에 변화를 적용합니다 (위 applyRivalDelta 의 부품) */
+function applyOneRivalDelta(rival: Rival, delta: RivalDelta): Rival {
+  const shift = delta.researchProgress ?? 0;
+  return {
+    ...rival,
+    momentum: delta.momentum ?? rival.momentum,
+    researchProgress: clampProgress(rival.researchProgress + shift),
+    // 상황판에 보이는 추정치도 함께 움직여야 화면이 어긋나 보이지 않습니다
+    reportedProgress: clampRatio(rival.reportedProgress + shift),
+    status: delta.status ?? rival.status,
+  };
+}
+
+/* ===========================================================================
+ *  6. 다른 폴더에서 바로 쓰라고 같이 내보내는 것들
+ * ======================================================================== */
+
+export { EVENT_POOL } from './events';
+export { nextRandom, pickIndex, randomRange } from './rng';

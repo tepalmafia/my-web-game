@@ -1,0 +1,160 @@
+/**
+ * ===========================================================================
+ *  속도와 경제 — 1초마다 무슨 일이 얼마나 일어나는가
+ * ===========================================================================
+ *
+ *  여기 있는 값은 전부 "1초당" 기준입니다.
+ *  게임은 0.1초마다 계산을 돌리므로, 실제로 쓸 때는 여기 값에 흐른 시간을 곱합니다.
+ *  (그 곱하는 일은 state 폴더가 하고, 이 파일은 순수하게 비율만 알려줍니다)
+ */
+
+import {
+  DATACENTER,
+  RESEARCH,
+  RESEARCHER,
+  REVENUE,
+  RIVAL_CURVE,
+  SAFETY,
+  TARGET_PLAY_SECONDS,
+} from '../balance';
+import type { GameState, Money, Multiplier, RatioPerSecond, Rival } from '../types';
+import { activeGpus } from './capacity';
+import { powerCostPerSecond } from './pricing';
+
+/**
+ * 속도형 경쟁사가 막판 스퍼트를 시작하는 진행도 기준.
+ *
+ * ※ 이 값만은 balance.ts 에 자리가 없어서 여기에 두었습니다.
+ *   나중에 조절하고 싶어지면 balance.ts 의 RIVAL_CURVE 로 옮기는 게 좋습니다.
+ */
+const SPEED_SPRINT_FROM_PROGRESS = 0.7;
+
+/** 값을 최소~최대 사이로 가둡니다 (예: 안전 수준은 0~1을 벗어날 수 없음) */
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * 연구원들이 올려주는 연구 속도 배수.
+ * 연구원 1명당 speedBonusEach 만큼 더해집니다. (0명이면 1 = 변화 없음)
+ */
+export function researcherMultiplier(state: GameState): Multiplier {
+  const headcount = Math.max(0, state.player.researchers);
+  return 1 + headcount * RESEARCHER.speedBonusEach;
+}
+
+/**
+ * 안전 수준을 낮춰서 얻는 연구 속도 배수.
+ * 안전 1(원칙대로) = 1배, 안전 0(전부 건너뜀) = 1 + maxSpeedBonus 배.
+ *
+ * 공짜가 아닙니다. 같은 선택이 아래 accidentChancePerSecond 를 함께 올립니다.
+ */
+export function safetySpeedMultiplier(state: GameState): Multiplier {
+  const safety = clamp(state.player.safety, 0, 1);
+  return 1 + (1 - safety) * SAFETY.maxSpeedBonus;
+}
+
+/**
+ * 1초에 오르는 AGI 진행도.
+ *
+ * 실제로 돌아가는 GPU 수 × GPU 1장의 기여 × 연구원 배수 × 안전 배수.
+ * 보유 GPU가 아니라 '실제로 돌아가는' GPU를 쓰는 것이 핵심입니다.
+ * → 전력을 계약하지 않으면 GPU를 아무리 사도 이 값이 오르지 않습니다.
+ */
+export function researchRate(state: GameState): RatioPerSecond {
+  return (
+    activeGpus(state) *
+    RESEARCH.perGpuPerSecond *
+    researcherMultiplier(state) *
+    safetySpeedMultiplier(state)
+  );
+}
+
+/**
+ * 1초에 나가는 돈 = 전기 요금 + 연구원 인건비 + 데이터센터 유지비.
+ *
+ * 전기 요금은 '계약한 용량' 기준이라 GPU를 안 돌려도 나갑니다.
+ * 이 값이 매출보다 크면 통장이 마르기 시작합니다.
+ */
+export function burnPerSecond(state: GameState): Money {
+  const wages = Math.max(0, state.player.researchers) * RESEARCHER.salaryPerSecond;
+  const upkeep = Math.max(0, state.player.datacenters) * DATACENTER.upkeepPerSecond;
+  return powerCostPerSecond(state) + wages + upkeep;
+}
+
+/**
+ * 1초에 들어오는 돈 (지금까지 만든 모델을 서비스해서 버는 매출).
+ *
+ * 진행도가 높을수록 좋은 모델이라 매출이 가파르게(진행도^curve) 오릅니다.
+ * 그래서 초반에는 매출이 거의 없고 후반에 몰립니다.
+ */
+export function revenuePerSecond(state: GameState): Money {
+  const progress = Math.max(0, state.player.researchProgress);
+  return REVENUE.atFullProgress * Math.pow(progress, REVENUE.curve);
+}
+
+/**
+ * 1초당 순수입 (매출 − 지출). 음수면 통장이 줄고 있다는 뜻입니다.
+ */
+export function netPerSecond(state: GameState): Money {
+  return revenuePerSecond(state) - burnPerSecond(state);
+}
+
+/**
+ * 1초당 사고 확률 (0~1).
+ *
+ * 안전을 낮출수록 제곱으로 가파르게 올라갑니다.
+ *   안전 1.0 → 0 (사고 없음)
+ *   안전 0.5 → 최대치의 25%
+ *   안전 0.0 → 최대치
+ * 실제로 주사위를 굴리는 것은 state 폴더의 일이고, 여기서는 확률만 알려줍니다.
+ */
+export function accidentChancePerSecond(state: GameState): number {
+  const safety = clamp(state.player.safety, 0, 1);
+  const recklessness = 1 - safety;
+  return recklessness * recklessness * SAFETY.maxAccidentPerSecond;
+}
+
+/**
+ * 경쟁사 한 곳이 1초에 올리는 진행도.
+ *
+ * 경쟁사는 GPU를 사거나 전기를 계약하지 않습니다. 대신 성향에 따라
+ * 시간·진행도에 맞춰 속도 배수가 달라지는 방식으로 단순하게 굴립니다.
+ *
+ *   탈락(collapsed)·달성(achieved) → 0 (더 이상 움직이지 않음)
+ *   정체(stalled)                  → 기본 속도 × momentum × 정체 배수
+ *   효율형(efficiency)             → 시간이 갈수록 느림 → 빠름으로 선형 가속
+ *   속도형(speed)                  → 진행도 0.7 을 넘으면 막판 스퍼트
+ *   자금력형(capital)              → 추가 배수 없이 처음부터 끝까지 꾸준함
+ */
+export function rivalSpeed(state: GameState, rival: Rival): RatioPerSecond {
+  // 이미 끝난 경쟁사는 더 이상 진행하지 않습니다
+  if (rival.status === 'collapsed' || rival.status === 'achieved') return 0;
+
+  const base = rival.baseSpeed * rival.momentum;
+
+  // 정체 중이면 성향과 관계없이 확 느려집니다
+  if (rival.status === 'stalled') return base * RIVAL_CURVE.stalled;
+
+  return base * personalityMultiplier(state, rival);
+}
+
+/** 성향에서 나오는 속도 배수만 따로 계산합니다 (위 rivalSpeed 의 부품) */
+function personalityMultiplier(state: GameState, rival: Rival): Multiplier {
+  switch (rival.personality) {
+    case 'efficiency': {
+      // 한 판 기준 시간에 대해 지금 얼마나 왔는지 (0 = 시작, 1 = 목표 시간 도달)
+      const elapsedRatio = clamp(state.elapsed / TARGET_PLAY_SECONDS, 0, 1);
+      return (
+        RIVAL_CURVE.efficiencyStart +
+        (RIVAL_CURVE.efficiencyEnd - RIVAL_CURVE.efficiencyStart) * elapsedRatio
+      );
+    }
+    case 'speed':
+      return rival.researchProgress >= SPEED_SPRINT_FROM_PROGRESS ? RIVAL_CURVE.speedSprint : 1;
+    case 'capital':
+      return 1;
+    default:
+      return 1;
+  }
+}
