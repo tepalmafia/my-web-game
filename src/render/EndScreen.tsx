@@ -15,12 +15,13 @@
  */
 
 import type { Dispatch } from 'react';
+import { rivalDisplayProgress } from '../constraints';
 import { rivalName, s } from '../i18n';
 import { formatDuration, formatMoney, formatPercent } from '../input';
 import type { GameAction, GameOutcome, GameState } from '../types';
 import { ProgressBar } from './ProgressBar';
 import { LanguagePicker } from './LanguagePicker';
-import { rivalDisplayProgress, rivalStyle } from './RaceTrack';
+import { rivalStyle } from './RaceTrack';
 import { ShareResult } from './ShareResult';
 
 interface EndScreenProps {

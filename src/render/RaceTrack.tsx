@@ -19,9 +19,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { GameState, Ratio, Rival, RivalPersonality, RivalStatus } from '../types';
+import type { GameState, Ratio, RivalPersonality, RivalStatus } from '../types';
 import { ALERT } from '../balance';
-import { rivalStatusFor } from '../constraints';
+import { rivalDisplayProgress, rivalStatusFor } from '../constraints';
 import { rivalName, s } from '../i18n';
 
 /** 경쟁사마다 다른 색 (플레이어의 청록색과 겹치지 않게 고른 차분한 색들) */
@@ -43,18 +43,6 @@ const RIVAL_COLORS = [
  */
 export function rivalStyle(index: number): { bar: string; text: string } {
   return RIVAL_COLORS[index % RIVAL_COLORS.length]!;
-}
-
-/**
- * 화면에 보여줄 경쟁사 진행도.
- *
- * 평소에는 추정치(reportedProgress)를 그대로 씁니다.
- * 다만 이미 AGI에 도달한 곳은 추정치가 99%로 보이면 이상하므로 100%로 채웁니다.
- * (진짜 값 researchProgress 는 여기서도 쓰지 않습니다)
- */
-export function rivalDisplayProgress(rival: Rival): number {
-  if (rival.status === 'achieved') return 1;
-  return rival.reportedProgress;
 }
 
 /** 추월 번쩍임이 유지되는 시간(밀리초) */

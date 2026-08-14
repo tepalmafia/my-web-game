@@ -51,6 +51,7 @@ export {
   netPerSecond,
   accidentChancePerSecond,
   rivalSpeed,
+  rivalDisplayProgress,
   rivalStatusFor,
   isSelfImproving,
   selfImproveDepth,

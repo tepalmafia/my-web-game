@@ -138,7 +138,25 @@ export function rivalSpeed(state: GameState, rival: Rival): RatioPerSecond {
   // 이미 끝난 경쟁사는 더 이상 진행하지 않습니다
   if (rival.status === 'collapsed' || rival.status === 'achieved') return 0;
 
-  return rival.baseSpeed * rival.momentum * personalityMultiplier(state, rival) * lateBoost(state, rival);
+  return (
+    rival.baseSpeed *
+    rival.momentum *
+    personalityMultiplier(state, rival) *
+    selfGrowthMultiplier(rival) *
+    lateBoost(state, rival)
+  );
+}
+
+/**
+ * 화면에 보여줄 경쟁사 진행도.
+ *
+ * 평소에는 추정치(reportedProgress)를 그대로 씁니다.
+ * 다만 이미 AGI에 도달한 곳은 추정치가 99%로 보이면 이상하므로 100%로 채웁니다.
+ * (진짜 값 researchProgress 는 여기서도 쓰지 않습니다 — 끝난 뒤에도 마찬가지입니다)
+ */
+export function rivalDisplayProgress(rival: Rival): Ratio {
+  if (rival.status === 'achieved') return RESEARCH.goal;
+  return rival.reportedProgress;
 }
 
 /**
@@ -153,6 +171,26 @@ export function rivalStatusFor(rival: Rival): RivalStatus {
   if (rival.momentum < RIVAL_CURVE.stalledBelowMomentum) return 'stalled';
   if (rival.momentum > RIVAL_CURVE.sprintingAboveMomentum) return 'sprinting';
   return 'racing';
+}
+
+/**
+ * 경쟁사가 '자기가 얼마나 왔는지'에 비례해 빨라지는 배수.
+ *
+ * 플레이어는 번 돈으로 설비를 늘리고 그 설비가 다시 돈을 벌어서 복리로 빨라집니다.
+ * 경쟁사가 일정한 속도로 달리면 두 곡선이 판 끝에서 한 번 교차할 뿐이라,
+ * 그전까지는 따라잡을 수 없어 보이고 교차한 뒤에는 이미 이긴 판이 됩니다.
+ * 경쟁사에도 같은 모양을 주면 순위표가 판 내내 의미를 갖습니다.
+ *
+ * ※ 완주 시각은 건드리지 않습니다.
+ *   1/m(p) 를 0에서 1까지 적분한 값이 정확히 1이 되도록 k 로 나누기 때문에,
+ *   결승선에 닿는 시각은 이 보정이 없을 때와 같습니다. (k = g / ln(1+g))
+ */
+function selfGrowthMultiplier(rival: Rival): Multiplier {
+  const growth = RIVAL_CURVE.selfGrowth;
+  if (growth <= 0) return 1;
+
+  const scale = growth / Math.log(1 + growth);
+  return (1 + growth * clamp(rival.researchProgress, 0, 1)) / scale;
 }
 
 /** 성향에서 나오는 속도 배수만 따로 계산합니다 (위 rivalSpeed 의 부품) */

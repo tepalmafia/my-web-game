@@ -468,8 +468,13 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
       status = 'achieved';
     }
 
-    // 상황판에 보이는 값은 '추정치'라 진짜 값 주변에서 조금 흔들립니다
-    const shake = randomRange(seed, -reportNoise, reportNoise);
+    // 상황판에 보이는 값은 '추정치'라 진짜 값 주변에서 조금 흔들립니다.
+    //
+    // 흔들리는 폭은 진행도에 비례합니다. 절대값으로 두면 진행도가 1%일 때도
+    // ±6%p 로 흔들려서, 아래로 흔들린 값이 0에서 잘리는 바람에 초반 표시가
+    // 실제보다 두 배 넘게 부풀어 보였습니다.
+    const spread = reportNoise * Math.max(RIVAL_CURVE.reportNoiseFloor, advanced);
+    const shake = randomRange(seed, -spread, spread);
     seed = shake.seed;
 
     // 붙어 있던 감속·가속은 시간이 지나면 평상시(1)로 돌아옵니다.

@@ -14,40 +14,8 @@
 
 import { useEffect, useState } from 'react';
 import { s } from '../i18n';
-import { formatCompact, formatDuration, formatPercent } from '../input';
+import { buildShareText } from '../input';
 import type { GameState } from '../types';
-
-/**
- * 자랑용 문구를 만듭니다.
- *
- * 화면 없이도 쓸 수 있게 순수 함수로 두었습니다 (주소는 밖에서 넣어 줍니다).
- */
-export function buildShareText(state: GameState, url: string): string {
-  const outcome = state.outcome;
-  const text = s().share;
-  const headline = outcome === null ? text.inProgress : text.outcome[outcome];
-  const win = outcome === 'agiAchieved';
-
-  const lines = [
-    text.headline(headline),
-    text.line2(
-      state.player.labName,
-      formatDuration(state.elapsed),
-      formatPercent(state.player.researchProgress),
-    ),
-    text.line3(
-      formatCompact(state.player.gpus),
-      formatCompact(state.player.researchers),
-      formatPercent(state.player.equityRetained),
-    ),
-  ];
-
-  // 진 사람은 도발을, 이긴 사람은 기록 경신을 부추깁니다
-  lines.push(win ? text.tauntWin : text.tauntLose);
-  lines.push(url);
-
-  return lines.join('\n');
-}
 
 /** 지금 보고 있는 페이지 주소 (물음표 뒤와 # 뒤는 떼어 냅니다) */
 function currentUrl(): string {

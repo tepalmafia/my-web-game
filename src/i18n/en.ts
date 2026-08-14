@@ -308,6 +308,8 @@ export const en = {
       `${lab} · ${duration} · progress ${progress}`,
     line3: (gpus: string, researchers: string, equity: string) =>
       `${gpus} GPUs · ${researchers} researchers · ${equity} equity left`,
+    marginAhead: (name: string, points: string) => `${points} points ahead of ${name}`,
+    marginBehind: (name: string, points: string) => `${points} points behind ${name}`,
     tauntWin: 'Think you can get there faster?',
     tauntLose: 'Think you can do better?',
     button: 'Share your result',

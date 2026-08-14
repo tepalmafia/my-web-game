@@ -280,6 +280,8 @@ export const ko: Dict = {
     headline: (outcome) => `AGI 경주 🏁 ${outcome}`,
     line2: (lab, duration, progress) => `${lab} · ${duration} · 진행도 ${progress}`,
     line3: (gpus, researchers, equity) => `GPU ${gpus}장 · 연구원 ${researchers}명 · 남은 지분 ${equity}`,
+    marginAhead: (name, points) => `2위 ${name}보다 ${points}%p 앞섬`,
+    marginBehind: (name, points) => `선두 ${name}보다 ${points}%p 뒤짐`,
     tauntWin: '더 빨리 도달할 수 있나요?',
     tauntLose: '당신은 더 잘할 수 있나요?',
     button: '결과 자랑하기',

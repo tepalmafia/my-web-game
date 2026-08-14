@@ -41,3 +41,6 @@ export {
   formatRate,
   withParticle,
 } from './format';
+
+// ── 결과 자랑 문구 ──
+export { buildShareText } from './share';

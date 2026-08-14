@@ -19,11 +19,11 @@
  *  넓은 화면에서는 전부 한눈에 들어오므로 이 줄을 띄우지 않습니다(md:hidden).
  */
 
-import { computeDerived, isSelfImproving } from '../constraints';
+import { computeDerived, isSelfImproving, rivalDisplayProgress } from '../constraints';
 import { s } from '../i18n';
 import { formatMoney, formatPercent, formatRate } from '../input';
 import type { GameState } from '../types';
-import { rivalDisplayProgress } from './RaceTrack';
+
 
 /** 내가 몇 등인지 (경쟁사 상황판이 열린 뒤에만 의미가 있습니다) */
 function rankOf(state: GameState): number {
