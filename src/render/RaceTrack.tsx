@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameState, Ratio, Rival, RivalPersonality, RivalStatus } from '../types';
 import { ALERT } from '../balance';
+import { rivalStatusFor } from '../constraints';
 
 /** 경쟁사마다 다른 색 (플레이어의 청록색과 겹치지 않게 고른 차분한 색들) */
 const RIVAL_COLORS = [
@@ -259,7 +260,9 @@ export function RaceTrack({ state }: RaceTrackProps) {
             state.rivals.map((rival, index) => {
               const color = RIVAL_COLORS[index % RIVAL_COLORS.length]!;
               const dead = rival.status === 'collapsed';
-              const status = STATUS_NOTE[rival.status];
+              // 표시용 상태는 저장된 값이 아니라 지금의 속도 배수에서 곧바로 끌어냅니다.
+              // (저장값에 기대면 개입 직후 한 박자 늦게 반영됩니다)
+              const status = STATUS_NOTE[rivalStatusFor(rival)];
               return (
                 <Lane
                   key={rival.id}

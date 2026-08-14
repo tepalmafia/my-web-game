@@ -11,7 +11,7 @@
  *    2) 많이 살수록 비싸집니다             (데이터센터·연구원의 priceGrowth)
  */
 
-import { DATACENTER, FUNDING, GPU, POWER, RESEARCHER } from '../balance';
+import { DATACENTER, FUNDING, GPU, INTERFERENCE, POWER, RESEARCHER } from '../balance';
 import type { GameState, Megawatts, Money, Ratio, Seconds } from '../types';
 
 /**
@@ -111,4 +111,37 @@ export function fundingOffer(state: GameState): { amount: Money; equityCost: Rat
   const equityCost = FUNDING.baseEquityCost * Math.pow(FUNDING.equityCostGrowth, round);
 
   return { amount, equityCost };
+}
+
+/* ===========================================================================
+ *  경쟁사 대응 비용
+ * ======================================================================== */
+
+/**
+ * 첩보 한 건의 값. 그 경쟁사의 진짜 진행도를 알아내는 비용입니다.
+ * 정액이라 후반으로 갈수록 상대적으로 싸집니다 — 정보의 가치도 그때는 낮아지므로
+ * (이미 상황판만 봐도 대세가 보이는 시점입니다) 일부러 그대로 두었습니다.
+ */
+export function intelCost(state: GameState): Money {
+  // state 를 쓰지 않지만, 나중에 진행도에 따라 값을 바꾸고 싶을 때
+  // 부르는 쪽을 고치지 않아도 되도록 다른 가격 함수들과 모양을 맞춰 둡니다
+  void state;
+  return INTERFERENCE.intelCost;
+}
+
+/**
+ * 인재 빼오기 비용.
+ *
+ * '지금 연구원 한 명 뽑는 값'에 배수를 곱합니다.
+ * 빼올 때마다 내 연구원이 늘고, 연구원이 늘면 다음 영입비가 오르므로,
+ * 사용 횟수를 따로 세지 않아도 쓸수록 저절로 비싸집니다.
+ */
+export function poachCost(state: GameState): Money {
+  return researcherPrice(state) * INTERFERENCE.poachCostMultiplier;
+}
+
+/** 공급 물량 선점 비용 */
+export function supplyLockCost(state: GameState): Money {
+  void state;
+  return INTERFERENCE.supplyLockCost;
 }

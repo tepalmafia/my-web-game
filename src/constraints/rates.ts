@@ -17,7 +17,7 @@ import {
   SAFETY,
   TARGET_PLAY_SECONDS,
 } from '../balance';
-import type { GameState, Money, Multiplier, RatioPerSecond, Rival } from '../types';
+import type { GameState, Money, Multiplier, RatioPerSecond, Rival, RivalStatus } from '../types';
 import { activeGpus } from './capacity';
 import { powerCostPerSecond } from './pricing';
 
@@ -114,21 +114,34 @@ export function accidentChancePerSecond(state: GameState): number {
  * 시간·진행도에 맞춰 속도 배수가 달라지는 방식으로 단순하게 굴립니다.
  *
  *   탈락(collapsed)·달성(achieved) → 0 (더 이상 움직이지 않음)
- *   정체(stalled)                  → 기본 속도 × momentum × 정체 배수
  *   효율형(efficiency)             → 시간이 갈수록 느림 → 빠름으로 선형 가속
  *   속도형(speed)                  → 진행도 0.7 을 넘으면 막판 스퍼트
  *   자금력형(capital)              → 추가 배수 없이 처음부터 끝까지 꾸준함
+ *
+ * ※ 개입이나 사건으로 생기는 감속·가속은 전부 momentum 하나로만 표현합니다.
+ *   상태(stalled 등)에 따로 배수를 두면 두 번 곱해져서, 인재를 한 번 빼온 것만으로
+ *   상대가 86% 느려지는 식으로 효과가 의도의 두 배가 됩니다.
+ *   상태는 momentum 을 보고 붙이는 '표시'일 뿐입니다 (아래 rivalStatusFor 참고).
  */
 export function rivalSpeed(state: GameState, rival: Rival): RatioPerSecond {
   // 이미 끝난 경쟁사는 더 이상 진행하지 않습니다
   if (rival.status === 'collapsed' || rival.status === 'achieved') return 0;
 
-  const base = rival.baseSpeed * rival.momentum;
+  return rival.baseSpeed * rival.momentum * personalityMultiplier(state, rival);
+}
 
-  // 정체 중이면 성향과 관계없이 확 느려집니다
-  if (rival.status === 'stalled') return base * RIVAL_CURVE.stalled;
-
-  return base * personalityMultiplier(state, rival);
+/**
+ * 속도 배수를 보고 지금 어떤 상태로 보여줄지 정합니다.
+ *
+ * 상태를 따로 저장하지 않고 매번 momentum 에서 끌어내기 때문에,
+ * 감속이 풀리면 표시도 저절로 '평소'로 돌아옵니다.
+ * (저장해두면 한 번 '정체'가 된 경쟁사가 영원히 정체로 남습니다)
+ */
+export function rivalStatusFor(rival: Rival): RivalStatus {
+  if (rival.status === 'collapsed' || rival.status === 'achieved') return rival.status;
+  if (rival.momentum < RIVAL_CURVE.stalledBelowMomentum) return 'stalled';
+  if (rival.momentum > RIVAL_CURVE.sprintingAboveMomentum) return 'sprinting';
+  return 'racing';
 }
 
 /** 성향에서 나오는 속도 배수만 따로 계산합니다 (위 rivalSpeed 의 부품) */

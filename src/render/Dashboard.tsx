@@ -31,6 +31,7 @@ import { AlertStrip, DangerVignette } from './DangerOverlay';
 import { DatacenterView } from './DatacenterView';
 import { LogPanel } from './LogPanel';
 import { RaceTrack } from './RaceTrack';
+import { RivalActionPanel } from './RivalActionPanel';
 import { ResourceBar } from './ResourceBar';
 
 /** 패널이 화면에 놓이는 순서 (게임 규칙이 아니라 화면 배치라 여기 있습니다) */
@@ -129,6 +130,9 @@ export function Dashboard({ state, dispatch }: DashboardProps) {
           )}
           {unlocks.safety && (
             <SafetyPanel state={state} dispatch={dispatch} isNew={isNew('safety')} />
+          )}
+          {unlocks.rivals && (
+            <RivalActionPanel state={state} dispatch={dispatch} isNew={isNew('rivals')} />
           )}
         </div>
 

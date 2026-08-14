@@ -27,6 +27,7 @@ export { ShareResult, buildShareText } from './ShareResult';
 export { EventModal } from './EventModal';
 export { LogPanel } from './LogPanel';
 export { RaceTrack, rivalStyle, rivalDisplayProgress } from './RaceTrack';
+export { RivalActionPanel } from './RivalActionPanel';
 export { DatacenterView } from './DatacenterView';
 export { AlertStrip, DangerVignette, collectAlerts } from './DangerOverlay';
 export type { Alert } from './DangerOverlay';

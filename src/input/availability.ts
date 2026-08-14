@@ -21,7 +21,7 @@
  *       영어 오류 문구나 프로그램 용어는 절대 화면에 내보내지 않습니다.
  */
 
-import { SAFETY, SPEED_OPTIONS, START } from '../balance';
+import { INTERFERENCE, SAFETY, SPEED_OPTIONS, START } from '../balance';
 import {
   accidentChancePerSecond,
   burnPerSecond,
@@ -36,11 +36,14 @@ import {
   fundingRequiredProgress,
   gpuCapacity,
   gpuUnitPrice,
+  intelCost,
+  poachCost,
   powerContractUpfront,
   powerCostPerSecond,
   powerDemand,
   researcherMultiplier,
   safetySpeedMultiplier,
+  supplyLockCost,
   violationMessage,
 } from '../constraints';
 import type { LimitViolation } from '../constraints';
@@ -401,6 +404,69 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       if (blocked !== null) return block(blocked, null, detail);
 
       return allow(null, detail);
+    }
+
+    // ── 경쟁사 대응 ──────────────────────────────────────────────────────
+
+    case 'buyIntel': {
+      const rival = state.rivals.find((item) => item.id === action.rivalId);
+      const cost = intelCost(state);
+      const detail = '그 연구소의 실제 진행도를 기록에 남깁니다';
+
+      const blocked = operationBlock(state, 'rivals');
+      if (blocked !== null) return block(blocked, cost, detail);
+      if (rival === undefined) return block('그런 연구소가 없습니다', cost, detail);
+      if (rival.status === 'collapsed') return block('이미 경주에서 빠진 곳입니다', cost, detail);
+      if (rival.status === 'achieved') return block('이미 끝난 상대입니다', cost, detail);
+
+      const funds = checkAffordable(state, cost);
+      if (funds !== null) return block(reasonFor(funds), cost, detail);
+
+      return allow(cost, detail);
+    }
+
+    case 'poachRival': {
+      const rival = state.rivals.find((item) => item.id === action.rivalId);
+      const cost = poachCost(state);
+      const detail = `연구원 +${formatCompact(INTERFERENCE.poachResearchers)}명 · 상대 속도 ${formatPercent(
+        1 - INTERFERENCE.poachSlowdown,
+        0,
+      )} 감소`;
+
+      const blocked = operationBlock(state, 'rivals');
+      if (blocked !== null) return block(blocked, cost, detail);
+      if (rival === undefined) return block('그런 연구소가 없습니다', cost, detail);
+      if (rival.status === 'collapsed') return block('이미 경주에서 빠진 곳입니다', cost, detail);
+      if (rival.status === 'achieved') return block('이미 끝난 상대입니다', cost, detail);
+
+      const funds = checkAffordable(state, cost);
+      if (funds !== null) return block(reasonFor(funds), cost, detail);
+
+      return allow(cost, detail);
+    }
+
+    case 'lockSupply': {
+      const cost = supplyLockCost(state);
+      const detail = `경쟁사 전체 속도 ${formatPercent(
+        1 - INTERFERENCE.supplyLockSlowdown,
+        0,
+      )} 감소 · 내 GPU 값 ${INTERFERENCE.supplyLockGpuPrice}배 (${formatDuration(
+        INTERFERENCE.supplyLockSeconds,
+      )})`;
+
+      const blocked = operationBlock(state, 'rivals');
+      if (blocked !== null) return block(blocked, cost, detail);
+
+      // 이미 다 끝난 상대뿐이면 돈만 나갑니다
+      const alive = state.rivals.some(
+        (item) => item.status !== 'collapsed' && item.status !== 'achieved',
+      );
+      if (!alive) return block('늦출 상대가 남아 있지 않습니다', cost, detail);
+
+      const funds = checkAffordable(state, cost);
+      if (funds !== null) return block(reasonFor(funds), cost, detail);
+
+      return allow(cost, detail);
     }
 
     default:

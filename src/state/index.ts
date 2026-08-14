@@ -29,9 +29,11 @@
 
 import {
   EVENTS,
+  INTERFERENCE,
   MARKET,
   RESEARCH,
   RIVALS,
+  RIVAL_CURVE,
   SAFETY,
   SPEED_OPTIONS,
   START,
@@ -48,13 +50,17 @@ import {
   fundingOffer,
   gpuCapacity,
   gpuUnitPrice,
+  intelCost,
   netPerSecond,
+  poachCost,
   powerAvailable,
   powerContractUpfront,
   powerDemand,
   researchRate,
   researcherPrice,
   rivalSpeed,
+  rivalStatusFor,
+  supplyLockCost,
 } from '../constraints';
 import {
   formatCount,
@@ -326,6 +332,12 @@ export function reducer(state: GameState, action: GameAction): GameState {
       return hireResearcher(state, action.count);
     case 'setSafety':
       return setSafety(state, action.value);
+    case 'buyIntel':
+      return buyIntel(state, action.rivalId);
+    case 'poachRival':
+      return poachRival(state, action.rivalId);
+    case 'lockSupply':
+      return lockSupply(state);
     case 'resolveEvent':
       return resolveEvent(state, action.choiceIndex);
     case 'setPaused':
@@ -430,12 +442,23 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
     const shake = randomRange(seed, -reportNoise, reportNoise);
     seed = shake.seed;
 
-    rivals.push({
+    // 붙어 있던 감속·가속은 시간이 지나면 평상시(1)로 돌아옵니다.
+    // 이게 없으면 인재를 한 번 빼온 것만으로 그 경쟁사가 끝까지 절름발이가 되고,
+    // 반대로 사건 한 번에 영영 못 따라잡게 되기도 합니다.
+    const recovery = RIVAL_CURVE.momentumRecoveryPerSecond * dt;
+    const momentum = rival.momentum + (1 - rival.momentum) * Math.min(1, recovery);
+
+    const stepped: Rival = {
       ...rival,
       researchProgress: advanced,
       reportedProgress: clampRatio(advanced + shake.value),
+      momentum,
       status,
-    });
+    };
+
+    // 정체·스퍼트 표시는 저장해둔 값이 아니라 지금의 속도 배수에서 끌어냅니다.
+    // 그래야 감속이 풀릴 때 표시도 저절로 '평소'로 돌아옵니다.
+    rivals.push({ ...stepped, status: rivalStatusFor(stepped) });
   }
 
   // ⓖ 내 연구소의 사고 판정 — 안전을 낮춰둔 만큼 확률이 올라갑니다
@@ -786,6 +809,139 @@ function hireResearcher(state: GameState, count: number): GameState {
   );
 
   return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/* ===========================================================================
+ *  경쟁사 대응
+ *  ---------------------------------------------------------------------------
+ *  전부 "내 걸 키울까, 상대를 늦출까"를 묻는 행동입니다.
+ *  쓴 돈은 내 설비로 돌아오지 않으므로, 늦추는 값어치가 그만큼 있어야 합니다.
+ * ======================================================================== */
+
+/** 지금 손댈 수 있는 경쟁사인지 (이미 탈락했거나 달성한 곳은 의미가 없습니다) */
+function targetableRival(state: GameState, rivalId: RivalId): Rival | null {
+  const rival = state.rivals.find((item) => item.id === rivalId);
+  if (rival === undefined) return null;
+  if (rival.status === 'collapsed' || rival.status === 'achieved') return null;
+  return rival;
+}
+
+/**
+ * 첩보 매입 — 그 경쟁사의 '진짜' 진행도를 알아냅니다.
+ *
+ * 상황판 숫자는 바깥에서 추정한 값이라 실제와 다를 수 있습니다.
+ * 이걸 사면 그 순간의 진짜 값을 기록에 남기고 상황판도 정확한 값으로 맞춥니다.
+ * 다만 다음 순간부터 다시 추정 오차가 붙기 시작합니다 — 정보는 시간이 지나면 낡습니다.
+ */
+function buyIntel(state: GameState, rivalId: RivalId): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.rivals) return state;
+
+  const rival = targetableRival(state, rivalId);
+  if (rival === null) return state;
+
+  const cost = intelCost(state);
+  if (checkAffordable(state, cost) !== null) return state;
+
+  const rivals = state.rivals.map((item) =>
+    item.id === rivalId ? { ...item, reportedProgress: item.researchProgress } : item,
+  );
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: `첩보 입수 — ${rival.name}의 실제 진행도는 ${percentText(rival.researchProgress)}입니다.`,
+      tone: 'info',
+    },
+  ]);
+
+  return {
+    ...state,
+    player: { ...state.player, money: state.player.money - cost },
+    rivals,
+    log: logged.log,
+    nextLogId: logged.nextLogId,
+  };
+}
+
+/**
+ * 인재 빼오기 — 상대의 핵심 인력을 데려옵니다.
+ *
+ * 상대는 느려지고 나는 연구원을 얻습니다. 이 게임에서 유일하게
+ * '한 번의 지출로 양쪽 격차를 동시에 벌리는' 수단이라 값이 비쌉니다.
+ * 비용은 지금 내 연구원 수에 연동되어 쓸수록 저절로 비싸집니다.
+ */
+function poachRival(state: GameState, rivalId: RivalId): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.rivals) return state;
+
+  const rival = targetableRival(state, rivalId);
+  if (rival === null) return state;
+
+  const cost = poachCost(state);
+  if (checkAffordable(state, cost) !== null) return state;
+
+  const rivals = state.rivals.map((item) =>
+    item.id === rivalId
+      ? { ...item, momentum: item.momentum * INTERFERENCE.poachSlowdown }
+      : item,
+  );
+
+  const player: PlayerState = {
+    ...state.player,
+    money: state.player.money - cost,
+    researchers: state.player.researchers + INTERFERENCE.poachResearchers,
+  };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: `${rival.name}의 핵심 연구원 ${formatCount(INTERFERENCE.poachResearchers)}명을 영입했습니다 (${formatMoney(cost)}).`,
+      tone: 'good',
+    },
+  ]);
+
+  return { ...state, player, rivals, log: logged.log, nextLogId: logged.nextLogId };
+}
+
+/**
+ * 공급 물량 선점 — GPU를 사재기해 경쟁사 전체를 늦춥니다.
+ *
+ * 대신 시장이 과열되어 내가 사는 GPU 값도 한동안 오릅니다.
+ * "상대를 늦추는 대가로 내 확장이 비싸진다" — 이 게임에서 가장 분명한 맞교환입니다.
+ */
+function lockSupply(state: GameState): GameState {
+  if (!isRunning(state)) return state;
+  if (!state.unlocks.rivals) return state;
+
+  const cost = supplyLockCost(state);
+  if (checkAffordable(state, cost) !== null) return state;
+
+  const rivals = state.rivals.map((item) =>
+    item.status === 'collapsed' || item.status === 'achieved'
+      ? item
+      : { ...item, momentum: item.momentum * INTERFERENCE.supplyLockSlowdown },
+  );
+
+  const market: MarketState = {
+    ...state.market,
+    gpuPrice: INTERFERENCE.supplyLockGpuPrice,
+    distortionRemaining: INTERFERENCE.supplyLockSeconds,
+  };
+
+  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
+    {
+      text: `GPU 물량을 선점했습니다 — 경쟁사 전체가 느려졌지만 당분간 내 GPU 값도 오릅니다.`,
+      tone: 'warn',
+    },
+  ]);
+
+  return {
+    ...state,
+    player: { ...state.player, money: state.player.money - cost },
+    rivals,
+    market,
+    log: logged.log,
+    nextLogId: logged.nextLogId,
+  };
 }
 
 /**

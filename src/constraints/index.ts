@@ -33,6 +33,9 @@ export {
   fundingOffer,
   fundingReadyAt,
   fundingRequiredProgress,
+  intelCost,
+  poachCost,
+  supplyLockCost,
 } from './pricing';
 
 // ── 설비 한계 ──
@@ -48,6 +51,7 @@ export {
   netPerSecond,
   accidentChancePerSecond,
   rivalSpeed,
+  rivalStatusFor,
 } from './rates';
 
 // ── 한계 위반 판정 ──
