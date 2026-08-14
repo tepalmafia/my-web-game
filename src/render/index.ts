@@ -23,6 +23,7 @@ export { App } from './App';
 export { Dashboard } from './Dashboard';
 export { TitleScreen } from './TitleScreen';
 export { EndScreen } from './EndScreen';
+export { ShareResult, buildShareText } from './ShareResult';
 export { EventModal } from './EventModal';
 export { LogPanel } from './LogPanel';
 export { RaceTrack, rivalStyle, rivalDisplayProgress } from './RaceTrack';

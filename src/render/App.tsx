@@ -59,6 +59,29 @@ export function App() {
     return () => clearInterval(timer);
   }, [speed]);
 
+  /**
+   * 실수로 탭을 닫거나 새로고침하는 사고를 막습니다.
+   *
+   * 이 게임은 저장 기능이 없어서 새로고침하면 20분짜리 판이 통째로 사라집니다.
+   * 그래서 '플레이 중'일 때만 브라우저에 확인창을 띄워 달라고 부탁합니다.
+   *
+   * 시작 화면과 결과 화면에서는 붙이지 않습니다 — 잃을 게 없는데 확인창이 뜨면
+   * 성가시기만 합니다. (브라우저가 문구를 직접 정하므로 우리가 쓸 수는 없습니다)
+   */
+  const isPlaying = state.phase === 'playing';
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // 오래된 브라우저는 preventDefault 만으로는 확인창을 띄우지 않습니다
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isPlaying]);
+
   switch (state.phase) {
     case 'title':
       return <TitleScreen state={state} dispatch={dispatch} />;

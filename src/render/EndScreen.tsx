@@ -14,10 +14,11 @@
  */
 
 import type { Dispatch } from 'react';
-import { formatDuration, formatMoney, formatPercent } from '../input';
+import { formatDuration, formatMoney, formatPercent, withParticle } from '../input';
 import type { GameAction, GameOutcome, GameState } from '../types';
 import { ProgressBar } from './ProgressBar';
 import { rivalDisplayProgress, rivalStyle } from './RaceTrack';
+import { ShareResult } from './ShareResult';
 
 interface EndScreenProps {
   state: GameState;
@@ -51,7 +52,7 @@ function copyFor(state: GameState, outcome: GameOutcome | null): OutcomeCopy {
       return {
         won: true,
         headline: '우리가 먼저 도달했다',
-        body: `${lab}이(가) 세계 최초로 AGI에 도달했습니다. 경쟁 연구소 세 곳은 결승선을 눈앞에 두고 멈춰 섰습니다.`,
+        body: `${withParticle(lab, '이', '가')} 세계 최초로 AGI에 도달했습니다. 경쟁 연구소 세 곳은 결승선을 눈앞에 두고 멈춰 섰습니다.`,
         toneClass: 'text-emerald-300',
         badge: '승리',
       };
@@ -62,7 +63,7 @@ function copyFor(state: GameState, outcome: GameOutcome | null): OutcomeCopy {
       return {
         won: false,
         headline: '한발 늦었다',
-        body: `${name}이(가) 먼저 AGI에 도달했습니다. 우리 클러스터는 아직 훈련 중이었습니다. 어디서 몇 초를 잃었는지는 오른쪽 기록에 남아 있습니다.`,
+        body: `${withParticle(name, '이', '가')} 먼저 AGI에 도달했습니다. 우리 클러스터는 아직 훈련 중이었습니다.`,
         toneClass: 'text-rose-300',
         badge: '패배',
       };
@@ -211,6 +212,8 @@ export function EndScreen({ state, dispatch }: EndScreenProps) {
             </li>
           ))}
         </ol>
+
+        <ShareResult state={state} />
 
         <button
           type="button"

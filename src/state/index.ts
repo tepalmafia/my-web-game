@@ -56,7 +56,13 @@ import {
   researcherPrice,
   rivalSpeed,
 } from '../constraints';
-import { formatCount, formatMoney, formatPower, groupDigits } from '../constraints/format';
+import {
+  formatCount,
+  formatMoney,
+  formatPower,
+  groupDigits,
+  withParticle,
+} from '../constraints/format';
 import { isRunning } from '../constraints/running';
 import type {
   GameAction,
@@ -409,7 +415,7 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
       if (roll.value < accidentPerSecond * dt) {
         status = 'collapsed';
         lines.push({
-          text: `${rival.name}이(가) 훈련 사고로 경주에서 이탈했습니다.`,
+          text: `${withParticle(rival.name, '이', '가')} 훈련 사고로 경주에서 이탈했습니다.`,
           tone: 'good',
         });
       }
@@ -593,11 +599,14 @@ function unlockRules(state: GameState): UnlockRule[] {
 function outcomeLine(state: GameState, outcome: GameOutcome, rivalId: RivalId | null): PendingLog {
   switch (outcome) {
     case 'agiAchieved':
-      return { text: `${state.player.labName}이(가) 가장 먼저 AGI에 도달했습니다.`, tone: 'good' };
+      return {
+        text: `${withParticle(state.player.labName, '이', '가')} 가장 먼저 AGI에 도달했습니다.`,
+        tone: 'good',
+      };
     case 'rivalWon': {
       const winner = state.rivals.find((rival) => rival.id === rivalId);
       const name = winner === undefined ? '경쟁 연구소' : winner.name;
-      return { text: `${name}이(가) 먼저 AGI에 도달했습니다.`, tone: 'bad' };
+      return { text: `${withParticle(name, '이', '가')} 먼저 AGI에 도달했습니다.`, tone: 'bad' };
     }
     case 'bankrupt':
       return { text: '자금이 바닥나 연구소를 더 이상 운영할 수 없습니다.', tone: 'bad' };
