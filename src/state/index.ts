@@ -31,6 +31,7 @@ import {
   EVENTS,
   INTERFERENCE,
   MARKET,
+  PHASE2,
   RESEARCH,
   RIVALS,
   RIVAL_CURVE,
@@ -60,6 +61,8 @@ import {
   researcherPrice,
   rivalSpeed,
   rivalStatusFor,
+  controlChangePerSecond,
+  isSelfImproving,
   supplyLockCost,
 } from '../constraints';
 import {
@@ -238,6 +241,9 @@ export function createInitialState(labName: string, rngSeed: number): GameState 
     fundingRound: 0,
     equityRetained: START.equity,
     safety: START.safety,
+    // 후반 단계 값들 — 진행도가 PHASE2.startProgress 를 넘기 전까지는 움직이지 않습니다
+    control: 1,
+    alignmentShare: PHASE2.startAlignmentShare,
   };
 
   // 경쟁사는 전부 같은 출발선(진행도 0)에서 평소 속도로 시작합니다.
@@ -332,6 +338,8 @@ export function reducer(state: GameState, action: GameAction): GameState {
       return hireResearcher(state, action.count);
     case 'setSafety':
       return setSafety(state, action.value);
+    case 'setAlignmentShare':
+      return setAlignmentShare(state, action.value);
     case 'buyIntel':
       return buyIntel(state, action.rivalId);
     case 'poachRival':
@@ -384,7 +392,28 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
   // ⓓ 돈 (수입 − 지출). 마이너스가 되면 아래 ⑨에서 파산으로 판정됩니다
   const money = state.player.money + netPerSecond(state) * dt;
 
-  const player: PlayerState = { ...state.player, researchProgress: progress, money };
+  // ⓓ-2 후반 단계 — 자기개선이 시작됐는가, 통제력은 어떻게 되고 있는가
+  //
+  //  단계 진입은 '이번 틱에 경계를 넘었는가'로 판단합니다. 따로 저장하지 않아도
+  //  직전 진행도와 지금 진행도를 비교하면 정확히 한 번만 알릴 수 있습니다.
+  if (!isSelfImproving(state) && progress >= PHASE2.startProgress && progress < RESEARCH.goal) {
+    lines.push({
+      text: '모델이 스스로 연구를 돕기 시작했습니다 — 이제부터는 무엇을 사느냐보다 그 힘을 어디에 쓰느냐가 승패를 가릅니다.',
+      tone: 'warn',
+    });
+  }
+
+  // 통제력은 '진행도가 이미 갱신된 상태'를 기준으로 계산합니다.
+  // 그래야 후반에 막 진입한 틱부터 곧바로 깎이기 시작합니다.
+  const advancedPlayer: GameState = {
+    ...state,
+    player: { ...state.player, researchProgress: progress },
+  };
+  const control = clampRatio(
+    state.player.control + controlChangePerSecond(advancedPlayer) * dt,
+  );
+
+  const player: PlayerState = { ...state.player, researchProgress: progress, money, control };
 
   // ⓔ 흔들린 시장 가격이 평상시로 돌아오는 중
   let market = state.market;
@@ -942,6 +971,24 @@ function lockSupply(state: GameState): GameState {
     log: logged.log,
     nextLogId: logged.nextLogId,
   };
+}
+
+/**
+ * 자율 연구력 배분 조절 (0 = 전부 가속, 1 = 전부 정렬).
+ *
+ * 후반 단계에 들어가기 전에는 아무 의미가 없어서 막습니다.
+ * 값 자체는 그냥 저장할 뿐이고, 이 값이 속도와 통제력에 어떻게 작용하는지는
+ * 전부 constraints 가 계산합니다.
+ */
+function setAlignmentShare(state: GameState, value: number): GameState {
+  if (!isRunning(state)) return state;
+  if (!isSelfImproving(state)) return state;
+  if (!Number.isFinite(value)) return state;
+
+  const next = clampRatio(value);
+  if (next === state.player.alignmentShare) return state;
+
+  return { ...state, player: { ...state.player, alignmentShare: next } };
 }
 
 /**

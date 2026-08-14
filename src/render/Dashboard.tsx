@@ -27,11 +27,13 @@ import {
   ResearcherPanel,
   SafetyPanel,
 } from './ActionPanel';
+import { isSelfImproving } from '../constraints';
 import { AlertStrip, DangerVignette } from './DangerOverlay';
 import { DatacenterView } from './DatacenterView';
 import { LogPanel } from './LogPanel';
 import { RaceTrack } from './RaceTrack';
 import { RivalActionPanel } from './RivalActionPanel';
+import { SelfResearchPanel } from './SelfResearchPanel';
 import { ResourceBar } from './ResourceBar';
 
 /** 패널이 화면에 놓이는 순서 (게임 규칙이 아니라 화면 배치라 여기 있습니다) */
@@ -95,6 +97,8 @@ interface DashboardProps {
 export function Dashboard({ state, dispatch }: DashboardProps) {
   const isNew = useFreshPanels(state.unlocks);
   const unlocks = state.unlocks;
+  // 후반 단계는 해금 목록이 아니라 진행도에서 곧바로 판단합니다 (저장하지 않는 값)
+  const selfImproving = isSelfImproving(state);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -111,6 +115,13 @@ export function Dashboard({ state, dispatch }: DashboardProps) {
 
       <main className="mx-auto grid max-w-6xl gap-3 p-3 md:grid-cols-[minmax(0,1fr)_20rem] md:gap-4 md:p-4">
         <div className="grid content-start gap-3 sm:grid-cols-2">
+          {/*
+            후반 단계에 들어가면 이 패널이 맨 위에 옵니다.
+            이때부터 승패를 가르는 조작이 여기 하나뿐이라, 설비 패널보다 앞에 두어야
+            플레이어가 '무엇이 달라졌는지'를 바로 알아챕니다.
+          */}
+          {selfImproving && <SelfResearchPanel state={state} dispatch={dispatch} />}
+
           {/* 설비 현황은 두 칸을 다 씁니다 (칸이 촘촘해서 좁으면 안 보입니다) */}
           {unlocks.gpu && (
             <div className="sm:col-span-2">

@@ -42,3 +42,8 @@ export function withResearchers(state: GameState, researchers: number): GameStat
 export function withSafety(state: GameState, safety: Ratio): GameState {
   return { ...state, player: { ...state.player, safety } };
 }
+
+/** 자율 연구력 배분만 다른 복사본 */
+export function withAlignmentShare(state: GameState, alignmentShare: Ratio): GameState {
+  return { ...state, player: { ...state.player, alignmentShare } };
+}

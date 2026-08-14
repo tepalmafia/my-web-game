@@ -22,6 +22,7 @@ const OUTCOME_LINE: Record<GameOutcome, string> = {
   rivalWon: '경쟁 연구소에 선수를 빼앗김',
   bankrupt: '자금이 바닥나 연구소 폐쇄',
   catastrophe: '안전을 무시하다 사고 발생',
+  controlLost: '자기개선하는 모델을 놓침',
 };
 
 /**

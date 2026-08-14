@@ -52,6 +52,11 @@ export {
   accidentChancePerSecond,
   rivalSpeed,
   rivalStatusFor,
+  isSelfImproving,
+  selfImproveDepth,
+  selfResearchMultiplier,
+  controlChangePerSecond,
+  secondsUntilControlLost,
 } from './rates';
 
 // ── 한계 위반 판정 ──

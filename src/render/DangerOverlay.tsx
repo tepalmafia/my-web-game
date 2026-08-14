@@ -18,7 +18,7 @@
  */
 
 import { ALERT } from '../balance';
-import { computeDerived } from '../constraints';
+import { computeDerived, isSelfImproving, secondsUntilControlLost } from '../constraints';
 import { withParticle } from '../input';
 import type { GameState } from '../types';
 
@@ -105,6 +105,25 @@ export function collectAlerts(state: GameState): Alert[] {
         level: 'danger',
         text: `${withParticle(names, '이', '가')} 결승선에 근접했습니다`,
       });
+    }
+  }
+
+  // ── 자기개선하는 모델을 놓치기 직전이다 (후반 단계에서만) ──
+  if (isSelfImproving(state)) {
+    const untilLost = secondsUntilControlLost(state);
+    if (untilLost !== null) {
+      const minutes = Math.floor(untilLost / 60);
+      const seconds = Math.floor(untilLost % 60);
+      const left = `${minutes}:${String(seconds).padStart(2, '0')}`;
+      if (untilLost <= ALERT.controlDangerSeconds) {
+        alerts.push({
+          id: 'control',
+          level: 'danger',
+          text: `통제력 소진까지 ${left} — 정렬 배분을 올리세요`,
+        });
+      } else if (untilLost <= ALERT.controlWarnSeconds) {
+        alerts.push({ id: 'control', level: 'warn', text: `통제력이 ${left} 뒤에 바닥납니다` });
+      }
     }
   }
 

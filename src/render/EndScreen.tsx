@@ -8,6 +8,7 @@
  *      rivalWon     : 경쟁사가 먼저 도달했다
  *      bankrupt     : 통장이 먼저 말랐다
  *      catastrophe  : 검증을 건너뛰다 사고가 났다
+ *      controlLost  : 자기개선하는 모델을 놓쳤다 (후반 단계에서만)
  *
  *  "졌습니다" 한 줄로 끝내지 않고 왜 졌는지를 문장으로 남기는 이유는,
  *  다음 판에 무엇을 다르게 해볼지가 이 화면에서 정해지기 때문입니다.
@@ -85,6 +86,15 @@ function copyFor(state: GameState, outcome: GameOutcome | null): OutcomeCopy {
         body: '검증을 건너뛴 훈련에서 사고가 났습니다. 앞서 나가기 위해 치른 대가였고, 되돌릴 방법은 없었습니다.',
         toneClass: 'text-rose-300',
         badge: '패배',
+      };
+
+    case 'controlLost':
+      return {
+        won: false,
+        headline: '더 이상 우리 것이 아니다',
+        body: '자기개선에 들어간 모델이 우리 손을 벗어났습니다. 가속에 쏟은 만큼 정렬에 쏟지 않았고, 되돌릴 시간은 남아 있지 않았습니다.',
+        toneClass: 'text-fuchsia-300',
+        badge: '통제 상실',
       };
 
     default:

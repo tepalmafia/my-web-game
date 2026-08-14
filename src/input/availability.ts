@@ -42,7 +42,10 @@ import {
   powerCostPerSecond,
   powerDemand,
   researcherMultiplier,
+  controlChangePerSecond,
+  isSelfImproving,
   safetySpeedMultiplier,
+  selfResearchMultiplier,
   supplyLockCost,
   violationMessage,
 } from '../constraints';
@@ -51,6 +54,7 @@ import type { EventChoice, GameAction, GameState, Money, PanelId, PlayerDelta } 
 import { formatCompact, formatDuration, formatMegawatts, formatMoney, formatPercent } from './format';
 import { researcherHireCost } from './limits';
 import {
+  withAlignmentShare,
   withDatacenters,
   withGpus,
   withPowerContracted,
@@ -402,6 +406,28 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
 
       const blocked = operationBlock(state, 'safety');
       if (blocked !== null) return block(blocked, null, detail);
+
+      return allow(null, detail);
+    }
+
+    case 'setAlignmentShare': {
+      const value = action.value;
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        return block('배분은 0% ~ 100% 사이에서만 정할 수 있습니다', null, null);
+      }
+
+      const next = withAlignmentShare(state, value);
+      const speedBonus = selfResearchMultiplier(next) - 1;
+      const controlChange = controlChangePerSecond(next);
+      const detail =
+        `연구 속도 +${formatPercent(speedBonus)} · 통제력 ` +
+        `${controlChange >= 0 ? '+' : ''}${formatPercent(controlChange, 2)}/초`;
+
+      const stopped = stoppedReason(state);
+      if (stopped !== null) return block(stopped, null, detail);
+      if (!isSelfImproving(state)) {
+        return block('아직 모델이 스스로 연구할 만큼 성장하지 않았습니다', null, detail);
+      }
 
       return allow(null, detail);
     }

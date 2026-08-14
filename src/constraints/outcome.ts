@@ -47,5 +47,12 @@ export function checkOutcome(state: GameState): { outcome: GameOutcome; rivalId:
     return { outcome: 'bankrupt', rivalId: null };
   }
 
+  // ④ 자기개선하는 모델을 놓쳤는가 (후반 단계에서만 일어납니다)
+  //   승리 판정보다 뒤에 두는 이유: 통제력이 0이 되는 그 순간 목표에도 닿았다면
+  //   아슬아슬하게 성공한 것으로 봐 줍니다.
+  if (state.player.control <= 0) {
+    return { outcome: 'controlLost', rivalId: null };
+  }
+
   return null;
 }

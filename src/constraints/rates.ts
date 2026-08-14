@@ -10,6 +10,7 @@
 
 import {
   DATACENTER,
+  PHASE2,
   RESEARCH,
   RESEARCHER,
   REVENUE,
@@ -17,7 +18,16 @@ import {
   SAFETY,
   TARGET_PLAY_SECONDS,
 } from '../balance';
-import type { GameState, Money, Multiplier, RatioPerSecond, Rival, RivalStatus } from '../types';
+import type {
+  GameState,
+  Money,
+  Multiplier,
+  Ratio,
+  RatioPerSecond,
+  Rival,
+  RivalStatus,
+  Seconds,
+} from '../types';
 import { activeGpus } from './capacity';
 import { powerCostPerSecond } from './pricing';
 
@@ -58,7 +68,8 @@ export function researchRate(state: GameState): RatioPerSecond {
     activeGpus(state) *
     RESEARCH.perGpuPerSecond *
     researcherMultiplier(state) *
-    safetySpeedMultiplier(state)
+    safetySpeedMultiplier(state) *
+    selfResearchMultiplier(state)
   );
 }
 
@@ -127,7 +138,7 @@ export function rivalSpeed(state: GameState, rival: Rival): RatioPerSecond {
   // 이미 끝난 경쟁사는 더 이상 진행하지 않습니다
   if (rival.status === 'collapsed' || rival.status === 'achieved') return 0;
 
-  return rival.baseSpeed * rival.momentum * personalityMultiplier(state, rival);
+  return rival.baseSpeed * rival.momentum * personalityMultiplier(state, rival) * lateBoost(rival);
 }
 
 /**
@@ -164,4 +175,79 @@ function personalityMultiplier(state: GameState, rival: Rival): Multiplier {
     default:
       return 1;
   }
+}
+
+/**
+ * 경쟁사도 같은 지점에서 자기개선에 들어갑니다.
+ * 플레이어만 후반에 빨라지면 경주가 싱거워지기 때문입니다.
+ */
+function lateBoost(rival: Rival): Multiplier {
+  if (rival.researchProgress < PHASE2.startProgress) return 1;
+  return PHASE2.rivalLateBoost;
+}
+
+/* ===========================================================================
+ *  후반 단계 — 자기개선
+ * ======================================================================== */
+
+/**
+ * 지금이 후반 단계인가 (모델이 스스로 연구를 돕기 시작했는가).
+ *
+ * 저장하지 않고 진행도에서 곧바로 판단합니다.
+ * 저장해두면 '단계는 후반인데 진행도는 전반' 같은 어긋난 상태가 생길 수 있습니다.
+ */
+export function isSelfImproving(state: GameState): boolean {
+  return state.player.researchProgress >= PHASE2.startProgress;
+}
+
+/**
+ * 후반 진입 이후 얼마나 왔는지 (0 = 막 진입, 1 = 목표 도달 직전).
+ * 자율 연구력의 세기와 통제력 소모가 이 값에 비례해 커집니다.
+ */
+export function selfImproveDepth(state: GameState): Ratio {
+  if (!isSelfImproving(state)) return 0;
+  const span = RESEARCH.goal - PHASE2.startProgress;
+  if (span <= 0) return 1;
+  return clamp((state.player.researchProgress - PHASE2.startProgress) / span, 0, 1);
+}
+
+/**
+ * 자율 연구력이 붙여주는 속도 배수.
+ *
+ * 후반 전에는 1(변화 없음)입니다.
+ * 후반에는 '가속에 배분한 비율 × 얼마나 깊이 왔는지' 만큼 보너스가 붙습니다.
+ * → 후반에는 GPU를 더 사는 것보다 이 배분을 조절하는 쪽이 훨씬 크게 작용합니다.
+ */
+export function selfResearchMultiplier(state: GameState): Multiplier {
+  const depth = selfImproveDepth(state);
+  if (depth === 0) return 1;
+
+  const speedShare = 1 - clamp(state.player.alignmentShare, 0, 1);
+  return 1 + PHASE2.maxSelfSpeedBonus * speedShare * depth;
+}
+
+/**
+ * 1초에 변하는 통제력 (양수면 회복, 음수면 깎임).
+ *
+ * 가속에 배분할수록 빨리 깎이고, 정렬에 배분할수록 회복됩니다.
+ * 깊이 들어갈수록 소모가 커져서, 후반으로 갈수록 같은 배분으로는 버틸 수 없게 됩니다.
+ */
+export function controlChangePerSecond(state: GameState): RatioPerSecond {
+  const depth = selfImproveDepth(state);
+  if (depth === 0) return 0;
+
+  const alignmentShare = clamp(state.player.alignmentShare, 0, 1);
+  const drain = PHASE2.controlDrainPerSecond * (1 - alignmentShare) * depth;
+  const recovery = PHASE2.controlRecoveryPerSecond * alignmentShare;
+  return recovery - drain;
+}
+
+/**
+ * 지금 통제력이면 통제를 잃기까지 남은 시간(초).
+ * 회복 중이거나 후반이 아니면 null 입니다.
+ */
+export function secondsUntilControlLost(state: GameState): Seconds | null {
+  const change = controlChangePerSecond(state);
+  if (change >= 0) return null;
+  return state.player.control / -change;
 }
