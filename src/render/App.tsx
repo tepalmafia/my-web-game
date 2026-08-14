@@ -26,11 +26,13 @@
  */
 
 import { useEffect, useReducer } from 'react';
-import { START, TICK_SECONDS } from '../balance';
+import { TICK_SECONDS } from '../balance';
+import { s } from '../i18n';
 import { createInitialState, reducer } from '../state';
 import { Dashboard } from './Dashboard';
 import { EndScreen } from './EndScreen';
 import { EventModal } from './EventModal';
+import { useLocale } from './LanguagePicker';
 import { TitleScreen } from './TitleScreen';
 
 /**
@@ -38,7 +40,7 @@ import { TitleScreen } from './TitleScreen';
  * 아직 '시작 화면' 상태이고, 이름과 씨앗은 시작 버튼을 누를 때 다시 정해집니다.
  */
 function createBootState() {
-  return createInitialState(START.labName, Date.now());
+  return createInitialState(s().names.defaultLab, Date.now());
 }
 
 /**
@@ -47,6 +49,9 @@ function createBootState() {
  */
 export function App() {
   const [state, dispatch] = useReducer(reducer, null, createBootState);
+
+  // 언어가 바뀌면 이 아래 화면 전체가 새 언어로 다시 그려집니다
+  useLocale();
 
   const speed = state.speed;
 

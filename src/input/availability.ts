@@ -17,11 +17,12 @@
  *    1) 값과 한계는 전부 constraints 폴더에서 가져옵니다.
  *       여기서 가격을 다시 계산하면, 버튼에 적힌 값과 실제로 빠져나가는 돈이
  *       언젠가 반드시 어긋납니다.
- *    2) 플레이어에게 보이는 글은 전부 쉬운 한국어입니다.
- *       영어 오류 문구나 프로그램 용어는 절대 화면에 내보내지 않습니다.
+ *    2) 플레이어에게 보이는 글은 여기서 직접 쓰지 않고 전부 i18n 사전에서 가져옵니다.
+ *       한 군데라도 직접 쓰면 영어로 하는 사람에게 한국어가 튀어나옵니다.
  */
 
-import { INTERFERENCE, SAFETY, SPEED_OPTIONS, START } from '../balance';
+import { INTERFERENCE, SAFETY, SPEED_OPTIONS } from '../balance';
+import { s } from '../i18n';
 import {
   accidentChancePerSecond,
   burnPerSecond,
@@ -66,7 +67,7 @@ import {
 export interface ActionAvailability {
   /** 지금 이 버튼을 누를 수 있는가 */
   enabled: boolean;
-  /** 못 누르는 이유 (한글). enabled 가 true 면 null */
+  /** 못 누르는 이유 (지금 언어). enabled 가 true 면 null */
   reason: string | null;
   /** 이 버튼을 누를 때 드는 돈. 비용이 없으면 null */
   cost: Money | null;
@@ -79,7 +80,7 @@ function allow(cost: Money | null, detail: string | null): ActionAvailability {
   return { enabled: true, reason: null, cost, detail };
 }
 
-/** 누를 수 없다 (이유를 반드시 한글로 적습니다) */
+/** 누를 수 없다 (이유는 반드시 사전에서 가져옵니다) */
 function block(reason: string, cost: Money | null, detail: string | null): ActionAvailability {
   return { enabled: false, reason, cost, detail };
 }
@@ -95,12 +96,12 @@ function block(reason: string, cost: Money | null, detail: string | null): Actio
 function reasonFor(violation: LimitViolation): string {
   switch (violation.kind) {
     case 'insufficientFunds':
-      return `자금이 ${formatMoney(violation.needed - violation.have)} 부족합니다`;
+      return s().violations.insufficientFunds(formatMoney(violation.needed - violation.have));
 
     case 'gpuCapacityExceeded': {
       const room = violation.capacity - violation.current;
       const missing = violation.requested - room;
-      return `GPU 자리가 ${formatCompact(missing)}장 모자랍니다 (데이터센터를 먼저 지으세요)`;
+      return s().violations.gpuSlotsShort(formatCompact(missing));
     }
 
     default:
@@ -119,10 +120,10 @@ function reasonFor(violation: LimitViolation): string {
 function stoppedReason(state: GameState): string | null {
   if (computeDerived(state).running) return null;
 
-  if (state.activeEvent !== null) return '먼저 사건 창에서 결정을 내려 주세요';
-  if (state.phase === 'title') return '아직 게임을 시작하지 않았습니다';
-  if (state.phase === 'ended') return '이미 끝난 판입니다';
-  if (state.paused) return '일시정지 중입니다. 재개한 뒤에 눌러 주세요';
+  if (state.activeEvent !== null) return s().availability.eventOpen;
+  if (state.phase === 'title') return s().availability.notStarted;
+  if (state.phase === 'ended') return s().availability.alreadyEnded;
+  if (state.paused) return s().availability.pausedNow;
 
   return reasonFor({ kind: 'gameNotRunning' });
 }
@@ -155,32 +156,34 @@ function describeDelta(delta: PlayerDelta | undefined): string | null {
   const parts: string[] = [];
 
   const money = delta.money;
-  if (money !== undefined) parts.push(`자금 ${withSign(money, formatMoney(money))}`);
+  if (money !== undefined) parts.push(s().availability.deltaMoney(withSign(money, formatMoney(money))));
 
   const gpus = delta.gpus;
-  if (gpus !== undefined) parts.push(`GPU ${withSign(gpus, formatCompact(gpus))}장`);
+  if (gpus !== undefined) parts.push(s().availability.deltaGpus(withSign(gpus, formatCompact(gpus))));
 
   const power = delta.powerContracted;
-  if (power !== undefined) parts.push(`전력 ${withSign(power, formatMegawatts(power))}`);
+  if (power !== undefined) parts.push(s().availability.deltaPower(withSign(power, formatMegawatts(power))));
 
   const progress = delta.researchProgress;
-  if (progress !== undefined) parts.push(`진행도 ${withSign(progress, formatPercent(progress))}`);
+  if (progress !== undefined) {
+    parts.push(s().availability.deltaProgress(withSign(progress, formatPercent(progress))));
+  }
 
   const datacenters = delta.datacenters;
   if (datacenters !== undefined) {
-    parts.push(`데이터센터 ${withSign(datacenters, formatCompact(datacenters))}동`);
+    parts.push(s().availability.deltaDatacenters(withSign(datacenters, formatCompact(datacenters))));
   }
 
   const researchers = delta.researchers;
   if (researchers !== undefined) {
-    parts.push(`연구원 ${withSign(researchers, formatCompact(researchers))}명`);
+    parts.push(s().availability.deltaResearchers(withSign(researchers, formatCompact(researchers))));
   }
 
   const equity = delta.equityRetained;
-  if (equity !== undefined) parts.push(`지분 ${withSign(equity, formatPercent(equity))}`);
+  if (equity !== undefined) parts.push(s().availability.deltaEquity(withSign(equity, formatPercent(equity))));
 
   const safety = delta.safety;
-  if (safety !== undefined) parts.push(`안전 ${withSign(safety, formatPercent(safety))}`);
+  if (safety !== undefined) parts.push(s().availability.deltaSafety(withSign(safety, formatPercent(safety))));
 
   return parts.length === 0 ? null : parts.join(' · ');
 }
@@ -207,42 +210,42 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
 
     case 'startGame': {
       const typed = action.labName.trim();
-      const name = typed === '' ? START.labName : typed;
-      const detail = `'${name}' 이름으로 새 판을 시작합니다`;
-      if (state.phase === 'playing') return block('이미 게임이 진행 중입니다', null, detail);
+      const name = typed === '' ? s().names.defaultLab : typed;
+      const detail = s().availability.startDetail(name);
+      if (state.phase === 'playing') return block(s().availability.alreadyPlaying, null, detail);
       return allow(null, detail);
     }
 
     case 'tick': {
       // 화면이 실수로 0초나 음수 시간을 보내면 시간이 거꾸로 흐를 수 있어 막습니다
       if (!Number.isFinite(action.deltaSeconds) || action.deltaSeconds <= 0) {
-        return block('흐른 시간은 0보다 커야 합니다', null, null);
+        return block(s().availability.tickPositive, null, null);
       }
       return allow(null, null);
     }
 
     case 'setPaused': {
-      const detail = action.paused ? '시간을 잠시 멈춥니다' : '멈췄던 시간을 다시 흐르게 합니다';
+      const detail = action.paused ? s().availability.pauseOn : s().availability.pauseOff;
       return allow(null, detail);
     }
 
     case 'setSpeed': {
       if (!SPEED_OPTIONS.includes(action.speed)) {
-        return block('고를 수 없는 속도입니다', null, null);
+        return block(s().availability.badSpeed, null, null);
       }
-      return allow(null, `${formatCompact(action.speed)}배 속도로 진행합니다`);
+      return allow(null, s().availability.speedDetail(formatCompact(action.speed)));
     }
 
     case 'restart':
-      return allow(null, '지금 판을 접고 처음부터 다시 시작합니다');
+      return allow(null, s().availability.restartDetail);
 
     case 'resolveEvent': {
       const event = state.activeEvent;
-      if (event === null) return block('지금은 답해야 할 사건이 없습니다', null, null);
+      if (event === null) return block(s().availability.noEvent, null, null);
 
       const index = action.choiceIndex;
       if (!Number.isInteger(index) || index < 0 || index >= event.choices.length) {
-        return block('고를 수 없는 선택지입니다', null, null);
+        return block(s().availability.badChoice, null, null);
       }
 
       const choice = event.choices[index];
@@ -269,13 +272,15 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       // "얼마나 더 있어야 하는지"를 숫자로 알려줘야 답답하지 않습니다.
       let detail: string;
       if (offer !== null) {
-        detail = `자금 +${formatMoney(offer.amount)} · 지분 ${formatPercent(offer.equityCost)} 내줌`;
+        detail = s().availability.fundingDetail(formatMoney(offer.amount), formatPercent(offer.equityCost));
       } else if (why === 'tooSoon') {
-        detail = `다음 라운드까지 ${formatDuration(Math.max(0, fundingReadyAt(state) - state.elapsed))} 남음`;
+        detail = s().availability.fundingWaitDetail(
+          formatDuration(Math.max(0, fundingReadyAt(state) - state.elapsed)),
+        );
       } else if (why === 'needProgress') {
-        detail = `진행도 ${formatPercent(fundingRequiredProgress(state))} 이상이어야 다음 투자를 받습니다`;
+        detail = s().availability.fundingProgressDetail(formatPercent(fundingRequiredProgress(state)));
       } else {
-        detail = '더 내줄 지분이 남지 않았습니다';
+        detail = s().availability.fundingNoEquity;
       }
 
       const blocked = operationBlock(state, 'funding');
@@ -285,11 +290,11 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       // (그냥 '아직 안 됩니다' 라고만 하면 플레이어가 언제 다시 눌러야 할지 알 수 없습니다)
       if (why === 'tooSoon') {
         const left = formatDuration(Math.max(0, fundingReadyAt(state) - state.elapsed));
-        return block(`투자자들이 아직 다음 라운드를 열지 않았습니다 (${left} 남음)`, null, detail);
+        return block(s().availability.fundingTooSoon(left), null, detail);
       }
       if (why === 'needProgress') {
         const need = formatPercent(fundingRequiredProgress(state));
-        return block(`성과가 더 필요합니다 (진행도 ${need} 이상)`, null, detail);
+        return block(s().availability.fundingNeedProgress(need), null, detail);
       }
       // 지분을 다 팔았으면 더 이상 투자를 받을 수 없습니다
       if (offer === null) return block(reasonFor({ kind: 'equityExhausted' }), null, detail);
@@ -300,14 +305,14 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
     case 'buyGpu': {
       const count = action.count;
       if (!Number.isInteger(count) || count <= 0) {
-        return block('GPU는 한 장 이상부터 살 수 있습니다', null, null);
+        return block(s().availability.gpuMinimum, null, null);
       }
 
       const unitPrice = gpuUnitPrice(state);
       const cost = unitPrice * count;
       // 산 GPU가 추가로 먹는 전력 (지금 상태에 count 장만 있다고 가정해서 구합니다)
       const addedPower = powerDemand(withGpus(state, count));
-      const detail = `장당 ${formatMoney(unitPrice)} · 전력 ${formatMegawatts(addedPower)} 더 필요`;
+      const detail = s().availability.gpuDetail(formatMoney(unitPrice), formatMegawatts(addedPower));
 
       const stopped = stoppedReason(state);
       if (stopped !== null) return block(stopped, cost, detail);
@@ -322,13 +327,13 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
     case 'contractPower': {
       const megawatts = action.megawatts;
       if (!Number.isFinite(megawatts) || megawatts <= 0) {
-        return block('계약할 전력은 0보다 커야 합니다', null, null);
+        return block(s().availability.powerMinimum, null, null);
       }
 
       const cost = powerContractUpfront(state, megawatts);
       // 이만큼만 계약했다고 가정하면 매초 얼마가 더 나가는지가 나옵니다
       const addedBurn = powerCostPerSecond(withPowerContracted(state, megawatts));
-      const detail = `전력 +${formatMegawatts(megawatts)} · 초당 ${formatMoney(addedBurn)} 추가`;
+      const detail = s().availability.powerDetail(formatMegawatts(megawatts), formatMoney(addedBurn));
 
       const blocked = operationBlock(state, 'power');
       if (blocked !== null) return block(blocked, cost, detail);
@@ -344,9 +349,10 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       const next = withDatacenters(state, state.player.datacenters + 1);
       const addedSlots = gpuCapacity(next) - gpuCapacity(state);
       const addedUpkeep = burnPerSecond(next) - burnPerSecond(state);
-      const detail = `GPU 자리 +${formatCompact(addedSlots)}장 · 초당 ${formatMoney(
-        addedUpkeep,
-      )} 추가`;
+      const detail = s().availability.datacenterDetail(
+        formatCompact(addedSlots),
+        formatMoney(addedUpkeep),
+      );
 
       const blocked = operationBlock(state, 'datacenter');
       if (blocked !== null) return block(blocked, cost, detail);
@@ -360,22 +366,23 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
     case 'hireResearcher': {
       const count = action.count;
       if (!Number.isInteger(count) || count <= 0) {
-        return block('연구원은 한 명 이상부터 뽑을 수 있습니다', null, null);
+        return block(s().availability.hireMinimum, null, null);
       }
 
       const price = researcherHireCost(state, count);
       const next = withResearchers(state, state.player.researchers + count);
       const speedGain = researcherMultiplier(next) / researcherMultiplier(state) - 1;
       const addedSalary = burnPerSecond(next) - burnPerSecond(state);
-      const detail = `연구 속도 +${formatPercent(speedGain)} · 초당 ${formatMoney(
-        addedSalary,
-      )} 추가`;
+      const detail = s().availability.hireDetail(
+        formatPercent(speedGain),
+        formatMoney(addedSalary),
+      );
 
       const blocked = operationBlock(state, 'researchers');
       if (blocked !== null) return block(blocked, price.total, detail);
 
       // 뽑을수록 몸값이 오르기 때문에 총액 계산을 도중에 접은 경우입니다
-      if (!price.exact) return block('자금이 부족합니다', price.total, detail);
+      if (!price.exact) return block(s().availability.hireShort, price.total, detail);
 
       const short = checkAffordable(state, price.total);
       if (short !== null) return block(reasonFor(short), price.total, detail);
@@ -387,10 +394,10 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       const value = action.value;
       if (!Number.isFinite(value) || value < SAFETY.minLevel || value > 1) {
         return block(
-          `안전 수준은 ${formatPercent(SAFETY.minLevel, 0)} ~ ${formatPercent(
-            1,
-            0,
-          )} 사이에서만 정할 수 있습니다`,
+          s().availability.safetyRange(
+            formatPercent(SAFETY.minLevel, 0),
+            formatPercent(1, 0),
+          ),
           null,
           null,
         );
@@ -399,10 +406,10 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       const next = withSafety(state, value);
       const speedBonus = safetySpeedMultiplier(next) - 1;
       const risk = accidentChancePerSecond(next);
-      const detail = `연구 속도 +${formatPercent(speedBonus)} · 매초 사고 위험 ${formatPercent(
-        risk,
-        2,
-      )}`;
+      const detail = s().availability.safetyDetail(
+        formatPercent(speedBonus),
+        formatPercent(risk, 2),
+      );
 
       const blocked = operationBlock(state, 'safety');
       if (blocked !== null) return block(blocked, null, detail);
@@ -413,20 +420,22 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
     case 'setAlignmentShare': {
       const value = action.value;
       if (!Number.isFinite(value) || value < 0 || value > 1) {
-        return block('배분은 0% ~ 100% 사이에서만 정할 수 있습니다', null, null);
+        return block(s().availability.allocationRange, null, null);
       }
 
       const next = withAlignmentShare(state, value);
       const speedBonus = selfResearchMultiplier(next) - 1;
       const controlChange = controlChangePerSecond(next);
       const detail =
-        `연구 속도 +${formatPercent(speedBonus)} · 통제력 ` +
-        `${controlChange >= 0 ? '+' : ''}${formatPercent(controlChange, 2)}/초`;
+        s().availability.allocationDetail(
+          formatPercent(speedBonus),
+          `${controlChange >= 0 ? '+' : ''}${formatPercent(controlChange, 2)}`,
+        );
 
       const stopped = stoppedReason(state);
       if (stopped !== null) return block(stopped, null, detail);
       if (!isSelfImproving(state)) {
-        return block('아직 모델이 스스로 연구할 만큼 성장하지 않았습니다', null, detail);
+        return block(s().availability.notSelfImproving, null, detail);
       }
 
       return allow(null, detail);
@@ -437,13 +446,13 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
     case 'buyIntel': {
       const rival = state.rivals.find((item) => item.id === action.rivalId);
       const cost = intelCost(state);
-      const detail = '그 연구소의 실제 진행도를 기록에 남깁니다';
+      const detail = s().availability.intelDetail;
 
       const blocked = operationBlock(state, 'rivals');
       if (blocked !== null) return block(blocked, cost, detail);
-      if (rival === undefined) return block('그런 연구소가 없습니다', cost, detail);
-      if (rival.status === 'collapsed') return block('이미 경주에서 빠진 곳입니다', cost, detail);
-      if (rival.status === 'achieved') return block('이미 끝난 상대입니다', cost, detail);
+      if (rival === undefined) return block(s().availability.noSuchRival, cost, detail);
+      if (rival.status === 'collapsed') return block(s().availability.rivalCollapsed, cost, detail);
+      if (rival.status === 'achieved') return block(s().availability.rivalAchieved, cost, detail);
 
       const funds = checkAffordable(state, cost);
       if (funds !== null) return block(reasonFor(funds), cost, detail);
@@ -454,16 +463,16 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
     case 'poachRival': {
       const rival = state.rivals.find((item) => item.id === action.rivalId);
       const cost = poachCost(state);
-      const detail = `연구원 +${formatCompact(INTERFERENCE.poachResearchers)}명 · 상대 속도 ${formatPercent(
-        1 - INTERFERENCE.poachSlowdown,
-        0,
-      )} 감소`;
+      const detail = s().availability.poachDetail(
+        formatCompact(INTERFERENCE.poachResearchers),
+        formatPercent(1 - INTERFERENCE.poachSlowdown, 0),
+      );
 
       const blocked = operationBlock(state, 'rivals');
       if (blocked !== null) return block(blocked, cost, detail);
-      if (rival === undefined) return block('그런 연구소가 없습니다', cost, detail);
-      if (rival.status === 'collapsed') return block('이미 경주에서 빠진 곳입니다', cost, detail);
-      if (rival.status === 'achieved') return block('이미 끝난 상대입니다', cost, detail);
+      if (rival === undefined) return block(s().availability.noSuchRival, cost, detail);
+      if (rival.status === 'collapsed') return block(s().availability.rivalCollapsed, cost, detail);
+      if (rival.status === 'achieved') return block(s().availability.rivalAchieved, cost, detail);
 
       const funds = checkAffordable(state, cost);
       if (funds !== null) return block(reasonFor(funds), cost, detail);
@@ -473,12 +482,11 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
 
     case 'lockSupply': {
       const cost = supplyLockCost(state);
-      const detail = `경쟁사 전체 속도 ${formatPercent(
-        1 - INTERFERENCE.supplyLockSlowdown,
-        0,
-      )} 감소 · 내 GPU 값 ${INTERFERENCE.supplyLockGpuPrice}배 (${formatDuration(
-        INTERFERENCE.supplyLockSeconds,
-      )})`;
+      const detail = s().availability.lockDetail(
+        formatPercent(1 - INTERFERENCE.supplyLockSlowdown, 0),
+        String(INTERFERENCE.supplyLockGpuPrice),
+        formatDuration(INTERFERENCE.supplyLockSeconds),
+      );
 
       const blocked = operationBlock(state, 'rivals');
       if (blocked !== null) return block(blocked, cost, detail);
@@ -487,7 +495,7 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       const alive = state.rivals.some(
         (item) => item.status !== 'collapsed' && item.status !== 'achieved',
       );
-      if (!alive) return block('늦출 상대가 남아 있지 않습니다', cost, detail);
+      if (!alive) return block(s().availability.noRivalsLeft, cost, detail);
 
       const funds = checkAffordable(state, cost);
       if (funds !== null) return block(reasonFor(funds), cost, detail);
@@ -497,7 +505,7 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
 
     default:
       // 여기까지 오는 일은 없지만, 알 수 없는 신호가 들어오면 안전하게 막습니다
-      return block('지금은 할 수 없습니다', null, null);
+      return block(s().availability.generic, null, null);
   }
 }
 

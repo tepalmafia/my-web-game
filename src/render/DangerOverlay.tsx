@@ -19,7 +19,7 @@
 
 import { ALERT } from '../balance';
 import { computeDerived, isSelfImproving, secondsUntilControlLost } from '../constraints';
-import { withParticle } from '../input';
+import { rivalName, s } from '../i18n';
 import type { GameState } from '../types';
 
 /** 위험 한 건 */
@@ -50,9 +50,9 @@ export function collectAlerts(state: GameState): Alert[] {
     const seconds = Math.max(0, Math.floor(runway % 60));
     const left = `${minutes}:${String(seconds).padStart(2, '0')}`;
     if (runway <= ALERT.runwayDangerSeconds) {
-      alerts.push({ id: 'cash', level: 'danger', text: `자금 고갈까지 ${left} — 곧 파산합니다` });
+      alerts.push({ id: 'cash', level: 'danger', text: s().alerts.cashDanger(left) });
     } else if (runway <= ALERT.runwayWarnSeconds) {
-      alerts.push({ id: 'cash', level: 'warn', text: `자금이 ${left} 뒤에 바닥납니다` });
+      alerts.push({ id: 'cash', level: 'warn', text: s().alerts.cashWarn(left) });
     }
   }
 
@@ -64,13 +64,13 @@ export function collectAlerts(state: GameState): Alert[] {
       alerts.push({
         id: 'power',
         level: 'danger',
-        text: `GPU의 ${Math.round(idleRatio * 100)}%가 전력이 없어 멈춰 있습니다`,
+        text: s().alerts.powerDanger(`${Math.round(idleRatio * 100)}%`),
       });
     } else if (idleRatio >= ALERT.idleGpuWarnRatio) {
       alerts.push({
         id: 'power',
         level: 'warn',
-        text: `GPU의 ${Math.round(idleRatio * 100)}%가 놀고 있습니다`,
+        text: s().alerts.powerWarn(`${Math.round(idleRatio * 100)}%`),
       });
     }
   }
@@ -84,13 +84,13 @@ export function collectAlerts(state: GameState): Alert[] {
         alerts.push({
           id: 'behind',
           level: 'danger',
-          text: `${leader.name}에 ${Math.round(behind * 100)}%p 뒤처졌습니다`,
+          text: s().alerts.behindDanger(rivalName(leader), `${Math.round(behind * 100)}%p`),
         });
       } else if (behind >= ALERT.behindWarnMargin) {
         alerts.push({
           id: 'behind',
           level: 'warn',
-          text: `${withParticle(leader.name, '이', '가')} 앞서 있습니다`,
+          text: s().alerts.behindWarn(rivalName(leader)),
         });
       }
     }
@@ -99,11 +99,11 @@ export function collectAlerts(state: GameState): Alert[] {
       (rival) => rival.status !== 'collapsed' && rival.reportedProgress >= ALERT.rivalNearGoal,
     );
     if (closing.length > 0) {
-      const names = closing.map((r) => r.name).join(', ');
+      const names = closing.map((rival) => rivalName(rival)).join(', ');
       alerts.push({
         id: 'finish',
         level: 'danger',
-        text: `${withParticle(names, '이', '가')} 결승선에 근접했습니다`,
+        text: s().alerts.nearFinish(names),
       });
     }
   }
@@ -119,10 +119,10 @@ export function collectAlerts(state: GameState): Alert[] {
         alerts.push({
           id: 'control',
           level: 'danger',
-          text: `통제력 소진까지 ${left} — 정렬 배분을 올리세요`,
+          text: s().alerts.controlDanger(left),
         });
       } else if (untilLost <= ALERT.controlWarnSeconds) {
-        alerts.push({ id: 'control', level: 'warn', text: `통제력이 ${left} 뒤에 바닥납니다` });
+        alerts.push({ id: 'control', level: 'warn', text: s().alerts.controlWarn(left) });
       }
     }
   }
@@ -134,10 +134,10 @@ export function collectAlerts(state: GameState): Alert[] {
       alerts.push({
         id: 'safety',
         level: 'danger',
-        text: `안전 검증 ${Math.round(safety * 100)}% — 언제 사고가 나도 이상하지 않습니다`,
+        text: s().alerts.safetyDanger(`${Math.round(safety * 100)}%`),
       });
     } else if (safety < ALERT.safetyWarnLevel) {
-      alerts.push({ id: 'safety', level: 'warn', text: '안전 검증을 줄인 상태입니다' });
+      alerts.push({ id: 'safety', level: 'warn', text: s().alerts.safetyWarn });
     }
   }
 

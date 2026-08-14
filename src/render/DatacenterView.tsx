@@ -20,6 +20,7 @@
 
 import { DATACENTER } from '../balance';
 import { activeGpus, gpuCapacity } from '../constraints';
+import { s } from '../i18n';
 import type { GameState } from '../types';
 
 /** 건물 한 동을 그릴 때 쓰는 칸 수 (4줄 × 8칸) */
@@ -41,11 +42,11 @@ interface Block {
  */
 function buildBlocks(state: GameState): Block[] {
   const blocks: Block[] = [
-    { label: '기본 클러스터', capacity: DATACENTER.baseCapacity, active: 0, idle: 0 },
+    { label: s().facility.baseCluster, capacity: DATACENTER.baseCapacity, active: 0, idle: 0 },
   ];
   for (let i = 0; i < state.player.datacenters; i++) {
     blocks.push({
-      label: `데이터센터 ${i + 1}동`,
+      label: s().facility.hall(i + 1),
       capacity: DATACENTER.slotsPerUnit,
       active: 0,
       idle: 0,
@@ -127,11 +128,11 @@ export function DatacenterView({ state, isNew = false }: DatacenterViewProps) {
       className={`rounded-lg border bg-slate-900/60 p-3 ${
         idle > 0 ? 'border-amber-500/40' : 'border-slate-800'
       }`}
-      aria-label="설비 현황"
+      aria-label={s().facility.aria}
     >
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h2 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-300">
-          설비 현황
+          {s().facility.heading}
           {isNew && (
             <span className="rounded bg-cyan-500/20 px-1 py-px text-[9px] font-bold text-cyan-300">
               NEW
@@ -139,13 +140,13 @@ export function DatacenterView({ state, isNew = false }: DatacenterViewProps) {
           )}
         </h2>
         <span className="font-mono text-[11px] tabular-nums text-slate-500">
-          {owned.toLocaleString()} / {capacity.toLocaleString()}장
+          {s().facility.owned(owned.toLocaleString(), capacity.toLocaleString())}
         </span>
       </div>
 
       <div className="grid gap-1.5 sm:grid-cols-2">
-        {blocks.map((block) => (
-          <RackBlock key={block.label} block={block} />
+        {blocks.map((block, index) => (
+          <RackBlock key={index} block={block} />
         ))}
       </div>
 
@@ -153,22 +154,21 @@ export function DatacenterView({ state, isNew = false }: DatacenterViewProps) {
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
         <span className="flex items-center gap-1">
           <span className="h-1.5 w-3 rounded-[1px] bg-cyan-400" />
-          가동 {running.toLocaleString()}
+          {s().facility.running(running.toLocaleString())}
         </span>
         <span className="flex items-center gap-1">
           <span className="h-1.5 w-3 rounded-[1px] bg-amber-400/80" />
-          노는 중 {idle.toLocaleString()}
+          {s().facility.idle(idle.toLocaleString())}
         </span>
         <span className="flex items-center gap-1">
-          <span className="h-1.5 w-3 rounded-[1px] bg-slate-800" />빈 자리{' '}
-          {Math.max(0, capacity - owned).toLocaleString()}
+          <span className="h-1.5 w-3 rounded-[1px] bg-slate-800" />
+          {s().facility.empty(Math.max(0, capacity - owned).toLocaleString())}
         </span>
       </div>
 
       {idle > 0 && (
         <p className="mt-1.5 text-[11px] text-amber-300">
-          전력이 모자라 {idle.toLocaleString()}장이 돈만 먹고 놀고 있습니다 — 전력을 더
-          계약하세요.
+          {s().facility.idleWarning(idle.toLocaleString())}
         </p>
       )}
     </section>

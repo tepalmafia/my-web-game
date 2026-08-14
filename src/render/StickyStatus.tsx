@@ -20,6 +20,7 @@
  */
 
 import { computeDerived, isSelfImproving } from '../constraints';
+import { s } from '../i18n';
 import { formatMoney, formatPercent, formatRate } from '../input';
 import type { GameState } from '../types';
 import { rivalDisplayProgress } from './RaceTrack';
@@ -58,7 +59,7 @@ export function StickyStatus({ state }: { state: GameState }) {
               margin >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'
             }`}
           >
-            {rank}위 {margin >= 0 ? '+' : ''}
+            {s().bar.rank(rank)} {margin >= 0 ? '+' : ''}
             {formatPercent(margin, 0)}
           </span>
         )}
@@ -74,7 +75,7 @@ export function StickyStatus({ state }: { state: GameState }) {
                   : 'bg-emerald-500/15 text-emerald-300'
             }`}
           >
-            통제 {formatPercent(control, 0)}
+            {s().bar.control(formatPercent(control, 0))}
           </span>
         )}
 

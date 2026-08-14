@@ -40,6 +40,7 @@ import {
   START,
   UNLOCK,
 } from '../balance';
+import { rivalName, s } from '../i18n';
 import {
   accidentChancePerSecond,
   checkAffordable,
@@ -65,13 +66,7 @@ import {
   isSelfImproving,
   supplyLockCost,
 } from '../constraints';
-import {
-  formatCount,
-  formatMoney,
-  formatPower,
-  groupDigits,
-  withParticle,
-} from '../constraints/format';
+import { formatCount, formatMoney, formatPower, groupDigits } from '../constraints/format';
 import { isRunning } from '../constraints/running';
 import type {
   GameAction,
@@ -94,7 +89,7 @@ import type {
   Seconds,
   UnlockState,
 } from '../types';
-import { EVENT_POOL } from './events';
+import { eventPool } from './events';
 import { nextRandom, pickIndex, randomRange } from './rng';
 
 /**
@@ -111,8 +106,8 @@ const MAX_LOG_LINES = 60;
  * 기록창이 구매 내역으로 도배되어, 정작 놓치면 안 되는 사건과 해금 알림이 밀려납니다.
  * 그래서 이 말로 시작하는 줄은 새로 만들지 않고 기존 줄을 고쳐 씁니다.
  */
-const GPU_BUY_LOG_PREFIX = 'GPU를 사들이는 중';
-const HIRE_LOG_PREFIX = '연구원을 늘리는 중';
+const gpuBuyPrefix = () => s().log.buyingGpus;
+const hirePrefix = () => s().log.hiring;
 
 /**
  * 같은 머리말의 줄이 이 시간(초) 안에 있으면 '연달아 하는 중'으로 봅니다.
@@ -230,7 +225,7 @@ export function createInitialState(labName: string, rngSeed: number): GameState 
   const trimmed = labName.trim();
 
   const player: PlayerState = {
-    labName: trimmed.length > 0 ? trimmed : START.labName,
+    labName: trimmed.length > 0 ? trimmed : s().names.defaultLab,
     money: START.money,
     gpus: START.gpus,
     // 전력 계약과 진행도는 '아직 아무것도 하지 않은 상태'라 0에서 출발합니다
@@ -250,7 +245,7 @@ export function createInitialState(labName: string, rngSeed: number): GameState 
   // momentum 1 은 '아무 보정도 붙어 있지 않다'는 뜻입니다.
   const rivals: Rival[] = RIVALS.map((template) => ({
     id: template.id,
-    name: template.name,
+    name: s().names.rivals[template.id] ?? template.id,
     personality: template.personality,
     researchProgress: 0,
     reportedProgress: 0,
@@ -277,7 +272,7 @@ export function createInitialState(labName: string, rngSeed: number): GameState 
 
   const opening = appendLogs([], 1, 0, [
     {
-      text: '투자를 유치하고 GPU를 사서 훈련을 시작하세요. 경쟁 연구소 세 곳이 이미 달리고 있습니다.',
+      text: s().log.opening,
       tone: 'info',
     },
   ]);
@@ -398,7 +393,7 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
   //  직전 진행도와 지금 진행도를 비교하면 정확히 한 번만 알릴 수 있습니다.
   if (!isSelfImproving(state) && progress >= PHASE2.startProgress && progress < RESEARCH.goal) {
     lines.push({
-      text: '모델이 스스로 연구를 돕기 시작했습니다 — 이제부터는 무엇을 사느냐보다 그 힘을 어디에 쓰느냐가 승패를 가릅니다.',
+      text: s().log.selfImproving,
       tone: 'warn',
     });
   }
@@ -425,7 +420,7 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
         powerPrice: MARKET.normalPowerPrice,
         distortionRemaining: 0,
       };
-      lines.push({ text: '시장 가격이 평상시 수준으로 돌아왔습니다.', tone: 'info' });
+      lines.push({ text: s().log.marketNormal, tone: 'info' });
     } else {
       market = { ...market, distortionRemaining: remaining };
     }
@@ -456,7 +451,7 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
       if (roll.value < accidentPerSecond * dt) {
         status = 'collapsed';
         lines.push({
-          text: `${withParticle(rival.name, '이', '가')} 훈련 사고로 경주에서 이탈했습니다.`,
+          text: s().log.rivalCollapsed(rival.name),
           tone: 'good',
         });
       }
@@ -497,7 +492,7 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
     seed = roll.seed;
     if (roll.value < accidentChance * dt) {
       lines.push({
-        text: '검증을 건너뛴 훈련에서 통제 불능 사고가 발생했습니다. 모든 연구가 여기서 멈춥니다.',
+        text: s().log.accident,
         tone: 'bad',
       });
       const logged = appendLogs(state.log, state.nextLogId, elapsed, lines);
@@ -535,8 +530,8 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
 
   if (nextEventIn <= 0) {
     // 지금 시각에 나올 수 있고, 한 번뿐인 사건이면 아직 안 나온 것만 고릅니다
-    const candidates = EVENT_POOL.filter(
-      (candidate) =>
+    const candidates: GameEvent[] = eventPool().filter(
+      (candidate: GameEvent) =>
         candidate.earliestAt <= elapsed &&
         !(candidate.once && seenEventIds.includes(candidate.id)),
     );
@@ -555,7 +550,7 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
         seenEventIds = seenEventIds.includes(chosen.id)
           ? seenEventIds
           : [...seenEventIds, chosen.id];
-        lines.push({ text: `사건 발생 — ${chosen.title}`, tone: 'warn' });
+        lines.push({ text: s().log.eventFired(chosen.title), tone: 'warn' });
       }
     }
   }
@@ -616,32 +611,32 @@ function unlockRules(state: GameState): UnlockRule[] {
       // UNLOCK.power: 필요한 전력이 쓸 수 있는 전력을 넘어선 순간 (= GPU가 놀기 시작할 때)
       panel: 'power',
       met: powerDemand(state) > powerAvailable(state),
-      text: '전력이 모자라 GPU 일부가 놀고 있습니다 — 전력 계약 항목이 열렸습니다.',
+      text: s().log.unlockPower,
       tone: 'warn',
     },
     {
       // UNLOCK.datacenter: 보유 GPU가 수용 한도에 닿는 순간
       panel: 'datacenter',
       met: state.player.gpus >= gpuCapacity(state),
-      text: 'GPU를 둘 자리가 가득 찼습니다 — 데이터센터 건설 항목이 열렸습니다.',
+      text: s().log.unlockDatacenter,
       tone: 'warn',
     },
     {
       panel: 'researchers',
       met: progress >= UNLOCK.researchers.value,
-      text: '연구 규모가 커졌습니다 — 연구원 채용 항목이 열렸습니다.',
+      text: s().log.unlockResearchers,
       tone: 'info',
     },
     {
       panel: 'rivals',
       met: progress >= UNLOCK.rivals.value,
-      text: '경쟁사 동향을 파악할 수 있게 되었습니다 — 경쟁사 상황판이 열렸습니다.',
+      text: s().log.unlockRivals,
       tone: 'info',
     },
     {
       panel: 'safety',
       met: progress >= UNLOCK.safety.value,
-      text: '안전 검증 수준을 조절할 수 있게 되었습니다 — 무리하면 사고가 납니다.',
+      text: s().log.unlockSafety,
       tone: 'warn',
     },
   ];
@@ -652,20 +647,20 @@ function outcomeLine(state: GameState, outcome: GameOutcome, rivalId: RivalId | 
   switch (outcome) {
     case 'agiAchieved':
       return {
-        text: `${withParticle(state.player.labName, '이', '가')} 가장 먼저 AGI에 도달했습니다.`,
+        text: s().log.playerWon(state.player.labName),
         tone: 'good',
       };
     case 'rivalWon': {
       const winner = state.rivals.find((rival) => rival.id === rivalId);
-      const name = winner === undefined ? '경쟁 연구소' : winner.name;
-      return { text: `${withParticle(name, '이', '가')} 먼저 AGI에 도달했습니다.`, tone: 'bad' };
+      const name = winner === undefined ? s().log.fallbackRivalName : winner.name;
+      return { text: s().log.rivalWon(name), tone: 'bad' };
     }
     case 'bankrupt':
-      return { text: '자금이 바닥나 연구소를 더 이상 운영할 수 없습니다.', tone: 'bad' };
+      return { text: s().log.bankrupt, tone: 'bad' };
     case 'catastrophe':
-      return { text: '통제 불능 사고로 연구가 중단되었습니다.', tone: 'bad' };
+      return { text: s().log.catastrophe, tone: 'bad' };
     default:
-      return { text: '게임이 끝났습니다.', tone: 'info' };
+      return { text: s().log.ended, tone: 'info' };
   }
 }
 
@@ -677,7 +672,7 @@ function outcomeLine(state: GameState, outcome: GameOutcome, rivalId: RivalId | 
 function startGame(labName: string, rngSeed: number): GameState {
   const fresh = createInitialState(labName, rngSeed);
   const logged = appendLogs(fresh.log, fresh.nextLogId, 0, [
-    { text: `${fresh.player.labName} 가동을 시작합니다.`, tone: 'good' },
+    { text: s().log.started(fresh.player.labName), tone: 'good' },
   ]);
   return { ...fresh, phase: 'playing', log: logged.log, nextLogId: logged.nextLogId };
 }
@@ -704,9 +699,7 @@ function raiseFunding(state: GameState): GameState {
 
   const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
     {
-      text: `${round}차 투자 유치 — ${formatMoney(offer.amount)}를 확보했습니다. 남은 지분 ${percentText(
-        player.equityRetained,
-      )}.`,
+      text: s().log.funding(round, formatMoney(offer.amount), percentText(player.equityRetained)),
       tone: 'good',
     },
   ]);
@@ -733,8 +726,8 @@ function buyGpu(state: GameState, count: number): GameState {
 
   const logged = appendRepeating(
     state,
-    GPU_BUY_LOG_PREFIX,
-    `${GPU_BUY_LOG_PREFIX} — 현재 ${formatCount(player.gpus)}장 보유.`,
+    gpuBuyPrefix(),
+    s().log.buyingGpusLine(formatCount(player.gpus)),
     'info',
   );
 
@@ -762,7 +755,7 @@ function contractPower(state: GameState, megawatts: Megawatts): GameState {
 
   const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
     {
-      text: `전력 ${formatPower(megawatts)}를 새로 계약했습니다 (설치비 ${formatMoney(cost)}).`,
+      text: s().log.powerContracted(formatPower(megawatts), formatMoney(cost)),
       tone: 'info',
     },
   ]);
@@ -787,9 +780,11 @@ function buildDatacenter(state: GameState): GameState {
 
   const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
     {
-      text: `데이터센터 ${formatCount(player.datacenters)}동째를 완공했습니다 (${formatMoney(
-        price,
-      )}). GPU 자리가 ${formatCount(gpuCapacity(after))}장으로 늘었습니다.`,
+      text: s().log.datacenterBuilt(
+        formatCount(player.datacenters),
+        formatMoney(price,),
+        formatCount(gpuCapacity(after)),
+      ),
       tone: 'good',
     },
   ]);
@@ -832,8 +827,8 @@ function hireResearcher(state: GameState, count: number): GameState {
 
   const logged = appendRepeating(
     state,
-    HIRE_LOG_PREFIX,
-    `${HIRE_LOG_PREFIX} — 현재 ${formatCount(researchers)}명.`,
+    hirePrefix(),
+    s().log.hiringLine(formatCount(researchers)),
     'good',
   );
 
@@ -878,7 +873,7 @@ function buyIntel(state: GameState, rivalId: RivalId): GameState {
 
   const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
     {
-      text: `첩보 입수 — ${rival.name}의 실제 진행도는 ${percentText(rival.researchProgress)}입니다.`,
+      text: s().log.intel(rival.name, percentText(rival.researchProgress)),
       tone: 'info',
     },
   ]);
@@ -909,9 +904,18 @@ function poachRival(state: GameState, rivalId: RivalId): GameState {
   const cost = poachCost(state);
   if (checkAffordable(state, cost) !== null) return state;
 
+  // 데려온 사람 몫은 상대의 기본 속도에서 영구히 빠집니다.
+  // 원래 속도는 balance.ts 의 표에 남아 있으므로, 바닥선은 거기서 계산합니다.
+  const original = RIVALS.find((template) => template.id === rivalId)?.baseSpeed ?? rival.baseSpeed;
+  const floor = original * INTERFERENCE.poachSpeedFloor;
+
   const rivals = state.rivals.map((item) =>
     item.id === rivalId
-      ? { ...item, momentum: item.momentum * INTERFERENCE.poachSlowdown }
+      ? {
+          ...item,
+          momentum: item.momentum * INTERFERENCE.poachSlowdown,
+          baseSpeed: Math.max(floor, item.baseSpeed * INTERFERENCE.poachPermanentCut),
+        }
       : item,
   );
 
@@ -923,7 +927,12 @@ function poachRival(state: GameState, rivalId: RivalId): GameState {
 
   const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
     {
-      text: `${rival.name}의 핵심 연구원 ${formatCount(INTERFERENCE.poachResearchers)}명을 영입했습니다 (${formatMoney(cost)}).`,
+      text: s().log.poached(
+        rivalName(rival),
+        formatCount(INTERFERENCE.poachResearchers),
+        formatMoney(cost),
+        `${Math.round((1 - INTERFERENCE.poachPermanentCut) * 100)}%`,
+      ),
       tone: 'good',
     },
   ]);
@@ -958,7 +967,7 @@ function lockSupply(state: GameState): GameState {
 
   const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
     {
-      text: `GPU 물량을 선점했습니다 — 경쟁사 전체가 느려졌지만 당분간 내 GPU 값도 오릅니다.`,
+      text: s().log.supplyLocked,
       tone: 'warn',
     },
   ]);
@@ -1009,8 +1018,8 @@ function setSafety(state: GameState, value: Ratio): GameState {
   const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
     {
       text: lowered
-        ? `안전 검증 수준을 ${percentText(level)}로 낮췄습니다. 훈련이 빨라지는 대신 사고 위험이 올라갑니다.`
-        : `안전 검증 수준을 ${percentText(level)}로 올렸습니다.`,
+        ? s().log.safetyDown(percentText(level))
+        : s().log.safetyUp(percentText(level)),
       tone: lowered ? 'warn' : 'info',
     },
   ]);
@@ -1196,5 +1205,5 @@ function applyOneRivalDelta(rival: Rival, delta: RivalDelta): Rival {
  *  6. 다른 폴더에서 바로 쓰라고 같이 내보내는 것들
  * ======================================================================== */
 
-export { EVENT_POOL } from './events';
+export { eventPool } from './events';
 export { nextRandom, pickIndex, randomRange } from './rng';

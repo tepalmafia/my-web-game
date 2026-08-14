@@ -10,6 +10,7 @@
  *    어디서 돌려도 똑같은 글자가 나와야 자동 테스트가 가능하기 때문입니다.
  */
 
+import { s } from '../i18n';
 import type { Megawatts, Money } from '../types';
 
 /**
@@ -40,20 +41,16 @@ export function groupDigits(value: number): string {
 }
 
 /**
- * 돈을 한국식 단위(만·억·조)로 짧게 씁니다.
- * 예) 32_000_000 → '3,200만 달러' / 120_000_000 → '1.2억 달러'
+ * 돈을 짧게 씁니다.
+ *
+ * 단위 체계가 언어마다 달라서(한국어는 만·억·조, 영어는 K·M·B) 실제 규칙은
+ * 사전에 두고 여기서는 지금 언어의 규칙을 불러다 씁니다.
  *
  * 왜 필요한가: 이 게임의 금액은 수천만~수십억 달러라
  * 숫자를 그대로 다 적으면 화면에서 읽히지 않습니다.
  */
 export function formatMoney(value: Money): string {
-  const magnitude = Math.abs(value);
-
-  if (magnitude >= 1_000_000_000_000) return `${groupDigits(value / 1_000_000_000_000)}조 달러`;
-  if (magnitude >= 100_000_000) return `${groupDigits(value / 100_000_000)}억 달러`;
-  if (magnitude >= 10_000) return `${groupDigits(Math.round(value / 10_000))}만 달러`;
-
-  return `${groupDigits(Math.round(value))} 달러`;
+  return s().units.money(value);
 }
 
 /**
@@ -72,28 +69,5 @@ export function formatPower(value: Megawatts): string {
   return `${groupDigits(value)}MW`;
 }
 
-/**
- * 한국어 조사를 앞말에 맞춰 골라 줍니다.
- *
- * 한국어는 앞 글자에 받침이 있느냐에 따라 조사가 달라집니다.
- *      받침 있음: 벡스 랩스'이' / 오린'은' / 헬리온'을'
- *      받침 없음: 아우로라'가' / 오린 인스티튜트'는' / 벡스'를'
- *
- * 이걸 처리하지 않으면 '벡스 랩스이(가)' 같은 어색한 글이 화면에 나갑니다.
- * 연구소 이름은 플레이어가 직접 짓기 때문에 미리 정해둘 수도 없습니다.
- *
- * 한글이 아닌 글자(영어·숫자)로 끝나면 판단할 수 없으므로 받침 없는 쪽을 씁니다.
- */
-export function withParticle(word: string, afterConsonant: string, afterVowel: string): string {
-  const last = word.trim().slice(-1);
-  if (last === '') return word + afterVowel;
-
-  const code = last.charCodeAt(0);
-  // 한글 음절 영역(가~힣)이 아니면 받침 여부를 알 수 없습니다
-  if (code < 0xac00 || code > 0xd7a3) return word + afterVowel;
-
-  // 한글 음절은 (초성, 중성, 종성) 순서로 배열되어 있어서, 28로 나눈 나머지가
-  // 0이면 종성(받침)이 없다는 뜻입니다.
-  const hasFinalConsonant = (code - 0xac00) % 28 !== 0;
-  return word + (hasFinalConsonant ? afterConsonant : afterVowel);
-}
+// 한국어 조사 처리는 사전(i18n)도 함께 쓰기 때문에 그쪽에 두고 여기서는 다시 내보냅니다.
+export { withParticle } from '../i18n/particle';

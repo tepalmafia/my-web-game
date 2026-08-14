@@ -25,6 +25,7 @@ import {
   selfImproveDepth,
   selfResearchMultiplier,
 } from '../constraints';
+import { s } from '../i18n';
 import { formatDuration, formatPercent } from '../input';
 import type { GameAction, GameState } from '../types';
 
@@ -52,24 +53,22 @@ export function SelfResearchPanel({ state, dispatch }: SelfResearchPanelProps) {
           ? 'border-fuchsia-500/60 bg-fuchsia-950/20 motion-safe:animate-pulse'
           : 'border-fuchsia-500/30 bg-slate-900/60'
       }`}
-      aria-label="자율 연구"
+      aria-label={s().selfResearch.aria}
     >
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-fuchsia-200">자율 연구</h2>
+        <h2 className="text-sm font-semibold text-fuchsia-200">{s().selfResearch.heading}</h2>
         <span className="font-mono text-[11px] tabular-nums text-fuchsia-300">
-          자기개선 {formatPercent(depth, 0)} 진입
+          {s().selfResearch.depth(formatPercent(depth, 0))}
         </span>
       </div>
       <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
-        모델이 스스로 연구를 돕고 있습니다. 그 힘을 <b className="text-slate-200">가속</b>에 쓸수록
-        빨라지지만 통제력이 깎이고, <b className="text-slate-200">정렬</b>에 쓸수록 통제력이
-        회복되지만 경쟁사에 뒤처집니다.
+        {s().selfResearch.description}
       </p>
 
       {/* 통제력 */}
       <div className="mb-3">
         <div className="mb-1 flex items-baseline justify-between gap-2">
-          <span className="text-[11px] text-slate-400">통제력</span>
+          <span className="text-[11px] text-slate-400">{s().selfResearch.control}</span>
           <span
             className={`font-mono text-xs tabular-nums ${
               critical ? 'text-rose-300' : losing ? 'text-amber-300' : 'text-emerald-300'
@@ -77,15 +76,16 @@ export function SelfResearchPanel({ state, dispatch }: SelfResearchPanelProps) {
           >
             {formatPercent(control, 0)}
             <span className="ml-1 opacity-70">
-              ({change >= 0 ? '+' : ''}
-              {formatPercent(change, 2)}/초)
+              {s().selfResearch.controlChange(
+                `${change >= 0 ? '+' : ''}${formatPercent(change, 2)}`,
+              )}
             </span>
           </span>
         </div>
         <div
           className="h-2 w-full overflow-hidden rounded-full bg-slate-800"
           role="progressbar"
-          aria-label="통제력"
+          aria-label={s().selfResearch.controlAria}
           aria-valuenow={Math.round(control * 100)}
           aria-valuemin={0}
           aria-valuemax={100}
@@ -103,17 +103,23 @@ export function SelfResearchPanel({ state, dispatch }: SelfResearchPanelProps) {
           }`}
         >
           {untilLost === null
-            ? '통제력이 회복되고 있습니다'
-            : `이대로면 ${formatDuration(untilLost)} 뒤 통제를 잃습니다`}
+            ? s().selfResearch.recovering
+            : s().selfResearch.untilLost(formatDuration(untilLost))}
         </p>
       </div>
 
       {/* 배분 저울 */}
       <label className="block">
         <span className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
-          <span className="text-cyan-300">가속 {formatPercent(1 - alignmentShare, 0)}</span>
-          <span className="text-slate-500">연구 속도 +{formatPercent(speedBonus, 0)}</span>
-          <span className="text-emerald-300">정렬 {formatPercent(alignmentShare, 0)}</span>
+          <span className="text-cyan-300">
+            {s().selfResearch.speedShare(formatPercent(1 - alignmentShare, 0))}
+          </span>
+          <span className="text-slate-500">
+            {s().selfResearch.speedBonus(formatPercent(speedBonus, 0))}
+          </span>
+          <span className="text-emerald-300">
+            {s().selfResearch.alignmentShare(formatPercent(alignmentShare, 0))}
+          </span>
         </span>
         <input
           type="range"
@@ -128,7 +134,7 @@ export function SelfResearchPanel({ state, dispatch }: SelfResearchPanelProps) {
             })
           }
           className="h-6 w-full cursor-pointer accent-fuchsia-400 md:h-4"
-          aria-label="자율 연구력 배분 (오른쪽으로 갈수록 정렬)"
+          aria-label={s().selfResearch.sliderLabel}
         />
       </label>
     </section>

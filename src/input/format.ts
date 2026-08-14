@@ -20,6 +20,7 @@
  *    balance.ts 가 아니라 이 파일에 있습니다. (고쳐도 게임 난이도는 그대로입니다)
  */
 
+import { s } from '../i18n';
 import type { Money, Ratio, Seconds } from '../types';
 
 /** 큰 수를 줄여 쓸 때 쓰는 단위표 (큰 것부터 차례로 봅니다) */
@@ -143,13 +144,13 @@ export function formatDuration(seconds: Seconds): string {
 
 /**
  * 매초 들어오거나 나가는 돈을 부호와 함께 씁니다.
- * 예) '+$12.4K/초', '-$8.0K/초', '$0/초'
+ * 예) '+$12.4K/초', '-$8.0K/초', `$0${s().units.perSecond}`
  *
  * 부호를 반드시 붙이는 이유: 이 게임에서 제일 중요한 정보가
  * '통장이 지금 차고 있나, 마르고 있나' 이기 때문입니다.
  */
 export function formatRate(perSecond: Money): string {
-  if (!Number.isFinite(perSecond)) return '$0/초';
+  if (!Number.isFinite(perSecond)) return `$0${s().units.perSecond}`;
 
   const rounded = roundToDigits(perSecond, MONEY_DIGITS);
   const abs = Math.abs(rounded);
@@ -157,8 +158,8 @@ export function formatRate(perSecond: Money): string {
 
   if (abs < 1_000) {
     const whole = Math.round(abs);
-    if (whole === 0) return '$0/초';
-    return `${sign}$${withCommas(String(whole))}/초`;
+    if (whole === 0) return `$0${s().units.perSecond}`;
+    return `${sign}$${withCommas(String(whole))}${s().units.perSecond}`;
   }
 
   for (const unit of UNITS) {
@@ -166,10 +167,10 @@ export function formatRate(perSecond: Money): string {
     const scaled = abs / unit.limit;
     // 매초 바뀌는 값이라 소수점을 한 자리까지만 보여줍니다 (눈이 덜 어지럽습니다)
     const decimals = scaled >= 100 ? 0 : 1;
-    return `${sign}$${withCommas(scaled.toFixed(decimals))}${unit.suffix}/초`;
+    return `${sign}$${withCommas(scaled.toFixed(decimals))}${unit.suffix}${s().units.perSecond}`;
   }
 
-  return '$0/초';
+  return `$0${s().units.perSecond}`;
 }
 
 /**

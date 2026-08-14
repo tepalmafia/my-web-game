@@ -229,15 +229,24 @@ export function selfResearchMultiplier(state: GameState): Multiplier {
 /**
  * 1초에 변하는 통제력 (양수면 회복, 음수면 깎임).
  *
- * 가속에 배분할수록 빨리 깎이고, 정렬에 배분할수록 회복됩니다.
- * 깊이 들어갈수록 소모가 커져서, 후반으로 갈수록 같은 배분으로는 버틸 수 없게 됩니다.
+ * ─ 깎이는 쪽은 '시간'이 아니라 '성과'에 물립니다.
+ *   지금 1초에 밀어내는 진행도(researchRate)에 비례해서 깎입니다.
+ *   그래서 GPU를 잔뜩 쌓아 후반을 빨리 통과해도 벌을 피할 수 없습니다 —
+ *   오히려 빨리 밀수록 그만큼 빨리 깎입니다.
+ *
+ * ─ 회복하는 쪽은 시간에 붙습니다.
+ *   정렬로 돌려놓고 기다리면 통제력이 돌아오지만, 그동안 가속 보너스가 사라져
+ *   경쟁사가 따라붙습니다. 되돌리는 값은 '잃은 시간'으로 치릅니다.
+ *
+ * 깊이 들어갈수록 소모가 커져서, 후반으로 갈수록 같은 배분으로는 버틸 수 없습니다.
  */
 export function controlChangePerSecond(state: GameState): RatioPerSecond {
   const depth = selfImproveDepth(state);
   if (depth === 0) return 0;
 
   const alignmentShare = clamp(state.player.alignmentShare, 0, 1);
-  const drain = PHASE2.controlDrainPerSecond * (1 - alignmentShare) * depth;
+  const drain =
+    PHASE2.controlDrainPerProgress * researchRate(state) * (1 - alignmentShare) * depth;
   const recovery = PHASE2.controlRecoveryPerSecond * alignmentShare;
   return recovery - drain;
 }

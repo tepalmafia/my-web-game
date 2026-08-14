@@ -14,6 +14,7 @@
  */
 
 import type { Dispatch } from 'react';
+import { rivalName, s } from '../i18n';
 import { availability, formatMoney } from '../input';
 import type { GameAction, GameState, Rival } from '../types';
 import { rivalStyle } from './RaceTrack';
@@ -73,27 +74,29 @@ function RivalRow({
   return (
     <div className={`rounded border border-slate-800 p-1.5 ${done ? 'opacity-50' : ''}`}>
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className={`truncate text-[11px] font-semibold ${style.text}`}>{rival.name}</span>
+        <span className={`truncate text-[11px] font-semibold ${style.text}`}>
+          {rivalName(rival)}
+        </span>
         {/*
           속도 배수가 1보다 낮으면 지금 내 개입이 먹히고 있다는 뜻입니다.
           시간이 지나면 1로 돌아오므로 '언제 다시 걸어야 하나'를 여기서 읽습니다.
         */}
         {rival.momentum < 0.97 && !done && (
           <span className="shrink-0 font-mono text-[10px] text-sky-300">
-            속도 {Math.round(rival.momentum * 100)}%
+            {s().rivalActions.speed(`${Math.round(rival.momentum * 100)}%`)}
           </span>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-1">
         <InterferenceButton
-          label="첩보"
+          label={s().rivalActions.intel}
           action={{ type: 'buyIntel', rivalId: rival.id }}
           state={state}
           dispatch={dispatch}
         />
         <InterferenceButton
-          label="인재 빼오기"
+          label={s().rivalActions.poach}
           action={{ type: 'poachRival', rivalId: rival.id }}
           state={state}
           dispatch={dispatch}
@@ -112,10 +115,10 @@ interface RivalActionPanelProps {
 /** 경쟁사 대응 패널 */
 export function RivalActionPanel({ state, dispatch, isNew = false }: RivalActionPanelProps) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-3" aria-label="경쟁사 대응">
+    <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-3" aria-label={s().rivalActions.aria}>
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-200">
-          경쟁사 대응
+          {s().rivalActions.heading}
           {isNew && (
             <span className="rounded bg-cyan-500/20 px-1 py-px text-[9px] font-bold text-cyan-300">
               NEW
@@ -124,7 +127,7 @@ export function RivalActionPanel({ state, dispatch, isNew = false }: RivalAction
         </h2>
       </div>
       <p className="mb-2 text-[11px] leading-relaxed text-slate-500">
-        내 설비를 키우는 대신 상대를 늦추는 데 돈을 씁니다. 늦춘 효과는 시간이 지나면 풀립니다.
+        {s().rivalActions.description}
       </p>
 
       <div className="grid gap-1.5">
@@ -141,7 +144,7 @@ export function RivalActionPanel({ state, dispatch, isNew = false }: RivalAction
 
       <div className="mt-2">
         <InterferenceButton
-          label="GPU 물량 선점 — 경쟁사 전체를 늦춥니다"
+          label={s().rivalActions.lockSupply}
           action={{ type: 'lockSupply' }}
           state={state}
           dispatch={dispatch}

@@ -13,9 +13,11 @@
 
 import { useState } from 'react';
 import type { Dispatch } from 'react';
-import { START, TARGET_PLAY_SECONDS } from '../balance';
+import { TARGET_PLAY_SECONDS } from '../balance';
+import { s } from '../i18n';
 import { availability, formatDuration } from '../input';
 import type { GameAction, GameState } from '../types';
+import { LanguagePicker } from './LanguagePicker';
 
 interface TitleScreenProps {
   state: GameState;
@@ -41,15 +43,17 @@ export function TitleScreen({ state, dispatch }: TitleScreenProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
       <div className="w-full max-w-md">
-        <p className="font-mono text-[10px] tracking-[0.3em] text-cyan-400">AGI RACE</p>
+        <div className="flex items-start justify-between gap-4">
+          <p className="font-mono text-[10px] tracking-[0.3em] text-cyan-400">AGI RACE</p>
+          <LanguagePicker />
+        </div>
 
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-50 sm:text-4xl">
-          경주는 이미 시작됐다
+          {s().title.heading}
         </h1>
 
         <p className="mt-3 text-sm leading-relaxed text-slate-400">
-          투자를 받고 GPU를 사고 전기를 계약해, 경쟁 연구소 세 곳보다 먼저 AGI에 도달하세요.
-          한 판은 대략 {formatDuration(TARGET_PLAY_SECONDS)} 입니다.
+          {s().title.body} {s().title.length(formatDuration(TARGET_PLAY_SECONDS))}
         </p>
 
         <form
@@ -60,14 +64,14 @@ export function TitleScreen({ state, dispatch }: TitleScreenProps) {
           }}
         >
           <label className="block text-xs tracking-wide text-slate-500" htmlFor="lab-name">
-            연구소 이름
+            {s().title.labelName}
           </label>
           <input
             id="lab-name"
             type="text"
             value={labName}
             maxLength={20}
-            placeholder={START.labName}
+            placeholder={s().names.defaultLab}
             onChange={(changeEvent) => setLabName(changeEvent.target.value)}
             className="mt-1.5 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2.5 text-base text-slate-100 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none"
           />
@@ -82,7 +86,7 @@ export function TitleScreen({ state, dispatch }: TitleScreenProps) {
                 : 'cursor-not-allowed border-slate-800 bg-slate-900 text-slate-600'
             }`}
           >
-            연구소 가동
+            {s().title.start}
           </button>
         </form>
 

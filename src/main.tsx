@@ -14,13 +14,17 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import './index.css';
+import { initLocale, s } from './i18n';
 import { App } from './render';
+
+// 화면을 그리기 전에 언어부터 정합니다 (전에 고른 언어 → 없으면 브라우저 언어 → 영어)
+initLocale();
 
 const container = document.getElementById('root');
 
 if (!container) {
   // index.html 에서 <div id="root"> 를 지우지 않는 한 여기로 올 일은 없습니다.
-  throw new Error('index.html 에서 id="root" 인 요소를 찾지 못했습니다.');
+  throw new Error(s().meta.rootMissing);
 }
 
 createRoot(container).render(

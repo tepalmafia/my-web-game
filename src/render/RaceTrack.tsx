@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GameState, Ratio, Rival, RivalPersonality, RivalStatus } from '../types';
 import { ALERT } from '../balance';
 import { rivalStatusFor } from '../constraints';
+import { rivalName, s } from '../i18n';
 
 /** 경쟁사마다 다른 색 (플레이어의 청록색과 겹치지 않게 고른 차분한 색들) */
 const RIVAL_COLORS = [
@@ -60,22 +61,20 @@ export function rivalDisplayProgress(rival: Rival): number {
 const OVERTAKE_FLASH_MS = 1800;
 
 /** 성향을 한 단어로 (이름 밑 작은 글씨) */
-const PERSONALITY_NOTE: Record<RivalPersonality, string> = {
-  capital: '자금력형',
-  speed: '속도형',
-  efficiency: '효율형',
-};
+function personalityNote(personality: RivalPersonality): string {
+  return s().race.personality[personality];
+}
 
 /**
  * 상태 표시. 평소(racing)에는 아무것도 붙이지 않습니다 —
  * 늘 뭔가 적혀 있으면 정작 스퍼트나 정체가 눈에 안 들어옵니다.
  */
-const STATUS_NOTE: Record<RivalStatus, { text: string; className: string }> = {
-  racing: { text: '', className: 'text-slate-500' },
-  sprinting: { text: ' · 스퍼트', className: 'text-amber-400' },
-  stalled: { text: ' · 정체', className: 'text-sky-400' },
-  collapsed: { text: ' · 탈락', className: 'text-slate-600' },
-  achieved: { text: ' · 달성', className: 'text-rose-400' },
+const STATUS_CLASS: Record<RivalStatus, string> = {
+  racing: 'text-slate-500',
+  sprinting: 'text-amber-400',
+  stalled: 'text-sky-400',
+  collapsed: 'text-slate-600',
+  achieved: 'text-rose-400',
 };
 
 /** 트랙 위 점 하나가 놓일 위치를 % 로 바꿉니다 (양 끝이 잘리지 않게 살짝 여백을 둡니다) */
@@ -232,12 +231,12 @@ export function RaceTrack({ state }: RaceTrackProps) {
   return (
     <section
       className="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-      aria-label="AGI 도달 경주 현황"
+      aria-label={s().race.aria}
     >
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-xs font-semibold tracking-wide text-slate-300">AGI 경주</h2>
+        <h2 className="text-xs font-semibold tracking-wide text-slate-300">{s().race.heading}</h2>
         <span className="text-[11px] text-slate-500">
-          {showRivals ? '결승선 = AGI 달성' : '경쟁 상황은 아직 파악되지 않았습니다'}
+          {showRivals ? s().race.finishLine : s().race.unknown}
         </span>
       </div>
 
@@ -252,7 +251,7 @@ export function RaceTrack({ state }: RaceTrackProps) {
             isPlayer
             flashing={false}
             nearGoal={playerProgress >= ALERT.rivalNearGoal}
-            note="우리"
+            note={s().race.us}
             noteClass="text-cyan-600"
           />
 
@@ -262,11 +261,11 @@ export function RaceTrack({ state }: RaceTrackProps) {
               const dead = rival.status === 'collapsed';
               // 표시용 상태는 저장된 값이 아니라 지금의 속도 배수에서 곧바로 끌어냅니다.
               // (저장값에 기대면 개입 직후 한 박자 늦게 반영됩니다)
-              const status = STATUS_NOTE[rivalStatusFor(rival)];
+              const status = rivalStatusFor(rival);
               return (
                 <Lane
                   key={rival.id}
-                  name={rival.name}
+                  name={rivalName(rival)}
                   progress={rivalDisplayProgress(rival)}
                   dotClass={dead ? 'bg-slate-600' : color.dot}
                   ringClass={dead ? 'ring-slate-700' : color.ring}
@@ -274,8 +273,8 @@ export function RaceTrack({ state }: RaceTrackProps) {
                   isPlayer={false}
                   flashing={flashing.includes(rival.id)}
                   nearGoal={!dead && rivalDisplayProgress(rival) >= ALERT.rivalNearGoal}
-                  note={`${PERSONALITY_NOTE[rival.personality]}${status.text}`}
-                  noteClass={status.className}
+                  note={`${personalityNote(rival.personality)}${s().race.status[status]}`}
+                  noteClass={STATUS_CLASS[status]}
                 />
               );
             })}

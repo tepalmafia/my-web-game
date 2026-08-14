@@ -15,9 +15,11 @@
  */
 
 import type { Dispatch } from 'react';
-import { formatDuration, formatMoney, formatPercent, withParticle } from '../input';
+import { rivalName, s } from '../i18n';
+import { formatDuration, formatMoney, formatPercent } from '../input';
 import type { GameAction, GameOutcome, GameState } from '../types';
 import { ProgressBar } from './ProgressBar';
+import { LanguagePicker } from './LanguagePicker';
 import { rivalDisplayProgress, rivalStyle } from './RaceTrack';
 import { ShareResult } from './ShareResult';
 
@@ -52,58 +54,58 @@ function copyFor(state: GameState, outcome: GameOutcome | null): OutcomeCopy {
     case 'agiAchieved':
       return {
         won: true,
-        headline: '우리가 먼저 도달했다',
-        body: `${withParticle(lab, '이', '가')} 세계 최초로 AGI에 도달했습니다. 경쟁 연구소 세 곳은 결승선을 눈앞에 두고 멈춰 섰습니다.`,
+        headline: s().end.won.headline,
+        body: s().end.won.body(lab),
         toneClass: 'text-emerald-300',
-        badge: '승리',
+        badge: s().end.won.badge,
       };
 
     case 'rivalWon': {
       const winner = state.rivals.find((rival) => rival.id === state.outcomeRivalId);
-      const name = winner === undefined ? '경쟁 연구소' : winner.name;
+      const name = winner === undefined ? s().log.fallbackRivalName : rivalName(winner);
       return {
         won: false,
-        headline: '한발 늦었다',
-        body: `${withParticle(name, '이', '가')} 먼저 AGI에 도달했습니다. 우리 클러스터는 아직 훈련 중이었습니다.`,
+        headline: s().end.rivalWon.headline,
+        body: s().end.rivalWon.body(name),
         toneClass: 'text-rose-300',
-        badge: '패배',
+        badge: s().end.rivalWon.badge,
       };
     }
 
     case 'bankrupt':
       return {
         won: false,
-        headline: '통장이 먼저 말랐다',
-        body: '전기 요금과 인건비가 매출을 앞질렀습니다. GPU는 그대로 있지만 더 이상 돌릴 돈이 없습니다.',
+        headline: s().end.bankrupt.headline,
+        body: s().end.bankrupt.body,
         toneClass: 'text-amber-300',
-        badge: '패배',
+        badge: s().end.bankrupt.badge,
       };
 
     case 'catastrophe':
       return {
         won: false,
-        headline: '통제 불능',
-        body: '검증을 건너뛴 훈련에서 사고가 났습니다. 앞서 나가기 위해 치른 대가였고, 되돌릴 방법은 없었습니다.',
+        headline: s().end.catastrophe.headline,
+        body: s().end.catastrophe.body,
         toneClass: 'text-rose-300',
-        badge: '패배',
+        badge: s().end.catastrophe.badge,
       };
 
     case 'controlLost':
       return {
         won: false,
-        headline: '더 이상 우리 것이 아니다',
-        body: '자기개선에 들어간 모델이 우리 손을 벗어났습니다. 가속에 쏟은 만큼 정렬에 쏟지 않았고, 되돌릴 시간은 남아 있지 않았습니다.',
+        headline: s().end.controlLost.headline,
+        body: s().end.controlLost.body,
         toneClass: 'text-fuchsia-300',
-        badge: '통제 상실',
+        badge: s().end.controlLost.badge,
       };
 
     default:
       return {
         won: false,
-        headline: '판이 끝났다',
-        body: '게임이 종료되었습니다.',
+        headline: s().end.unknown.headline,
+        body: s().end.unknown.body,
         toneClass: 'text-slate-300',
-        badge: '종료',
+        badge: s().end.unknown.badge,
       };
   }
 }
@@ -135,7 +137,7 @@ function rankings(state: GameState): RankEntry[] {
   const others: RankEntry[] = state.rivals.map((rival, index) => {
     const style = rivalStyle(index);
     return {
-      name: rival.name,
+      name: rivalName(rival),
       progress: rivalDisplayProgress(rival),
       barClass: style.bar,
       textClass: style.text,
@@ -169,6 +171,9 @@ export function EndScreen({ state, dispatch }: EndScreenProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
       <div className="w-full max-w-lg">
+        <div className="mb-2 flex justify-end">
+          <LanguagePicker />
+        </div>
         <p
           className={`font-mono text-[10px] tracking-[0.3em] ${
             copy.won ? 'text-emerald-400' : 'text-rose-400'
@@ -185,14 +190,17 @@ export function EndScreen({ state, dispatch }: EndScreenProps) {
 
         {/* 최종 기록 */}
         <div className="mt-6 grid grid-cols-2 gap-2">
-          <Record label="경과 시간" value={formatDuration(state.elapsed)} />
-          <Record label="최종 진행도" value={formatPercent(state.player.researchProgress)} />
-          <Record label="최종 지분" value={formatPercent(state.player.equityRetained)} />
-          <Record label="남은 자금" value={formatMoney(state.player.money)} />
+          <Record label={s().end.elapsed} value={formatDuration(state.elapsed)} />
+          <Record
+            label={s().end.finalProgress}
+            value={formatPercent(state.player.researchProgress)}
+          />
+          <Record label={s().end.finalEquity} value={formatPercent(state.player.equityRetained)} />
+          <Record label={s().end.finalMoney} value={formatMoney(state.player.money)} />
         </div>
 
         {/* 최종 순위 */}
-        <h2 className="mt-6 text-sm font-semibold tracking-wide text-slate-200">최종 순위</h2>
+        <h2 className="mt-6 text-sm font-semibold tracking-wide text-slate-200">{s().end.standings}</h2>
         <ol className="mt-2 space-y-2">
           {board.map((entry, index) => (
             <li
@@ -203,9 +211,9 @@ export function EndScreen({ state, dispatch }: EndScreenProps) {
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="flex items-baseline gap-2 text-xs">
-                  <span className="font-mono text-slate-500">{index + 1}위</span>
+                  <span className="font-mono text-slate-500">{s().end.place(index + 1)}</span>
                   <span className={`font-semibold ${entry.textClass}`}>{entry.name}</span>
-                  {entry.mine && <span className="text-[10px] text-slate-500">우리</span>}
+                  {entry.mine && <span className="text-[10px] text-slate-500">{s().end.us}</span>}
                 </span>
                 <span className="font-mono text-xs text-slate-300">
                   {formatPercent(entry.progress)}
@@ -214,7 +222,7 @@ export function EndScreen({ state, dispatch }: EndScreenProps) {
               <div className="mt-1">
                 <ProgressBar
                   value={entry.progress}
-                  label={`${entry.name} 최종 진행도`}
+                  label={s().end.progressAria(entry.name)}
                   colorClass={entry.barClass}
                   size="sm"
                 />
@@ -230,7 +238,7 @@ export function EndScreen({ state, dispatch }: EndScreenProps) {
           onClick={() => dispatch({ type: 'restart' })}
           className="mt-6 w-full rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-3 text-base font-bold text-cyan-50 transition-colors hover:bg-cyan-500/30 active:bg-cyan-500/40"
         >
-          다시 하기
+          {s().end.restart}
         </button>
       </div>
     </div>

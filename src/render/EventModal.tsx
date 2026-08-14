@@ -12,6 +12,7 @@
  */
 
 import type { Dispatch } from 'react';
+import { s } from '../i18n';
 import { availability, formatMoney } from '../input';
 import type { GameAction, GameEvent, GameState } from '../types';
 import { guarded } from './ActionPanel';
@@ -40,7 +41,7 @@ export function EventModal({ state, dispatch, event }: EventModalProps) {
         aria-labelledby="event-title"
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-amber-500/40 bg-slate-900 p-4 shadow-2xl"
       >
-        <p className="text-[10px] tracking-widest text-amber-400">사건 발생</p>
+        <p className="text-[10px] tracking-widest text-amber-400">{s().eventModal.eyebrow}</p>
         <h2 id="event-title" className="mt-1 text-lg font-bold text-slate-100">
           {event.title}
         </h2>

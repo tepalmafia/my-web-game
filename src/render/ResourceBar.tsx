@@ -15,10 +15,12 @@
 import type { Dispatch } from 'react';
 import { SPEED_OPTIONS } from '../balance';
 import { computeDerived, powerAvailable } from '../constraints';
+import { s } from '../i18n';
 import { formatCompact, formatDuration, formatMoney, formatPercent, formatRate } from '../input';
 import { formatMegawatts } from '../input/format';
 import type { GameAction, GameState } from '../types';
 import { guarded } from './ActionPanel';
+import { LanguagePicker } from './LanguagePicker';
 import { ProgressBar } from './ProgressBar';
 
 interface ResourceBarProps {
@@ -64,7 +66,9 @@ export function ResourceBar({ state, dispatch }: ResourceBarProps) {
   // 통장이 차고 있는지 마르고 있는지 — 이 게임에서 가장 중요한 한 가지
   const gaining = derived.netPerSecond >= 0;
   const runway =
-    derived.runwaySeconds === null ? '흑자' : `${formatDuration(derived.runwaySeconds)} 남음`;
+    derived.runwaySeconds === null
+      ? s().bar.inTheBlack
+      : s().bar.runwayLeft(formatDuration(derived.runwaySeconds));
 
   // 전력이 모자라면 사둔 GPU가 놀고 있다는 뜻이라 색으로 알려줍니다
   const idleGpus = player.gpus - derived.activeGpus;
@@ -84,11 +88,13 @@ export function ResourceBar({ state, dispatch }: ResourceBarProps) {
           <div className="flex items-baseline gap-2">
             <h1 className="text-sm font-semibold text-slate-200">{player.labName}</h1>
             <span className="font-mono text-xs text-slate-500">
-              경과 {formatDuration(state.elapsed)}
+              {s().bar.elapsed(formatDuration(state.elapsed))}
             </span>
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* 좁은 화면에서는 숨깁니다 — 한 줄이 더 늘어나면 게임 화면이 밀립니다 */}
+            <LanguagePicker className="mr-1 hidden md:inline-flex" />
             <button
               type="button"
               onClick={() => act({ type: 'setPaused', paused: !state.paused })}
@@ -99,10 +105,10 @@ export function ResourceBar({ state, dispatch }: ResourceBarProps) {
                   : 'border-slate-700 bg-slate-800/70 text-slate-200 hover:bg-slate-700/70'
               }`}
             >
-              {state.paused ? '재개' : '일시정지'}
+              {state.paused ? s().bar.resume : s().bar.pause}
             </button>
 
-            <div className="flex items-center gap-1" role="group" aria-label="게임 속도">
+            <div className="flex items-center gap-1" role="group" aria-label={s().bar.speedGroup}>
               {SPEED_OPTIONS.map((option) => (
                 <button
                   key={option}
@@ -115,7 +121,7 @@ export function ResourceBar({ state, dispatch }: ResourceBarProps) {
                       : 'border-slate-700 bg-slate-800/70 text-slate-400 hover:bg-slate-700/70'
                   }`}
                 >
-                  {option}배속
+                  {s().bar.speed(String(option))}
                 </button>
               ))}
             </div>
@@ -125,54 +131,58 @@ export function ResourceBar({ state, dispatch }: ResourceBarProps) {
         {/* 자원 네 칸 */}
         <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat
-            label="자금"
+            label={s().bar.money}
             value={formatMoney(player.money)}
             hint={`${formatRate(derived.netPerSecond)} · ${runway}`}
             valueClass={gaining ? 'text-emerald-300' : 'text-rose-300'}
           />
           <Stat
-            label="GPU (가동 / 보유)"
+            label={s().bar.gpus}
             value={`${formatCompact(derived.activeGpus)} / ${formatCompact(player.gpus)}`}
-            hint={idleGpus > 0 ? `${formatCompact(idleGpus)}장이 놀고 있음` : '전부 가동 중'}
+            hint={
+              idleGpus > 0 ? s().bar.gpusIdle(formatCompact(idleGpus)) : s().bar.gpusAllRunning
+            }
             valueClass={idleGpus > 0 ? 'text-amber-300' : 'text-slate-100'}
           />
           <Stat
-            label="전력 (사용 / 가용)"
+            label={s().bar.power}
             value={`${formatMegawatts(derived.powerDemand)} / ${formatMegawatts(
               powerAvailable(state),
             )}`}
-            hint={`계약 ${formatMegawatts(player.powerContracted)} · 여유 ${formatPercent(
-              derived.powerHeadroom,
-              0,
-            )}`}
+            hint={s().bar.powerHint(
+              formatMegawatts(player.powerContracted),
+              formatPercent(derived.powerHeadroom, 0),
+            )}
             valueClass={derived.powerHeadroom <= 0 ? 'text-rose-300' : 'text-slate-100'}
           />
           <Stat
-            label="연구원"
-            value={`${formatCompact(player.researchers)}명`}
-            hint={`지분 ${formatPercent(player.equityRetained, 0)} · 안전 ${formatPercent(
-              player.safety,
-              0,
-            )}`}
+            label={s().bar.researchers}
+            value={formatCompact(player.researchers)}
+            hint={s().bar.researchersHint(
+              formatPercent(player.equityRetained, 0),
+              formatPercent(player.safety, 0),
+            )}
           />
         </div>
 
         {/* AGI 진행도 */}
         <div className="mt-2.5">
           <div className="mb-1 flex items-baseline justify-between gap-2">
-            <span className="text-[10px] tracking-wide text-slate-500">AGI 진행도</span>
+            <span className="text-[10px] tracking-wide text-slate-500">
+              {s().bar.progressLabel}
+            </span>
             <span className="font-mono text-xs text-slate-400">
               <span className="text-base font-semibold text-cyan-300">
                 {formatPercent(player.researchProgress)}
               </span>
               <span className="ml-2">
-                {formatPercent(derived.researchRate, 3)}/초 · 완성까지 {eta}
+                {s().bar.progressRate(formatPercent(derived.researchRate, 3), eta)}
               </span>
             </span>
           </div>
           <ProgressBar
             value={player.researchProgress}
-            label="내 연구소의 AGI 진행도"
+            label={s().bar.progressAria}
             colorClass="bg-cyan-400"
             size="lg"
           />

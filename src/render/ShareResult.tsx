@@ -13,17 +13,9 @@
  */
 
 import { useEffect, useState } from 'react';
+import { s } from '../i18n';
 import { formatCompact, formatDuration, formatPercent } from '../input';
-import type { GameOutcome, GameState } from '../types';
-
-/** 결과별 한 줄 요약 */
-const OUTCOME_LINE: Record<GameOutcome, string> = {
-  agiAchieved: 'AGI 달성 — 승리',
-  rivalWon: '경쟁 연구소에 선수를 빼앗김',
-  bankrupt: '자금이 바닥나 연구소 폐쇄',
-  catastrophe: '안전을 무시하다 사고 발생',
-  controlLost: '자기개선하는 모델을 놓침',
-};
+import type { GameState } from '../types';
 
 /**
  * 자랑용 문구를 만듭니다.
@@ -32,21 +24,26 @@ const OUTCOME_LINE: Record<GameOutcome, string> = {
  */
 export function buildShareText(state: GameState, url: string): string {
   const outcome = state.outcome;
-  const headline = outcome === null ? '진행 중' : OUTCOME_LINE[outcome];
+  const text = s().share;
+  const headline = outcome === null ? text.inProgress : text.outcome[outcome];
   const win = outcome === 'agiAchieved';
 
   const lines = [
-    `AGI 경주 🏁 ${headline}`,
-    `${state.player.labName} · ${formatDuration(state.elapsed)} · 진행도 ${formatPercent(
-      state.player.researchProgress,
-    )}`,
-    `GPU ${formatCompact(state.player.gpus)}장 · 연구원 ${formatCompact(
-      state.player.researchers,
-    )}명 · 남은 지분 ${formatPercent(state.player.equityRetained)}`,
+    text.headline(headline),
+    text.line2(
+      state.player.labName,
+      formatDuration(state.elapsed),
+      formatPercent(state.player.researchProgress),
+    ),
+    text.line3(
+      formatCompact(state.player.gpus),
+      formatCompact(state.player.researchers),
+      formatPercent(state.player.equityRetained),
+    ),
   ];
 
   // 진 사람은 도발을, 이긴 사람은 기록 경신을 부추깁니다
-  lines.push(win ? '더 빨리 도달할 수 있나요?' : '당신은 더 잘할 수 있나요?');
+  lines.push(win ? text.tauntWin : text.tauntLose);
   lines.push(url);
 
   return lines.join('\n');
@@ -117,15 +114,13 @@ export function ShareResult({ state }: { state: GameState }) {
         }}
         className="w-full rounded-md border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-800 active:bg-slate-700"
       >
-        {status === 'copied' ? '복사했습니다 — 붙여넣기만 하면 됩니다' : '결과 자랑하기'}
+        {status === 'copied' ? s().share.copied : s().share.button}
       </button>
 
       {/* 복사가 막힌 브라우저에서는 직접 긁어갈 수 있게 문구를 그대로 보여줍니다 */}
       {status === 'failed' && (
         <div className="mt-2">
-          <p className="text-[11px] text-amber-300">
-            이 브라우저에서는 자동 복사가 막혀 있습니다. 아래 글을 직접 복사해 주세요.
-          </p>
+          <p className="text-[11px] text-amber-300">{s().share.failed}</p>
           <textarea
             readOnly
             value={text}

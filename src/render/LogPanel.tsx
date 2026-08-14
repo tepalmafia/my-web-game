@@ -10,6 +10,7 @@
  *  여기서 다시 정렬하지 않습니다.
  */
 
+import { s } from '../i18n';
 import { formatDuration } from '../input';
 import type { LogEntry, LogTone } from '../types';
 
@@ -34,10 +35,10 @@ interface LogPanelProps {
 export function LogPanel({ log }: LogPanelProps) {
   return (
     <aside className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-      <h2 className="text-sm font-semibold tracking-wide text-slate-200">기록</h2>
+      <h2 className="text-sm font-semibold tracking-wide text-slate-200">{s().logPanel.heading}</h2>
 
       {log.length === 0 ? (
-        <p className="mt-2 text-xs text-slate-600">아직 기록이 없습니다.</p>
+        <p className="mt-2 text-xs text-slate-600">{s().logPanel.empty}</p>
       ) : (
         <ol className="mt-2 max-h-64 space-y-1.5 overflow-y-auto pr-1 md:max-h-[calc(100vh-19rem)]">
           {log.map((entry) => (

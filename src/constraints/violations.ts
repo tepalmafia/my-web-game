@@ -11,6 +11,7 @@
  *                          violationMessage 로 이유를 한 줄 보여주면 됩니다)
  */
 
+import { s } from '../i18n';
 import type { GameState, Megawatts, Money, PanelId, Requirement } from '../types';
 import { gpuCapacity } from './capacity';
 import { formatCount, formatMoney, formatPower } from './format';
@@ -106,21 +107,21 @@ export function checkRequirement(state: GameState, req: Requirement): LimitViola
 function panelLabel(panel: PanelId): string {
   switch (panel) {
     case 'funding':
-      return '투자 유치';
+      return s().violations.panel.funding;
     case 'gpu':
       return 'GPU';
     case 'power':
-      return '전력 계약';
+      return s().violations.panel.power;
     case 'datacenter':
-      return '데이터센터';
+      return s().violations.panel.datacenter;
     case 'researchers':
-      return '연구원';
+      return s().violations.panel.researchers;
     case 'rivals':
-      return '경쟁사 상황판';
+      return s().violations.panel.rivals;
     case 'safety':
-      return '안전 조절';
+      return s().violations.panel.safety;
     default:
-      return '해당 항목';
+      return s().violations.panel.unknown;
   }
 }
 
@@ -131,22 +132,24 @@ function panelLabel(panel: PanelId): string {
 export function violationMessage(v: LimitViolation): string {
   switch (v.kind) {
     case 'insufficientFunds':
-      return `자금이 ${formatMoney(v.needed - v.have)} 부족합니다`;
+      return s().violations.insufficientFunds(formatMoney(v.needed - v.have));
     case 'gpuCapacityExceeded':
-      return `GPU를 둘 자리가 없습니다 (한도 ${formatCount(v.capacity)}장 · 보유 ${formatCount(
-        v.current,
-      )}장 · 요청 ${formatCount(v.requested)}장)`;
+      return s().violations.gpuCapacity(
+        formatCount(v.capacity),
+        formatCount(v.current,
+      ),
+        formatCount(v.requested),
+      );
     case 'powerShortage':
-      return `전력이 부족합니다 (필요 ${formatPower(v.demand)} · 사용 가능 ${formatPower(
-        v.available,
-      )})`;
+      return s().violations.powerShortage(formatPower(v.demand), formatPower(v.available,
+      ));
     case 'equityExhausted':
-      return '남은 지분이 없어 더 이상 투자를 받을 수 없습니다';
+      return s().violations.equityExhausted;
     case 'panelLocked':
-      return `${panelLabel(v.panel)} 조건을 아직 만족하지 못했습니다`;
+      return s().violations.panelLocked(panelLabel(v.panel));
     case 'gameNotRunning':
-      return '지금은 진행할 수 없습니다 (일시정지 중이거나 게임이 끝났습니다)';
+      return s().violations.notRunning;
     default:
-      return '지금은 할 수 없습니다';
+      return s().violations.generic;
   }
 }

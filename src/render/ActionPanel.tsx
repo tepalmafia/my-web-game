@@ -20,6 +20,7 @@
 import type { Dispatch, ReactNode } from 'react';
 import { GPU, SAFETY } from '../balance';
 import { computeDerived, powerAvailable, powerDemand, researcherMultiplier } from '../constraints';
+import { s } from '../i18n';
 import {
   availability,
   formatCompact,
@@ -234,16 +235,16 @@ export function FundingPanel({ state, dispatch, isNew }: PanelProps) {
 
   return (
     <Panel
-      title="투자 유치"
-      description="지분을 내주고 자금을 받습니다. 라운드가 올라갈수록 들어오는 돈도, 내주는 지분도 커집니다."
+      title={s().panels.funding.title}
+      description={s().panels.funding.description}
       isNew={isNew}
-      status={`남은 지분 ${formatPercent(state.player.equityRetained)}`}
+      status={s().panels.funding.status(formatPercent(state.player.equityRetained))}
       note={note.text}
       noteIsBlocked={note.blocked}
     >
       <ButtonRow>
         <ActionButton
-          label={`${state.player.fundingRound + 1}차 투자 받기`}
+          label={s().panels.funding.button(state.player.fundingRound + 1)}
           status={status}
           onClick={() => act({ type: 'raiseFunding' })}
           primary
@@ -274,15 +275,18 @@ export function GpuPanel({ state, dispatch, isNew }: PanelProps) {
   // 마우스를 올려야 보이는 설명은 휴대폰에서 아무 소용이 없습니다.
   const hasMaxButton = options.length > GPU.buySteps.length;
   const reserveNote = hasMaxButton
-    ? `'최대'는 운영자금 ${formatMoney(maxBuyReserve(state))}를 남깁니다`
+    ? s().panels.gpu.reserveNote(formatMoney(maxBuyReserve(state)))
     : null;
 
   return (
     <Panel
-      title="GPU 구매"
-      description="훈련 속도는 '실제로 돌아가는' GPU 수에 비례합니다. 전력이 모자라면 사둔 GPU가 놉니다."
+      title={s().panels.gpu.title}
+      description={s().panels.gpu.description}
       isNew={isNew}
-      status={`${formatCompact(state.player.gpus)} / ${formatCompact(derived.gpuCapacity)}장`}
+      status={s().panels.gpu.status(
+        formatCompact(state.player.gpus),
+        formatCompact(derived.gpuCapacity),
+      )}
       note={note.text}
       noteIsBlocked={note.blocked}
     >
@@ -292,8 +296,8 @@ export function GpuPanel({ state, dispatch, isNew }: PanelProps) {
             key={`${index}-${option.count}`}
             label={
               index < GPU.buySteps.length
-                ? `+${formatCompact(option.count)}장`
-                : `최대 +${formatCompact(option.count)}장`
+                ? s().panels.gpu.buy(formatCompact(option.count))
+                : s().panels.gpu.buyMax(formatCompact(option.count))
             }
             status={option.availability}
             onClick={() => act({ type: 'buyGpu', count: option.count })}
@@ -325,8 +329,8 @@ export function PowerPanel({ state, dispatch, isNew }: PanelProps) {
 
   return (
     <Panel
-      title="전력 계약"
-      description="계약한 용량만큼 매초 요금이 나갑니다. 실제로 쓰지 않아도 나가니 필요한 만큼만 늘리세요."
+      title={s().panels.power.title}
+      description={s().panels.power.description}
       isNew={isNew}
       status={`${formatMegawatts(powerDemand(state))} / ${formatMegawatts(powerAvailable(state))}`}
       note={note.text}
@@ -336,7 +340,7 @@ export function PowerPanel({ state, dispatch, isNew }: PanelProps) {
         {options.map((option, index) => (
           <ActionButton
             key={option.megawatts}
-            label={`+${formatMegawatts(option.megawatts)}`}
+            label={s().panels.power.button(formatMegawatts(option.megawatts))}
             status={option.availability}
             onClick={() => act({ type: 'contractPower', megawatts: option.megawatts })}
             primary={index === 0}
@@ -362,16 +366,16 @@ export function DatacenterPanel({ state, dispatch, isNew }: PanelProps) {
 
   return (
     <Panel
-      title="데이터센터 건설"
-      description="GPU를 둘 자리를 늘립니다. 한 동 지을 때마다 다음 건설비가 비싸지고 유지비도 늘어납니다."
+      title={s().panels.datacenter.title}
+      description={s().panels.datacenter.description}
       isNew={isNew}
-      status={`${formatCompact(state.player.datacenters)}동`}
+      status={s().panels.datacenter.status(formatCompact(state.player.datacenters))}
       note={note.text}
       noteIsBlocked={note.blocked}
     >
       <ButtonRow>
         <ActionButton
-          label="한 동 짓기"
+          label={s().panels.datacenter.button}
           status={status}
           onClick={() => act({ type: 'buildDatacenter' })}
           primary
@@ -404,10 +408,13 @@ export function ResearcherPanel({ state, dispatch, isNew }: PanelProps) {
 
   return (
     <Panel
-      title="연구원 채용"
-      description="같은 GPU로도 훈련이 빨라집니다. 대신 한 명 뽑을 때마다 다음 사람의 몸값과 인건비가 올라갑니다."
+      title={s().panels.researcher.title}
+      description={s().panels.researcher.description}
       isNew={isNew}
-      status={`${formatCompact(state.player.researchers)}명 · 속도 +${formatPercent(bonus)}`}
+      status={s().panels.researcher.status(
+        formatCompact(state.player.researchers),
+        formatPercent(bonus),
+      )}
       note={note.text}
       noteIsBlocked={note.blocked}
     >
@@ -415,7 +422,7 @@ export function ResearcherPanel({ state, dispatch, isNew }: PanelProps) {
         {options.map((option, index) => (
           <ActionButton
             key={option.count}
-            label={`+${formatCompact(option.count)}명`}
+            label={s().panels.researcher.button(formatCompact(option.count))}
             status={option.status}
             onClick={() => act({ type: 'hireResearcher', count: option.count })}
             primary={index === 0}
@@ -448,16 +455,16 @@ export function SafetyPanel({ state, dispatch, isNew }: PanelProps) {
 
   return (
     <Panel
-      title="안전 조절"
-      description="검증을 건너뛰면 훈련이 빨라지지만 매초 사고 위험이 생깁니다. 사고가 나면 그 자리에서 게임이 끝납니다."
+      title={s().panels.safety.title}
+      description={s().panels.safety.description}
       isNew={isNew}
-      status={`검증 수준 ${formatPercent(level, 0)}`}
+      status={s().panels.safety.status(formatPercent(level, 0))}
       note={note.text}
       noteIsBlocked={note.blocked}
       wide
     >
       <label className="block">
-        <span className="sr-only">안전 검증 수준</span>
+        <span className="sr-only">{s().panels.safety.sliderLabel}</span>
         <input
           type="range"
           min={SAFETY.minLevel}
@@ -467,17 +474,17 @@ export function SafetyPanel({ state, dispatch, isNew }: PanelProps) {
           disabled={!current.enabled}
           onChange={(event) => act({ type: 'setSafety', value: Number(event.target.value) })}
           className="h-6 w-full cursor-pointer appearance-none bg-transparent accent-amber-400 md:h-4"
-          aria-label="안전 검증 수준"
+          aria-label={s().panels.safety.sliderLabel}
         />
       </label>
 
       <div className="mt-1 flex justify-between font-mono text-[10px] text-slate-500">
-        <span>{formatPercent(SAFETY.minLevel, 0)} · 전부 건너뛰고 질주</span>
-        <span>{formatPercent(1, 0)} · 원칙대로 검증</span>
+        <span>{s().panels.safety.low(formatPercent(SAFETY.minLevel, 0))}</span>
+        <span>{s().panels.safety.high(formatPercent(1, 0))}</span>
       </div>
 
       <p className="mt-2 text-xs text-rose-400/90">
-        끝까지 낮추면 — {reckless.detail}
+        {s().panels.safety.recklessNote(reckless.detail ?? '')}
       </p>
     </Panel>
   );
