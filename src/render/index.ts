@@ -25,8 +25,11 @@ export { TitleScreen } from './TitleScreen';
 export { EndScreen } from './EndScreen';
 export { EventModal } from './EventModal';
 export { LogPanel } from './LogPanel';
+export { RaceTrack, rivalStyle, rivalDisplayProgress } from './RaceTrack';
+export { DatacenterView } from './DatacenterView';
+export { AlertStrip, DangerVignette, collectAlerts } from './DangerOverlay';
+export type { Alert } from './DangerOverlay';
 export { ResourceBar } from './ResourceBar';
-export { RivalBoard } from './RivalBoard';
 export { ProgressBar } from './ProgressBar';
 export {
   ActionButton,

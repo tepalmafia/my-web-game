@@ -89,6 +89,22 @@ import { nextRandom, pickIndex, randomRange } from './rng';
  */
 const MAX_LOG_LINES = 60;
 
+/**
+ * 반복되는 행동을 한 줄로 합칠 때 쓰는 머리말.
+ *
+ * GPU 구매와 연구원 채용은 한 판에 수십 번 일어납니다. 할 때마다 한 줄씩 남기면
+ * 기록창이 구매 내역으로 도배되어, 정작 놓치면 안 되는 사건과 해금 알림이 밀려납니다.
+ * 그래서 이 말로 시작하는 줄은 새로 만들지 않고 기존 줄을 고쳐 씁니다.
+ */
+const GPU_BUY_LOG_PREFIX = 'GPU를 사들이는 중';
+const HIRE_LOG_PREFIX = '연구원을 늘리는 중';
+
+/**
+ * 같은 머리말의 줄이 이 시간(초) 안에 있으면 '연달아 하는 중'으로 봅니다.
+ * GPU를 사고 연구원을 뽑고 다시 GPU를 사는 식으로 번갈아 해도 각각 한 줄로 합쳐집니다.
+ */
+const COALESCE_WINDOW_SECONDS = 12;
+
 /* ===========================================================================
  *  작은 도구들 — 이 파일 안에서만 씁니다
  * ======================================================================== */
@@ -145,6 +161,37 @@ function appendLogs(
     id += 1;
   }
   return { log: merged.slice(0, MAX_LOG_LINES), nextLogId: id };
+}
+
+/**
+ * 반복되는 행동을 기록할 때 씁니다.
+ *
+ * 최근에 같은 머리말의 줄이 있으면 그 줄을 지우고 최신 내용으로 맨 위에 다시 답니다.
+ * 없으면 평소처럼 새 줄을 만듭니다. 결과적으로 '연달아 사는 동안'에는 줄이
+ * 하나만 남고 그 줄의 숫자가 계속 갱신됩니다.
+ */
+function appendRepeating(
+  state: GameState,
+  prefix: string,
+  text: string,
+  tone: LogTone,
+): { log: LogEntry[]; nextLogId: number } {
+  const recent = state.log.findIndex(
+    (entry) =>
+      entry.text.startsWith(prefix) && state.elapsed - entry.at <= COALESCE_WINDOW_SECONDS,
+  );
+
+  if (recent === -1) {
+    return appendLogs(state.log, state.nextLogId, state.elapsed, [{ text, tone }]);
+  }
+
+  const found = state.log[recent]!;
+  const without = state.log.filter((_, index) => index !== recent);
+  // 줄 번호는 그대로 두고 위치와 내용만 갱신합니다 (화면이 목록을 다시 그리지 않아도 되게)
+  return {
+    log: [{ ...found, at: state.elapsed, text, tone }, ...without],
+    nextLogId: state.nextLogId,
+  };
 }
 
 /* ===========================================================================
@@ -623,9 +670,12 @@ function buyGpu(state: GameState, count: number): GameState {
     gpus: state.player.gpus + wanted,
   };
 
-  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
-    { text: `GPU ${formatCount(wanted)}장을 들였습니다 (${formatMoney(cost)}).`, tone: 'info' },
-  ]);
+  const logged = appendRepeating(
+    state,
+    GPU_BUY_LOG_PREFIX,
+    `${GPU_BUY_LOG_PREFIX} — 현재 ${formatCount(player.gpus)}장 보유.`,
+    'info',
+  );
 
   return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
 }
@@ -717,15 +767,14 @@ function hireResearcher(state: GameState, count: number): GameState {
   // 한 명도 못 뽑았으면 아무 일도 없었던 것으로 합니다
   if (hired === 0) return state;
 
-  const spent = state.player.money - money;
   const player: PlayerState = { ...state.player, money, researchers };
 
-  const logged = appendLogs(state.log, state.nextLogId, state.elapsed, [
-    {
-      text: `연구원 ${formatCount(hired)}명을 영입했습니다 (${formatMoney(spent)}).`,
-      tone: 'good',
-    },
-  ]);
+  const logged = appendRepeating(
+    state,
+    HIRE_LOG_PREFIX,
+    `${HIRE_LOG_PREFIX} — 현재 ${formatCount(researchers)}명.`,
+    'good',
+  );
 
   return { ...state, player, log: logged.log, nextLogId: logged.nextLogId };
 }

@@ -27,9 +27,11 @@ import {
   ResearcherPanel,
   SafetyPanel,
 } from './ActionPanel';
+import { AlertStrip, DangerVignette } from './DangerOverlay';
+import { DatacenterView } from './DatacenterView';
 import { LogPanel } from './LogPanel';
+import { RaceTrack } from './RaceTrack';
 import { ResourceBar } from './ResourceBar';
-import { RivalBoard } from './RivalBoard';
 
 /** 패널이 화면에 놓이는 순서 (게임 규칙이 아니라 화면 배치라 여기 있습니다) */
 const PANEL_ORDER: PanelId[] = [
@@ -95,10 +97,25 @@ export function Dashboard({ state, dispatch }: DashboardProps) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* 위험할 때 화면 가장자리를 물들입니다. 클릭은 가로채지 않습니다 */}
+      <DangerVignette state={state} />
+
       <ResourceBar state={state} dispatch={dispatch} />
+
+      {/* 경주 현황과 경고는 조작 패널보다 위 — 눈이 가장 먼저 닿는 자리 */}
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-3 pt-3 md:px-4 md:pt-4">
+        <RaceTrack state={state} />
+        <AlertStrip state={state} />
+      </div>
 
       <main className="mx-auto grid max-w-6xl gap-3 p-3 md:grid-cols-[minmax(0,1fr)_20rem] md:gap-4 md:p-4">
         <div className="grid content-start gap-3 sm:grid-cols-2">
+          {/* 설비 현황은 두 칸을 다 씁니다 (칸이 촘촘해서 좁으면 안 보입니다) */}
+          {unlocks.gpu && (
+            <div className="sm:col-span-2">
+              <DatacenterView state={state} isNew={isNew('datacenter')} />
+            </div>
+          )}
           {unlocks.funding && (
             <FundingPanel state={state} dispatch={dispatch} isNew={isNew('funding')} />
           )}
@@ -113,7 +130,6 @@ export function Dashboard({ state, dispatch }: DashboardProps) {
           {unlocks.safety && (
             <SafetyPanel state={state} dispatch={dispatch} isNew={isNew('safety')} />
           )}
-          {unlocks.rivals && <RivalBoard state={state} isNew={isNew('rivals')} />}
         </div>
 
         <LogPanel log={state.log} />

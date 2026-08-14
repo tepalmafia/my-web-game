@@ -33,4 +33,11 @@ export { maxAffordableGpus, maxAffordablePower } from './limits';
 export { gpuBuyOptions, powerContractOptions } from './options';
 
 // ── 화면이 함께 쓰는 표시 형식 ──
-export { formatCompact, formatDuration, formatMoney, formatPercent, formatRate } from './format';
+export {
+  formatCompact,
+  formatDuration,
+  formatMoney,
+  formatPercent,
+  formatRate,
+  withParticle,
+} from './format';

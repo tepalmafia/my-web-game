@@ -17,7 +17,7 @@ import type { Dispatch } from 'react';
 import { formatDuration, formatMoney, formatPercent } from '../input';
 import type { GameAction, GameOutcome, GameState } from '../types';
 import { ProgressBar } from './ProgressBar';
-import { rivalDisplayProgress, rivalStyle } from './RivalBoard';
+import { rivalDisplayProgress, rivalStyle } from './RaceTrack';
 
 interface EndScreenProps {
   state: GameState;
