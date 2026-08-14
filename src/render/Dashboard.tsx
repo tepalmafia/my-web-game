@@ -35,6 +35,7 @@ import { RaceTrack } from './RaceTrack';
 import { RivalActionPanel } from './RivalActionPanel';
 import { SelfResearchPanel } from './SelfResearchPanel';
 import { ResourceBar } from './ResourceBar';
+import { StickyStatus } from './StickyStatus';
 
 /** 패널이 화면에 놓이는 순서 (게임 규칙이 아니라 화면 배치라 여기 있습니다) */
 const PANEL_ORDER: PanelId[] = [
@@ -104,6 +105,9 @@ export function Dashboard({ state, dispatch }: DashboardProps) {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* 위험할 때 화면 가장자리를 물들입니다. 클릭은 가로채지 않습니다 */}
       <DangerVignette state={state} />
+
+      {/* 휴대폰에서만: 스크롤해도 따라오는 한 줄 상태바 */}
+      <StickyStatus state={state} />
 
       <ResourceBar state={state} dispatch={dispatch} />
 

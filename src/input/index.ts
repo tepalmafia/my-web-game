@@ -27,7 +27,7 @@ export type { ActionAvailability } from './availability';
 export { availability, guard } from './availability';
 
 // ── '최대' 수량 계산 ──
-export { maxAffordableGpus, maxAffordablePower } from './limits';
+export { maxAffordableGpus, maxAffordablePower, maxBuyReserve } from './limits';
 
 // ── 나란히 놓이는 구매 버튼 목록 ──
 export { gpuBuyOptions, powerContractOptions } from './options';

@@ -33,6 +33,7 @@ export { DatacenterView } from './DatacenterView';
 export { AlertStrip, DangerVignette, collectAlerts } from './DangerOverlay';
 export type { Alert } from './DangerOverlay';
 export { ResourceBar } from './ResourceBar';
+export { StickyStatus } from './StickyStatus';
 export { ProgressBar } from './ProgressBar';
 export {
   ActionButton,

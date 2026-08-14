@@ -27,6 +27,7 @@ import {
   formatPercent,
   gpuBuyOptions,
   guard,
+  maxBuyReserve,
   powerContractOptions,
 } from '../input';
 import type { ActionAvailability } from '../input';
@@ -175,6 +176,7 @@ interface ActionButtonProps {
 export function ActionButton({ label, status, onClick, primary = false }: ActionButtonProps) {
   const enabled = status.enabled;
 
+  // 휴대폰에서 손가락으로 정확히 누르려면 44px 이상이어야 합니다
   const look = !enabled
     ? 'border-slate-800 bg-slate-900 text-slate-600 cursor-not-allowed'
     : primary
@@ -187,7 +189,7 @@ export function ActionButton({ label, status, onClick, primary = false }: Action
       onClick={onClick}
       disabled={!enabled}
       title={status.reason ?? status.detail ?? undefined}
-      className={`rounded-md border px-3 py-2 text-left transition-colors ${look}`}
+      className={`min-h-11 rounded-md border px-3 py-2 text-left transition-colors md:min-h-0 ${look}`}
     >
       <span className="block text-sm font-semibold whitespace-nowrap">{label}</span>
       {status.cost !== null && (
@@ -268,6 +270,13 @@ export function GpuPanel({ state, dispatch, isNew }: PanelProps) {
   const lead = options.length > 0 ? options[0].availability : null;
   const note = lead === null ? { text: null, blocked: false } : noteOf(lead);
 
+  // '최대'가 전 재산을 쓰지 않고 얼마를 남기는지 항상 보이게 적습니다.
+  // 마우스를 올려야 보이는 설명은 휴대폰에서 아무 소용이 없습니다.
+  const hasMaxButton = options.length > GPU.buySteps.length;
+  const reserveNote = hasMaxButton
+    ? `'최대'는 운영자금 ${formatMoney(maxBuyReserve(state))}를 남깁니다`
+    : null;
+
   return (
     <Panel
       title="GPU 구매"
@@ -292,6 +301,9 @@ export function GpuPanel({ state, dispatch, isNew }: PanelProps) {
           />
         ))}
       </ButtonRow>
+      {reserveNote !== null && (
+        <p className="mt-1 text-[10px] text-slate-500">{reserveNote}</p>
+      )}
     </Panel>
   );
 }
@@ -454,7 +466,7 @@ export function SafetyPanel({ state, dispatch, isNew }: PanelProps) {
           value={level}
           disabled={!current.enabled}
           onChange={(event) => act({ type: 'setSafety', value: Number(event.target.value) })}
-          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-amber-400"
+          className="h-6 w-full cursor-pointer appearance-none bg-transparent accent-amber-400 md:h-4"
           aria-label="안전 검증 수준"
         />
       </label>

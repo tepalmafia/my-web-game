@@ -127,7 +127,7 @@ export function SelfResearchPanel({ state, dispatch }: SelfResearchPanelProps) {
               value: Number(changeEvent.target.value) / 100,
             })
           }
-          className="w-full accent-fuchsia-400"
+          className="h-6 w-full cursor-pointer accent-fuchsia-400 md:h-4"
           aria-label="자율 연구력 배분 (오른쪽으로 갈수록 정렬)"
         />
       </label>

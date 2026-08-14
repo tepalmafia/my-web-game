@@ -8,7 +8,14 @@
  *  나중에 밸런스를 고쳤을 때 버튼에 적힌 수량과 실제 결제 금액이 어긋납니다.
  */
 
-import { gpuCapacity, gpuUnitPrice, powerContractUpfront, researcherPrice } from '../constraints';
+import { GPU } from '../balance';
+import {
+  burnPerSecond,
+  gpuCapacity,
+  gpuUnitPrice,
+  powerContractUpfront,
+  researcherPrice,
+} from '../constraints';
 import type { GameState, Megawatts, Money } from '../types';
 import { withResearchers } from './simulate';
 
@@ -32,13 +39,24 @@ function trimToAffordable(count: number, unitPrice: Money, money: Money): number
 export function maxAffordableGpus(state: GameState): number {
   const room = Math.max(0, Math.floor(gpuCapacity(state) - state.player.gpus));
   const price = gpuUnitPrice(state);
-  const money = Math.max(0, state.player.money);
+
+  // 전 재산을 쓰지 않고 운영자금을 남깁니다.
+  // 남기지 않으면 누르는 순간 잔액 0에서 적자가 시작되어 곧 파산합니다.
+  const money = Math.max(0, state.player.money - maxBuyReserve(state));
 
   // 값이 0 이하인 비정상 상황에서는 자리만 보고 답합니다
   if (!(price > 0)) return room;
 
   const byMoney = trimToAffordable(Math.floor(money / price), price, money);
   return Math.max(0, Math.min(room, byMoney));
+}
+
+/**
+ * '최대' 버튼이 남겨두는 운영자금.
+ * 지금 지출로 balance.ts 가 정한 시간만큼 버틸 돈, 최소한 정해진 하한만큼입니다.
+ */
+export function maxBuyReserve(state: GameState): Money {
+  return Math.max(GPU.maxBuyReserveFloor, burnPerSecond(state) * GPU.maxBuyReserveSeconds);
 }
 
 /**

@@ -93,7 +93,7 @@ export function ResourceBar({ state, dispatch }: ResourceBarProps) {
               type="button"
               onClick={() => act({ type: 'setPaused', paused: !state.paused })}
               aria-pressed={state.paused}
-              className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+              className={`min-h-11 md:min-h-0 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
                 state.paused
                   ? 'border-amber-400/60 bg-amber-400/20 text-amber-200 hover:bg-amber-400/30'
                   : 'border-slate-700 bg-slate-800/70 text-slate-200 hover:bg-slate-700/70'
@@ -109,7 +109,7 @@ export function ResourceBar({ state, dispatch }: ResourceBarProps) {
                   type="button"
                   onClick={() => act({ type: 'setSpeed', speed: option })}
                   aria-pressed={state.speed === option}
-                  className={`rounded-md border px-2 py-1 font-mono text-xs transition-colors ${
+                  className={`min-h-11 rounded-md border px-3 py-1 font-mono text-xs transition-colors md:min-h-0 ${
                     state.speed === option
                       ? 'border-cyan-400/60 bg-cyan-500/20 text-cyan-100'
                       : 'border-slate-700 bg-slate-800/70 text-slate-400 hover:bg-slate-700/70'
