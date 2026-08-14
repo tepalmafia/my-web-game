@@ -53,10 +53,16 @@ export function maxAffordableGpus(state: GameState): number {
 
 /**
  * '최대' 버튼이 남겨두는 운영자금.
+ *
  * 지금 지출로 balance.ts 가 정한 시간만큼 버틸 돈, 최소한 정해진 하한만큼입니다.
+ * 다만 잔액의 절반을 넘게 남기지는 않습니다 — 남길 돈이 잔액보다 커지면
+ * 살 수 있는 최대 장수가 0이 되어 '최대' 버튼이 화면에서 사라져 버립니다.
+ * (돈도 자리도 있는데 버튼이 없으면 고장 난 것으로 보입니다)
  */
 export function maxBuyReserve(state: GameState): Money {
-  return Math.max(GPU.maxBuyReserveFloor, burnPerSecond(state) * GPU.maxBuyReserveSeconds);
+  const wanted = Math.max(GPU.maxBuyReserveFloor, burnPerSecond(state) * GPU.maxBuyReserveSeconds);
+  const cap = Math.max(0, state.player.money) * GPU.maxBuyReserveShare;
+  return Math.min(wanted, cap);
 }
 
 /**
