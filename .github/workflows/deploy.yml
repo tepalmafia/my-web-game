@@ -1,0 +1,64 @@
+# 깃허브 페이지 자동 배포
+#
+# main 브랜치에 코드가 올라갈 때마다 이 순서로 자동 실행됩니다.
+#   1) 코드 받기  2) 타입검사 + 빌드  3) 결과물을 깃허브 페이지에 올리기
+#
+# 성공하면 https://tepalmafia.github.io/my-web-game/ 주소가 갱신됩니다.
+# 실행 상황은 저장소의 Actions 탭에서 볼 수 있습니다.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Actions 탭에서 수동으로도 돌릴 수 있게 열어둡니다
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포가 겹치지 않게 한 번에 하나만 진행합니다
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 받기
+        uses: actions/checkout@v4
+
+      - name: 깃허브 페이지 설정 (꺼져 있으면 켜기)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Node 준비
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 타입검사 + 빌드
+        run: npm run build
+
+      - name: 결과물 올리기
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 페이지에 배포
+        id: deployment
+        uses: actions/deploy-pages@v4
