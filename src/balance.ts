@@ -121,8 +121,13 @@ export const RESEARCH = {
    * ★ 게임 전체 속도를 좌우하는 값 ★
    * GPU 1장이 1초 동안 올리는 진행도.
    * 이 값을 두 배로 하면 게임이 대략 절반 시간에 끝납니다.
+   *
+   * ⚠️ 낮출 때는 조금씩 낮추세요.
+   *   느려지면 진행도가 낮게 유지되고 → 매출이 줄고 → 자금이 마르는데
+   *   지출은 그대로라 '죽음의 나선'에 빠질 수 있습니다.
+   *   (REVENUE.curve 를 함께 완만하게 하면 이 위험이 크게 줄어듭니다)
    */
-  perGpuPerSecond: 5.5e-8 as RatioPerSecond,
+  perGpuPerSecond: 4.7e-8 as RatioPerSecond,
 
   /** 진행도가 이 값에 도달하면 AGI 달성 (승리) */
   goal: 1 as Ratio,
@@ -205,10 +210,14 @@ export const REVENUE = {
   /** 진행도 100%일 때의 초당 매출 */
   atFullProgress: 250_000 as Money,
   /**
-   * 진행도에 대한 가파름. 1.5 면 초반 매출은 거의 없고 후반에 몰립니다.
-   * (매출 = atFullProgress × 진행도^curve)
+   * 진행도에 대한 가파름. (매출 = atFullProgress × 진행도^curve)
+   *
+   * 1.5 처럼 크게 잡으면 초반 매출이 거의 0이라, 조금만 느려져도 자금이 마르고
+   * 그래서 더 느려지는 '죽음의 나선'이 생깁니다. 실제로 1.5 에서는 연구 속도를
+   * 20%만 낮춰도 24판 전부 5분 만에 파산했습니다.
+   * 1.0 은 초반에도 진행도에 비례해 매출이 들어와 경제가 훨씬 안정적입니다.
    */
-  curve: 1.5,
+  curve: 1,
 };
 
 /* ===========================================================================
@@ -232,8 +241,8 @@ export const RIVALS: RivalTemplate[] = [
     id: 'rival-helion',
     name: '헬리온 리서치',
     personality: 'capital',
-    // 자금력형: 처음부터 끝까지 흔들림 없이 꾸준함. 대략 1515초에 완주
-    baseSpeed: 0.00066,
+    // 자금력형: 처음부터 끝까지 흔들림 없이 꾸준함
+    baseSpeed: 0.00076,
     accidentPerSecond: 0,
     reportNoise: 0.03,
   },
@@ -244,8 +253,8 @@ export const RIVALS: RivalTemplate[] = [
     // 속도형: 가장 빠르지만 스스로 사고를 낼 확률이 높음.
     // ★ 이 값이 사실상 게임의 제한시간입니다 ★ — 셋 중 가장 먼저 완주하기 때문에,
     //   플레이어가 쓸 수 있는 시간은 대부분 이 랩이 끝나는 시각까지입니다.
-    //   0.00065 이면 대략 1440초(24분)에 완주합니다. 키우면 게임이 짧고 급해집니다.
-    baseSpeed: 0.00065,
+    //   0.00075 이면 대략 1250초(21분)에 완주합니다. 키우면 게임이 짧고 급해집니다.
+    baseSpeed: 0.00075,
     accidentPerSecond: 0.00025,
     reportNoise: 0.06,
   },
@@ -254,7 +263,7 @@ export const RIVALS: RivalTemplate[] = [
     name: '오린 인스티튜트',
     personality: 'efficiency',
     // 효율형: 초반엔 한참 뒤처지지만 후반에 무섭게 가속
-    baseSpeed: 0.00045,
+    baseSpeed: 0.00052,
     accidentPerSecond: 0,
     reportNoise: 0.02,
   },
