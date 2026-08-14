@@ -76,9 +76,15 @@ export function fundingReadyAt(state: GameState): Seconds {
   return Math.max(0, state.player.fundingRound) * FUNDING.roundIntervalSeconds;
 }
 
-/** 다음 라운드를 받으려면 진행도가 최소 얼마여야 하는지 */
+/**
+ * 다음 라운드를 받으려면 진행도가 최소 얼마여야 하는지.
+ *
+ * 라운드가 오를수록 제곱으로 멀어집니다 — 초반 라운드는 금방 열리고,
+ * 뒷 라운드는 실제로 성과를 내야 열립니다.
+ */
 export function fundingRequiredProgress(state: GameState): Ratio {
-  return Math.max(0, state.player.fundingRound) * FUNDING.progressPerRound;
+  const done = Math.max(0, state.player.fundingRound);
+  return FUNDING.progressPerRound * Math.pow(done, FUNDING.progressCurve);
 }
 
 /**
