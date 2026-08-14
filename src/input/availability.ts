@@ -274,11 +274,15 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       const blocked = operationBlock(state, 'funding');
       if (blocked !== null) return block(blocked, null, detail);
 
+      // 비활성 버튼에는 사유만 보이므로, 얼마나 더 기다려야 하는지를 사유 안에 넣습니다.
+      // (그냥 '아직 안 됩니다' 라고만 하면 플레이어가 언제 다시 눌러야 할지 알 수 없습니다)
       if (why === 'tooSoon') {
-        return block('투자자들이 아직 다음 라운드를 열지 않았습니다', null, detail);
+        const left = formatDuration(Math.max(0, fundingReadyAt(state) - state.elapsed));
+        return block(`투자자들이 아직 다음 라운드를 열지 않았습니다 (${left} 남음)`, null, detail);
       }
       if (why === 'needProgress') {
-        return block('성과가 더 쌓여야 다음 투자를 받을 수 있습니다', null, detail);
+        const need = formatPercent(fundingRequiredProgress(state));
+        return block(`성과가 더 필요합니다 (진행도 ${need} 이상)`, null, detail);
       }
       // 지분을 다 팔았으면 더 이상 투자를 받을 수 없습니다
       if (offer === null) return block(reasonFor({ kind: 'equityExhausted' }), null, detail);
