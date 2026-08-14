@@ -217,6 +217,7 @@ export const en = {
       'The model started doing its own research — from here, where you point it matters more than what you buy.',
     marketNormal: 'Market prices are back to normal.',
     rivalCollapsed: (name: string) => `${name} dropped out of the race after a training accident.`,
+    rivalAbsorbed: 'The surviving labs are taking on their people and hardware.',
     accident:
       'Skipping verification caused a loss-of-control accident. All research stops here.',
     eventFired: (title: string) => `Incident — ${title}`,
@@ -378,6 +379,7 @@ export const en = {
     noSuchRival: 'No such lab',
     rivalCollapsed: 'That lab is already out of the race',
     rivalAchieved: 'That lab is already finished',
+    rivalStillReeling: 'They are still reeling — nothing left to take until they recover',
     poachDetail: (researchers: string, slow: string) =>
       `Researchers +${researchers} · rival speed −${slow}`,
     lockDetail: (slow: string, price: string, duration: string) =>

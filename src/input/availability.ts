@@ -21,7 +21,7 @@
  *       한 군데라도 직접 쓰면 영어로 하는 사람에게 한국어가 튀어나옵니다.
  */
 
-import { INTERFERENCE, SAFETY, SPEED_OPTIONS } from '../balance';
+import { INTERFERENCE, RIVAL_CURVE, SAFETY, SPEED_OPTIONS } from '../balance';
 import { s } from '../i18n';
 import {
   accidentChancePerSecond,
@@ -473,6 +473,16 @@ export function availability(state: GameState, action: GameAction): ActionAvaila
       if (rival === undefined) return block(s().availability.noSuchRival, cost, detail);
       if (rival.status === 'collapsed') return block(s().availability.rivalCollapsed, cost, detail);
       if (rival.status === 'achieved') return block(s().availability.rivalAchieved, cost, detail);
+
+      // 아직 지난번 타격에서 못 벗어난 곳에서는 더 데려올 사람이 없습니다.
+      //
+      // 이 줄이 없으면 감속이 풀릴 때마다 다시 걸어서 선두를 영구히 묶어둘 수 있고,
+      // 실제로 재보니 그것만으로 이긴 판의 격차가 17.3%p 에서 29.5%p 로 벌어지고
+      // 8%p 이내 신승이 5판에서 2판으로 줄었습니다 — 후반이 통째로 사라집니다.
+      // 속도가 평소로 돌아올 때까지(약 1분) 기다려야 다시 걸 수 있습니다.
+      if (rival.momentum < RIVAL_CURVE.stalledBelowMomentum) {
+        return block(s().availability.rivalStillReeling, cost, detail);
+      }
 
       const funds = checkAffordable(state, cost);
       if (funds !== null) return block(reasonFor(funds), cost, detail);

@@ -428,6 +428,8 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
 
   // ⓕ 경쟁사들의 한 걸음
   const rivals: Rival[] = [];
+  // 이번 걸음에 사고로 빠진 곳이 있으면 그 id 를 적어둡니다 (아래에서 남은 곳들이 흡수)
+  let absorbedFrom: RivalId | null = null;
   for (const rival of state.rivals) {
     // 이미 탈락했거나 달성한 곳은 더 이상 움직이지 않습니다
     if (rival.status === 'collapsed' || rival.status === 'achieved') {
@@ -450,9 +452,13 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
       seed = roll.seed;
       if (roll.value < accidentPerSecond * dt) {
         status = 'collapsed';
+        // 사라진 연구소의 사람과 설비는 업계에서 증발하지 않습니다 —
+        // 남은 곳들이 데려갑니다. 이게 없으면 가장 위협적인 상대가 내가
+        // 아무것도 안 했는데 공짜로 없어져서 그 판이 그 자리에서 시시해집니다.
+        absorbedFrom = rival.id;
         lines.push({
-          text: s().log.rivalCollapsed(rival.name),
-          tone: 'good',
+          text: s().log.rivalCollapsed(rivalName(rival)),
+          tone: 'warn',
         });
       }
     }
@@ -483,6 +489,18 @@ function runTick(state: GameState, deltaSeconds: Seconds): GameState {
     // 정체·스퍼트 표시는 저장해둔 값이 아니라 지금의 속도 배수에서 끌어냅니다.
     // 그래야 감속이 풀릴 때 표시도 저절로 '평소'로 돌아옵니다.
     rivals.push({ ...stepped, status: rivalStatusFor(stepped) });
+  }
+
+  // ⓕ-2 사고로 빠진 연구소가 있으면 남은 곳들이 그 사람과 설비를 데려갑니다.
+  // 그냥 사라지기만 하면 가장 위협적인 상대가 공짜로 없어져서 판이 시시해집니다.
+  if (absorbedFrom !== null) {
+    for (let i = 0; i < rivals.length; i++) {
+      const item = rivals[i]!;
+      if (item.id === absorbedFrom) continue;
+      if (item.status === 'collapsed' || item.status === 'achieved') continue;
+      rivals[i] = { ...item, baseSpeed: item.baseSpeed * RIVAL_CURVE.absorbOnCollapse };
+    }
+    lines.push({ text: s().log.rivalAbsorbed, tone: 'warn' });
   }
 
   // ⓖ 내 연구소의 사고 판정 — 안전을 낮춰둔 만큼 확률이 올라갑니다
@@ -900,6 +918,10 @@ function poachRival(state: GameState, rivalId: RivalId): GameState {
 
   const rival = targetableRival(state, rivalId);
   if (rival === null) return state;
+
+  // 아직 지난번 타격에서 못 벗어난 곳에서는 더 데려올 사람이 없습니다.
+  // (화면의 버튼 판정과 같은 규칙 — 여기서도 막아야 신호를 직접 보내도 통하지 않습니다)
+  if (rival.momentum < RIVAL_CURVE.stalledBelowMomentum) return state;
 
   const cost = poachCost(state);
   if (checkAffordable(state, cost) !== null) return state;
