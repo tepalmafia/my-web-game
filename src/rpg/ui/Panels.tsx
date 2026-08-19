@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 
-import { MAX_SKILL, STATS, gainChance } from '../balance';
+import { LOOT, MAX_SKILL, STATS, gainChance } from '../balance';
 import { ITEMS, SHOP_STOCK, itemDef } from '../content/items';
 import { RECIPE_ORDER, recipeDef } from '../content/recipes';
 import { SKILLS, SKILL_ORDER } from '../content/skills';
@@ -236,7 +236,13 @@ function PackPanel({ world, refresh }: { world: World; refresh: () => void }) {
 
       <section>
         <h3 className="eyebrow mb-1.5 flex items-baseline justify-between">
-          <span>가방 ({me.backpack.length}/30)</span>
+          <span>
+            가방{' '}
+            <span className={`tabular ${me.backpack.length >= LOOT.packSlots ? 'text-[#e88a86]' : 'text-parch-300'}`}>
+              {me.backpack.length} / {LOOT.packSlots}
+            </span>{' '}
+            칸
+          </span>
           <span className={stats.load > stats.carry * 0.9 ? 'text-[#e88a86]' : 'text-brass-300'}>
             {fmt(stats.load)} / {fmt(stats.carry)} 스톤
           </span>
@@ -245,30 +251,50 @@ function PackPanel({ world, refresh }: { world: World; refresh: () => void }) {
           <div className="fill fill-exp" style={{ width: `${Math.min(100, (stats.load / stats.carry) * 100)}%` }} />
         </div>
 
-        <div className="grid grid-cols-6 gap-1">
+        {/* ★ 예전에는 종류를 뜻하는 글자 한 자('연' '광' '물')만 칸에 찍혀서,
+            무엇이 몇 개인지 알 수 없었습니다. 이름과 개수를 나란히 적습니다. */}
+        <div className="space-y-1">
           {me.backpack.map((s) => {
             const d = itemDef(s.defId);
+            const chosen = s.uid === selected;
             return (
               <button
                 key={s.uid}
                 type="button"
-                onClick={() => setSelected(s.uid)}
-                title={d.name}
-                className={`relative flex aspect-square flex-col items-center justify-center rounded-sm border text-base font-bold transition ${
-                  s.uid === selected ? 'border-brass-400' : 'border-ink-500 hover:border-brass-500/60'
+                onClick={() => setSelected(chosen ? null : s.uid)}
+                title={`${d.name} — ${d.desc}`}
+                className={`flex w-full items-center gap-2 rounded-sm border px-1.5 py-1 text-left transition ${
+                  chosen ? 'border-brass-400 bg-ink-700' : 'border-ink-600 bg-ink-700/60 hover:border-brass-500/60'
                 }`}
-                style={{ background: 'linear-gradient(180deg,#241d16,#171310)' }}
               >
-                <span className="text-parch-200">{KIND_ICON[d.kind]}</span>
-                {s.count > 1 && (
-                  <span className="tabular absolute bottom-0 right-0.5 text-[10px] font-bold text-parch-100">{s.count}</span>
-                )}
-                {s.quality === 'fine' && <span className="absolute left-0.5 top-0 text-[9px] text-brass-300">우</span>}
+                <span
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[3px] border border-ink-500 text-[11px] font-bold text-parch-200"
+                  style={{ background: 'linear-gradient(180deg,#241d16,#171310)' }}
+                >
+                  {KIND_ICON[d.kind]}
+                </span>
+
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold text-parch-100">
+                    {itemName(s)}
+                  </span>
+                  {wearRatio(s) !== null && (
+                    <span className="tabular block text-[10px] text-parch-400">
+                      내구 {Math.ceil(s.durability ?? 0)}/{Math.round(s.maxDurability ?? 0)}
+                    </span>
+                  )}
+                </span>
+
+                {/* 수량은 하나뿐이어도 적습니다 — "몇 개인지" 를 매번 세지 않게 */}
+                <span className="tabular shrink-0 text-xs font-bold text-parch-100">×{s.count}</span>
+                <span className="tabular w-12 shrink-0 text-right text-[10px] text-parch-400">
+                  {fmt(d.weight * s.count)} 스톤
+                </span>
               </button>
             );
           })}
           {me.backpack.length === 0 && (
-            <p className="col-span-6 py-4 text-center text-xs text-parch-400/70">가방이 비었습니다</p>
+            <p className="py-4 text-center text-xs text-parch-400/70">가방이 비었습니다</p>
           )}
         </div>
       </section>
