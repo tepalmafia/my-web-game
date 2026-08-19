@@ -4,10 +4,10 @@ import { useEffect, useRef } from 'react';
 import type { World } from '../types';
 
 const TONE: Record<string, string> = {
-  normal: 'text-slate-400',
-  good: 'text-emerald-300',
-  bad: 'text-rose-300',
-  epic: 'text-amber-300 font-bold',
+  normal: 'text-parch-400',
+  good: 'text-[#8fcf8a]',
+  bad: 'text-[#e88a86]',
+  epic: 'text-brass-300 font-bold',
 };
 
 export function LogPanel({ world }: { world: World }) {
@@ -19,9 +19,10 @@ export function LogPanel({ world }: { world: World }) {
   }, [lastId]);
 
   return (
-    <div className="h-32 shrink-0 overflow-y-auto border-t border-slate-800 bg-slate-950/80 px-2.5 py-1.5 text-[11px] leading-relaxed lg:h-40">
+    <div className="h-28 shrink-0 overflow-y-auto border-t border-ink-600 bg-ink-900 px-3 py-2 text-[11px] leading-relaxed lg:h-36">
       {world.log.map((line) => (
         <p key={line.id} className={TONE[line.tone]}>
+          <span className="text-parch-400/50">· </span>
           {line.text}
         </p>
       ))}

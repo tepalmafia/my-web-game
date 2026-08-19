@@ -135,7 +135,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   };
 
   return (
-    <div className="flex h-dvh w-full flex-col bg-slate-950 text-slate-100 lg:flex-row">
+    <div className="flex h-dvh w-full flex-col bg-ink-900 text-parch-100 lg:flex-row">
       {/* ----------------------------------------------------- 화면 */}
       <div ref={wrapRef} className="relative h-[56dvh] shrink-0 overflow-hidden lg:h-full lg:min-h-0 lg:flex-1">
         <canvas ref={canvasRef}
@@ -165,8 +165,11 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
           <ActionBar world={world} refresh={refresh} />
         </div>
 
-        <button type="button" onClick={onQuit}
-          className="absolute bottom-16 left-2 z-10 rounded bg-slate-900/80 px-2 py-1 text-[11px] text-slate-400 ring-1 ring-slate-700 hover:text-slate-200 lg:bottom-2">
+        <button
+          type="button"
+          onClick={onQuit}
+          className="btn absolute bottom-16 left-2 z-10 rounded-sm px-2.5 py-1 text-[11px] text-parch-300 lg:bottom-2"
+        >
           나가기
         </button>
 
@@ -175,7 +178,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
       </div>
 
       {/* ----------------------------------------------------- 오른쪽 창 */}
-      <aside className="flex min-h-0 flex-1 flex-col border-slate-800 bg-slate-950 lg:h-full lg:w-[380px] lg:flex-none lg:border-l">
+      <aside className="flex min-h-0 flex-1 flex-col border-ink-600 bg-ink-800 lg:h-full lg:w-[380px] lg:flex-none lg:border-l">
         <div className="flex min-h-0 flex-1 flex-col">
           <SidePanel world={world} refresh={refresh} />
         </div>

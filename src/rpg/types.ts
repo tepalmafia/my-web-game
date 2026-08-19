@@ -251,6 +251,16 @@ export interface Monster {
   /** 광역기 시전에 남은 시간 (0 이면 시전 중이 아님) */
   castTimer: Seconds;
   aoeCooldown: Seconds;
+
+  /* --- 그림용 (규칙과 무관하고 저장하지 않습니다) --- */
+  /** 걸음 위상 — 다리와 팔이 흔들리는 주기 */
+  anim: Seconds;
+  /** 지금 걸어가고 있는가 */
+  moving: boolean;
+  /** 때리는 동작이 남은 시간 */
+  swing: Seconds;
+  /** 바라보는 방향 (라디안) */
+  facing: number;
 }
 
 /* ===========================================================================
@@ -530,6 +540,14 @@ export interface World {
   pathTimer: Seconds;
   /** 화면이 흔들리는 남은 시간 */
   shake: Seconds;
+
+  /* --- 그림용 (규칙과 무관하고 저장하지 않습니다) --- */
+  /** 내 캐릭터의 걸음 위상 */
+  playerAnim: Seconds;
+  /** 내가 지금 걸어가고 있는가 */
+  playerMoving: boolean;
+  /** 무기를 휘두르는 동작이 남은 시간 */
+  playerSwing: Seconds;
 
   /** 보스가 다시 나타나는 시각 (몬스터 id → time). 없으면 지금 살아 있습니다 */
   bossRespawnAt: Record<string, Seconds>;

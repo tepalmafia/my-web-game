@@ -67,6 +67,7 @@ function tickTimers(world: World, dt: number): void {
 
   player.attackCooldown = Math.max(0, player.attackCooldown - dt);
   player.potionCooldown = Math.max(0, player.potionCooldown - dt);
+  world.playerSwing = Math.max(0, world.playerSwing - dt);
 
   for (const id of Object.keys(player.skillCooldowns)) {
     const left = player.skillCooldowns[id]! - dt;
@@ -154,6 +155,7 @@ function movePlayer(world: World, dt: number): void {
 
   if (destX === null || destY === null) {
     world.path = [];
+    world.playerMoving = false;
     return;
   }
 
@@ -161,6 +163,7 @@ function movePlayer(world: World, dt: number): void {
   if (straight <= stopAt) {
     if (!target) player.moveTarget = null;
     world.path = [];
+    world.playerMoving = false;
     player.facing = Math.atan2(destY - player.pos.y, destX - player.pos.x);
     return;
   }
@@ -192,8 +195,13 @@ function movePlayer(world: World, dt: number): void {
 
   slideMove(world.map, player.pos, (dx / distance) * stepLength, (dy / distance) * stepLength, PLAYER_RADIUS);
 
+  // 실제로 움직인 만큼 걸음이 나갑니다 (제자리걸음을 하지 않도록)
+  const walked = Math.hypot(player.pos.x - beforeX, player.pos.y - beforeY);
+  world.playerAnim += walked * 0.055;
+  world.playerMoving = walked > stepLength * 0.25;
+
   // 그래도 한 발도 못 갔다면 길이 낡은 것이므로 다음 기회에 다시 구합니다
-  if (Math.hypot(player.pos.x - beforeX, player.pos.y - beforeY) < stepLength * 0.2) {
+  if (walked < stepLength * 0.2) {
     world.path = [];
     world.pathTimer = 0;
   }
@@ -213,6 +221,8 @@ function playerAttack(world: World, _dt: number): void {
 
   player.attackCooldown = stats.attackInterval;
   player.facing = Math.atan2(target.pos.y - player.pos.y, target.pos.x - player.pos.x);
+
+  world.playerSwing = 0.28;
 
   const cls = CLASSES[player.classId];
   if (cls.projectile === 'none') {
@@ -242,6 +252,8 @@ function updateMonsters(world: World, dt: number): void {
     const def = monsterDef(monster.defId);
     monster.hitFlash = Math.max(0, monster.hitFlash - dt);
     monster.attackCooldown = Math.max(0, monster.attackCooldown - dt);
+    monster.swing = Math.max(0, monster.swing - dt);
+    monster.moving = false;
     monster.aoeCooldown = Math.max(0, monster.aoeCooldown - dt);
 
     const distance = distanceTo(world, monster);
@@ -271,7 +283,8 @@ function updateMonsters(world: World, dt: number): void {
         monster.hp = Math.min(def.hp, monster.hp + def.hp * 0.3 * dt);
       } else {
         const stepLength = def.moveSpeed * AI.returnSpeedMul * dt;
-        slideMove(world.map, monster.pos, (dx / d) * stepLength, (dy / d) * stepLength, def.size * 0.7);
+        monster.facing = Math.atan2(dy, dx);
+        moveMonster(world, monster, (dx / d) * stepLength, (dy / d) * stepLength);
         // 자리로 돌아가는 동안은 체력을 회복합니다
         monster.hp = Math.min(def.hp, monster.hp + def.hp * 0.25 * dt);
       }
@@ -289,13 +302,16 @@ function updateMonsters(world: World, dt: number): void {
         continue;
       }
 
+      monster.facing = Math.atan2(player.pos.y - monster.pos.y, player.pos.x - monster.pos.x);
+
       if (distance > def.attackRange * 0.85) {
         const dx = player.pos.x - monster.pos.x;
         const dy = player.pos.y - monster.pos.y;
         const stepLength = def.moveSpeed * dt;
-        slideMove(world.map, monster.pos, (dx / distance) * stepLength, (dy / distance) * stepLength, def.size * 0.7);
+        moveMonster(world, monster, (dx / distance) * stepLength, (dy / distance) * stepLength);
       } else if (monster.attackCooldown <= 0) {
         monster.attackCooldown = def.attackInterval;
+        monster.swing = 0.3;
         if (def.ranged) monsterProjectile(world, monster);
         else vfx(world, 'slash', monster.pos, { to: player.pos, life: 0.14, color: def.color });
         monsterStrike(world, monster);
@@ -335,7 +351,21 @@ function wander(world: World, monster: Monster, dt: number): void {
     return;
   }
   const stepLength = def.moveSpeed * 0.45 * dt;
-  slideMove(world.map, monster.pos, (dx / d) * stepLength, (dy / d) * stepLength, def.size * 0.7);
+  monster.facing = Math.atan2(dy, dx);
+  moveMonster(world, monster, (dx / d) * stepLength, (dy / d) * stepLength);
+}
+
+/** 몬스터를 옮기면서, 실제로 움직인 만큼 걸음 위상을 돌립니다 */
+function moveMonster(world: World, monster: Monster, dx: number, dy: number): void {
+  const def = monsterDef(monster.defId);
+  const beforeX = monster.pos.x;
+  const beforeY = monster.pos.y;
+
+  slideMove(world.map, monster.pos, dx, dy, def.size * 0.7);
+
+  const walked = Math.hypot(monster.pos.x - beforeX, monster.pos.y - beforeY);
+  monster.anim += walked * 0.06;
+  monster.moving = walked > 0.05;
 }
 
 /** 몬스터끼리 완전히 겹쳐 서지 않게 살짝 밀어냅니다 */

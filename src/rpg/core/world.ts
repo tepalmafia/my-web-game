@@ -259,6 +259,10 @@ function makeMonster(world: World, defId: string, tx: number, ty: number): Monst
     wanderTimer: nextRandom(world) * AI.wanderInterval,
     castTimer: 0,
     aoeCooldown: def.aoe ? def.aoe.cooldown * 0.5 : 0,
+    anim: nextRandom(world) * 10,
+    moving: false,
+    swing: 0,
+    facing: nextRandom(world) * Math.PI * 2,
   };
 }
 
