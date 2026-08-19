@@ -23,6 +23,7 @@ import { LogPanel } from './LogPanel';
 import { SidePanel } from './Panels';
 import { draw, computeView, screenToWorld } from './draw';
 import { attachImpact, frozen, kick, tickImpact } from './impact';
+import { SoundControl } from './SoundControl';
 import { attachAudio } from '../audio';
 
 export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void }) {
@@ -191,13 +192,16 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
           <ActionBar world={world} refresh={refresh} />
         </div>
 
-        <button
-          type="button"
-          onClick={onQuit}
-          className="btn absolute bottom-16 left-2 z-10 rounded-sm px-2.5 py-1 text-[11px] text-parch-300 lg:bottom-2"
-        >
-          나가기
-        </button>
+        <div className="absolute bottom-16 left-2 z-10 flex items-center gap-1 lg:bottom-2">
+          <button
+            type="button"
+            onClick={onQuit}
+            className="btn rounded-sm px-2.5 py-1 text-[11px] text-parch-300"
+          >
+            나가기
+          </button>
+          <SoundControl />
+        </div>
 
         <Toast world={world} />
         <DeathOverlay world={world} refresh={refresh} />

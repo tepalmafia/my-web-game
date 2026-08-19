@@ -71,8 +71,11 @@ const slots: Slot[] = [];
 const lastPlayed = new Map<string, number>();
 let serial = 0;
 
-/** 덕킹·정적이 끝나고 마스터를 되돌릴 시각 (겹칠 때 늦은 쪽이 이깁니다) */
+/** 덕킹이 끝나고 마스터를 되돌릴 시각 (겹칠 때 늦은 쪽이 이깁니다) */
 let restoreAt = 0;
+
+/** 이 시각까지는 새 소리를 받지 않습니다 (설계 문서 §4.7 의 정적) */
+let silentUntil = 0;
 
 /* ===========================================================================
  *  설정 (localStorage)
@@ -249,13 +252,23 @@ export function duck(decibels: number, holdMs: number): void {
 
 /**
  * 세상을 통째로 잠깐 끕니다 (설계 문서 §4.7 제작 실패).
- * @param holdMs    아무 소리도 없는 시간
- * @param restoreMs 되돌아오는 데 걸리는 시간
+ *
+ * 울리던 것을 즉시 지우고, 그 뒤 holdMs 동안 **새 소리를 받지 않습니다.**
+ * ★ 마스터 게인을 내리는 대신 이렇게 하는 이유: 마스터를 내려버리면
+ *   정적 한가운데에 울려야 할 실패음까지 같이 죽습니다.
+ *   그 한 소리는 force 로 통과시킵니다.
  */
-export function silence(holdMs: number, restoreMs = 0.2 * 1000): void {
-  if (!ctx || !master) return;
+export function silence(holdMs: number): void {
+  const audio = context();
+  if (!audio) return;
   stopAll();
-  hold(FLOOR, holdMs, 0.005, restoreMs / 1000);
+  silentUntil = Math.max(silentUntil, audio.currentTime + Math.max(0, holdMs) / 1000);
+}
+
+/** 지금 정적 중인가 */
+export function silent(): boolean {
+  const audio = context();
+  return audio ? audio.currentTime < silentUntil : false;
 }
 
 function hold(target: number, holdMs: number, fallSeconds: number, riseSeconds: number): void {
@@ -282,12 +295,14 @@ function hold(target: number, holdMs: number, fallSeconds: number, riseSeconds: 
  * @param key         같은 소리인지 가리는 이름 (12ms 안에 같은 이름이면 거절)
  * @param durationMs  이 소리가 이어지는 길이
  * @param delayMs     지금부터 이만큼 뒤에 시작 (설계 문서 §4.2 의 잔향 등)
+ * @param force       정적 중에도 통과 (§4.7 의 실패음 하나만 씁니다)
  * @returns 자리. 소리를 낼 수 없거나 거절되면 null
  */
-export function takeVoice(key: string, durationMs: number, delayMs = 0): Voice | null {
+export function takeVoice(key: string, durationMs: number, delayMs = 0, force = false): Voice | null {
   const audio = context();
   if (!audio || !master) return null;
   if (settings.muted) return null;
+  if (!force && audio.currentTime < silentUntil) return null;
 
   const at = audio.currentTime + Math.max(0, delayMs) / 1000;
 
@@ -383,6 +398,11 @@ export function stopAll(): void {
   lastPlayed.clear();
 }
 
+/** 정적 창을 걷습니다 (테스트와 화면을 떠날 때) */
+export function clearSilence(): void {
+  silentUntil = 0;
+}
+
 /* ===========================================================================
  *  탭이 뒤로 가면 쉽니다
  * ======================================================================== */
@@ -411,6 +431,7 @@ export function shutdown(): void {
   stopAll();
   started = false;
   restoreAt = 0;
+  silentUntil = 0;
   const audio = ctx;
   ctx = null;
   master = null;
