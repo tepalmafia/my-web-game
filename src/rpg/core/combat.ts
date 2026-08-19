@@ -56,7 +56,7 @@ export function swingAtMonster(world: World, monster: Monster): void {
   trySkillGain(world, 'swordsmanship', def.difficulty);
 
   if (!chance(world, hitChance(me.skills.swordsmanship, def.difficulty))) {
-    floater(world, monster.pos, '빗나감', 'miss');
+    floater(world, monster.pos, '빗나감', 'miss', 'sword-miss');
     return;
   }
 
@@ -71,7 +71,13 @@ export function swingAtMonster(world: World, monster: Monster): void {
 
   monster.hp -= damage;
   monster.hitFlash = 0.12;
-  floater(world, { x: monster.pos.x, y: monster.pos.y - def.size }, String(damage), crit ? 'crit' : 'damage');
+  floater(
+    world,
+    { x: monster.pos.x, y: monster.pos.y - def.size },
+    String(damage),
+    crit ? 'crit' : 'damage',
+    crit ? 'sword-crit' : 'sword-hit',
+  );
   vfx(world, 'impact', monster.pos, { life: 0.18, color: crit ? '#ffd23f' : '#ffffff', radius: def.size });
 
   if (monster.hp <= 0) killMonster(world, monster);
@@ -106,7 +112,7 @@ export function monsterStrike(world: World, monster: Monster): void {
   trySkillGain(world, 'defense', def.difficulty);
 
   if (!chance(world, hitChance(def.difficulty, me.skills.defense))) {
-    floater(world, { x: me.pos.x, y: me.pos.y - 22 }, '회피', 'miss');
+    floater(world, { x: me.pos.x, y: me.pos.y - 22 }, '회피', 'miss', 'dodge');
     return;
   }
 
@@ -127,7 +133,7 @@ export function damagePlayer(world: World, damage: number): void {
   if (me.dead) return;
 
   me.hp -= damage;
-  floater(world, { x: me.pos.x, y: me.pos.y - 22 }, String(damage), 'taken');
+  floater(world, { x: me.pos.x, y: me.pos.y - 22 }, String(damage), 'taken', 'taken');
 
   const stats = derive(me);
   if (damage > stats.maxHp * 0.18) shake(world, 0.22);

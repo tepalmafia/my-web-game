@@ -20,12 +20,37 @@ import type { Floater, LogLine, Seconds, Vec2, Vfx, World } from '../types';
  *    발신하는 쪽마다 listeners.length 를 먼저 보고, 0 이면 거기서 끝냅니다.
  */
 
+/**
+ * 왜 이 일이 일어났는지.
+ *
+ * ★ kind(=Floater 의 종류)는 **보여주는 방식**입니다 — 색과 모양을 정합니다.
+ *   그래서 'miss' 한 칸에 헛친 검·피한 공격·허탕 친 곡괭이·망친 제작이 모두 들어갑니다.
+ *   보여주는 방식이 같다고 원인까지 같지는 않으므로, 원인은 따로 적습니다.
+ *
+ * ★ 없어도 됩니다. 안 적힌 발신점이 있어도 게임은 그대로 돌아갑니다.
+ *   화면에 그려지는 Floater 객체에는 넣지 않습니다 — 표시는 지금 그대로입니다.
+ */
+export type FeedbackCause =
+  | 'sword-hit'
+  | 'sword-crit'
+  | 'sword-miss'
+  | 'dodge'
+  | 'taken'
+  | 'mine-fail'
+  | 'ore'
+  | 'pack-full'
+  | 'craft-fail'
+  | 'craft-fine'
+  | 'gold'
+  | 'heal'
+  | 'skill';
+
 /** 방금 무슨 일이 있었는지 */
 export type FeedbackEvent =
   | { at: 'log'; tone: LogLine['tone']; text: string }
-  | { at: 'floater'; kind: Floater['kind']; text: string; pos: Vec2 }
+  | { at: 'floater'; kind: Floater['kind']; text: string; pos: Vec2; cause?: FeedbackCause }
   | { at: 'vfx'; kind: Vfx['kind']; pos: Vec2; color: string; radius?: number }
-  | { at: 'toast'; tone: 'good' | 'bad' | 'epic'; text: string }
+  | { at: 'toast'; tone: 'good' | 'bad' | 'epic'; text: string; cause?: FeedbackCause }
   | { at: 'shake'; seconds: Seconds };
 
 export type FeedbackListener = (event: FeedbackEvent, world: World) => void;
@@ -78,7 +103,13 @@ export function log(world: World, text: string, tone: LogLine['tone'] = 'normal'
   if (listeners.length > 0) emit(world, { at: 'log', tone, text });
 }
 
-export function floater(world: World, pos: Vec2, text: string, kind: Floater['kind']): void {
+export function floater(
+  world: World,
+  pos: Vec2,
+  text: string,
+  kind: Floater['kind'],
+  cause?: FeedbackCause,
+): void {
   const life = kind === 'gain' || kind === 'info' ? VIEW.floaterLife * 1.6 : VIEW.floaterLife;
   world.floaters.push({
     id: world.nextId++,
@@ -88,7 +119,7 @@ export function floater(world: World, pos: Vec2, text: string, kind: Floater['ki
     maxLife: life,
     kind,
   });
-  if (listeners.length > 0) emit(world, { at: 'floater', kind, text, pos });
+  if (listeners.length > 0) emit(world, { at: 'floater', kind, text, pos, cause });
 }
 
 export function vfx(
@@ -119,9 +150,14 @@ export function vfx(
   }
 }
 
-export function toast(world: World, text: string, tone: 'good' | 'bad' | 'epic' = 'good'): void {
+export function toast(
+  world: World,
+  text: string,
+  tone: 'good' | 'bad' | 'epic' = 'good',
+  cause?: FeedbackCause,
+): void {
   world.toast = { text, tone, life: 2.6 };
-  if (listeners.length > 0) emit(world, { at: 'toast', tone, text });
+  if (listeners.length > 0) emit(world, { at: 'toast', tone, text, cause });
 }
 
 export function shake(world: World, seconds: number): void {

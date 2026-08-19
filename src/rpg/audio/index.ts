@@ -6,36 +6,18 @@
  *  ★ core/ 는 이 파일의 존재를 모릅니다. 여기서 core/feedback 을 구독합니다.
  *    방향은 언제나 audio → core 입니다.
  *
- *  ★ 무엇이 무슨 소리인가 — core/ 를 한 줄도 고치지 않고 가려내야 해서,
- *    같은 kind 안에서는 **문구**로 가릅니다. floater 'miss' 하나에
- *    빗나감 · 회피 · 채굴 실패 · 제작 실패 네 가지가 들어 있기 때문입니다.
- *    문구가 바뀌면 소리가 조용히 죽으므로, tests/rpg/audio.test.ts 가
- *    그 문구들을 붙잡아 둡니다. 거기가 깨지면 여기도 같이 고치세요.
+ *  ★ 무엇이 무슨 소리인가는 이벤트에 실려 오는 **원인(cause)** 하나로 정해집니다.
+ *    화면에 어떻게 보이는지(kind)도, 뭐라고 적혔는지(text)도 보지 않습니다.
+ *      · kind 는 표시용입니다 — 'miss' 한 칸에 헛친 검·피한 공격·허탕 친 곡괭이·
+ *        망친 제작이 전부 들어 있어서, 그걸로 가르면 겹칩니다.
+ *      · text 로 가르면 문구를 못 바꾸게 되고 다국어에서 무너집니다.
+ *    그래서 이 파일에는 판별에 쓰는 한국어 문구가 한 줄도 없습니다 (테스트가 지킵니다).
  */
 
-import { onFeedback, type FeedbackEvent } from '../core/feedback';
+import { onFeedback, type FeedbackCause, type FeedbackEvent } from '../core/feedback';
 import { duck, silence, unlock } from './bus';
 import { metal, noise, sweep, thump } from './synth';
 import { BLOCK, CRAFT_FAIL, FINE, MINE, MISS, ORE, SWORD_CRIT, SWORD_HIT, TAKEN } from './sfx';
-
-/* ===========================================================================
- *  core/ 가 쓰는 문구 — 이 글자들로 소리를 가릅니다
- * ======================================================================== */
-
-export const CUES = {
-  /** combat.ts — 내 검이 헛나감 */
-  miss: '빗나감',
-  /** combat.ts — 몬스터의 공격을 피함 */
-  dodge: '회피',
-  /** action.ts — 곡괭이질·제작이 허탕 */
-  failed: '실패',
-  /** action.ts — 제작 실패 (floater 보다 먼저 나옵니다) */
-  craftFailed: '만들기에 실패했습니다',
-  /** action.ts — 우수품이 나옴 */
-  fine: '우수한 물건',
-  /** action.ts — 캔 것이 손에 들어옴 (`+2 철광석`) */
-  ore: '광석',
-} as const;
 
 /* ===========================================================================
  *  소리 내기
@@ -103,90 +85,41 @@ export function playFine(): void {
 }
 
 /* ===========================================================================
- *  이벤트 가려듣기
+ *  원인 → 소리
  * ======================================================================== */
 
-/** 무슨 소리를 낼 것인가 */
-export type Cue =
-  | 'sword'
-  | 'sword-crit'
-  | 'block'
-  | 'miss'
-  | 'taken'
-  | 'mine'
-  | 'mine-ore'
-  | 'craft-fail'
-  | 'fine';
-
 /**
- * 제작 실패는 `log(…만들기에 실패했습니다)` 다음에 `floater('실패')` 가 옵니다.
- * 그 floater 를 곡괭이질로 잘못 듣지 않도록 잠깐 창을 열어 둡니다.
+ * 어떤 원인에 어떤 소리를 낼 것인가.
+ * 여기 없는 원인(골드·회복·실력 오름)은 아직 소리가 없습니다 — 그냥 조용합니다.
  */
-const CRAFT_FAIL_WINDOW = 0.35; // 초 (세계 시간)
+const SOUNDS: Partial<Record<FeedbackCause, () => void>> = {
+  'sword-hit': () => playSwordHit(false),
+  'sword-crit': () => playSwordHit(true),
+  'sword-miss': playMiss,
+  dodge: playBlock,
+  taken: playTaken,
 
-/**
- * 순수한 판별 — 상태는 인자로 받습니다.
- * ★ 여기가 이 층에서 가장 깨지기 쉬운 곳(문구 의존)이라 따로 떼어
- *   테스트가 표 전체를 확인할 수 있게 했습니다.
- *
- * @param sinceCraftFail 마지막 제작 실패로부터 흐른 시간(초)
- */
-export function decide(event: FeedbackEvent, sinceCraftFail: number): Cue | null {
-  if (event.at === 'log') {
-    return event.text.includes(CUES.craftFailed) ? 'craft-fail' : null;
-  }
-  if (event.at === 'toast') {
-    return event.tone === 'epic' && event.text.includes(CUES.fine) ? 'fine' : null;
-  }
-  if (event.at !== 'floater') return null;
+  // 곡괭이질 한 번은 셋 중 하나로 끝납니다 — 캐냈거나, 허탕이거나, 더 들 수 없거나.
+  // 셋 다 곡괭이가 바위를 때린 것이므로 같은 소리를 내고, 캐낸 것에만 보상음을 얹습니다.
+  ore: () => {
+    playMineSwing();
+    playOre();
+  },
+  'mine-fail': playMineSwing,
+  'pack-full': playMineSwing,
 
-  switch (event.kind) {
-    case 'damage':
-      return 'sword';
-    case 'crit':
-      return 'sword-crit';
-    case 'taken':
-      return 'taken';
-    case 'miss':
-      if (event.text === CUES.miss) return 'miss';
-      if (event.text === CUES.dodge) return 'block';
-      // 제작 실패의 '실패' 는 방금 정적으로 처리했으므로 곡괭이 소리를 내지 않습니다
-      if (event.text === CUES.failed) return sinceCraftFail > CRAFT_FAIL_WINDOW ? 'mine' : null;
-      return null;
-    case 'info':
-      // 캔 것이 손에 들어온 순간 — 곡괭이 소리 위에 보상 소리를 얹습니다
-      return event.text.includes(CUES.ore) ? 'mine-ore' : null;
-    default:
-      return null;
-  }
+  'craft-fail': playCraftFail,
+  'craft-fine': playFine,
+};
+
+/** 이 원인에 낼 소리 (없으면 null) */
+export function soundFor(cause: FeedbackCause | undefined): (() => void) | null {
+  return cause ? SOUNDS[cause] ?? null : null;
 }
 
-/** 판별한 것을 실제로 냅니다 */
-export function play(cue: Cue): void {
-  switch (cue) {
-    case 'sword': return playSwordHit(false);
-    case 'sword-crit': return playSwordHit(true);
-    case 'block': return playBlock();
-    case 'miss': return playMiss();
-    case 'taken': return playTaken();
-    case 'mine': return playMineSwing();
-    case 'mine-ore': {
-      playMineSwing();
-      playOre();
-      return;
-    }
-    case 'craft-fail': return playCraftFail();
-    case 'fine': return playFine();
-  }
-}
-
-let craftFailAt = -CRAFT_FAIL_WINDOW * 10;
-
-function hear(event: FeedbackEvent, world: { time: number }): void {
-  const cue = decide(event, world.time - craftFailAt);
-  if (!cue) return;
-  if (cue === 'craft-fail') craftFailAt = world.time;
-  play(cue);
+function hear(event: FeedbackEvent): void {
+  if (event.at !== 'floater' && event.at !== 'toast') return;
+  soundFor(event.cause)?.();
 }
 
 /* --------------------------------------------------------------- 이어 붙이기 */

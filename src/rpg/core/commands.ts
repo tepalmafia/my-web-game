@@ -122,7 +122,7 @@ export function drinkPotion(world: World, uid: number): boolean {
 
   const healed = Math.min(def.healHp, stats.maxHp - me.hp);
   me.hp += healed;
-  floater(world, { x: me.pos.x, y: me.pos.y - 22 }, `+${healed}`, 'heal');
+  floater(world, { x: me.pos.x, y: me.pos.y - 22 }, `+${healed}`, 'heal', 'heal');
   removeItem(me, uid, 1);
   me.potionCooldown = POTION_COOLDOWN;
   return true;

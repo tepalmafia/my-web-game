@@ -33,7 +33,7 @@ export function trySkillGain(world: World, skillId: SkillId, difficulty: Difficu
     me.skills[skillId] = after;
 
     const info = SKILLS[skillId];
-    floater(world, { x: me.pos.x, y: me.pos.y - 26 }, `${info.name} ${after.toFixed(1)}`, 'gain');
+    floater(world, { x: me.pos.x, y: me.pos.y - 26 }, `${info.name} ${after.toFixed(1)}`, 'gain', 'skill');
 
     // 10 단위를 넘길 때만 기록에 남깁니다 (0.1 마다 남기면 기록창이 잠깁니다)
     if (Math.floor(after / 10) > Math.floor(before / 10)) {

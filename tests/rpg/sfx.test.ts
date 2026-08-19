@@ -1,86 +1,90 @@
 /**
  *  어떤 일에 어떤 소리를 낼 것인가.
  *
- *  ★ 이 층에서 가장 깨지기 쉬운 곳입니다.
- *    core/ 를 한 줄도 고치지 않고 소리를 가르려니, floater 의 **문구**로 가려야 합니다.
- *    ('miss' 하나에 빗나감 · 회피 · 채굴 실패 · 제작 실패 네 가지가 들어 있습니다)
+ *  ★ 판별은 **원인(cause)** 하나로만 합니다.
+ *    예전에는 floater 의 문구('빗나감' '회피' '실패')로 갈랐습니다. 그러면
+ *    문구를 못 바꾸게 되고, 다국어에서 무너지고, 제작 실패를 가리려고 둔
+ *    타이밍 창은 프레임이 밀리면 조용히 틀립니다.
+ *    그래서 core/ 가 원인을 직접 실어 보내도록 바꿨고, 여기서 그것을 지킵니다.
  *
- *    그래서 여기서 두 가지를 지킵니다.
- *      1. 판별표가 통째로 맞는가
- *      2. core/ 가 **정말 그 문구를 쓰고 있는가** — 문구를 바꾸면 여기가 깨집니다.
- *         깨지면 audio/index.ts 의 CUES 도 같이 고치세요. 안 그러면 소리가 조용히 죽습니다.
+ *  ★ audio/ 에 판별용 한국어 문구가 한 줄도 남지 않았는지도 여기서 봅니다.
  */
 
 import { describe, expect, it } from 'vitest';
 
-import { CUES, decide, type Cue } from '../../src/rpg/audio';
+import { soundFor } from '../../src/rpg/audio';
 import { BLOCK, CRAFT_FAIL, MINE, MISS, ORE, TAKEN } from '../../src/rpg/audio/sfx';
-import type { FeedbackEvent } from '../../src/rpg/core/feedback';
-import type { Floater } from '../../src/rpg/types';
+import type { FeedbackCause } from '../../src/rpg/core/feedback';
 
-const COMBAT = import.meta.glob('../../src/rpg/core/combat.ts', {
-  query: '?raw', import: 'default', eager: true,
-}) as Record<string, string>;
-const ACTION = import.meta.glob('../../src/rpg/core/action.ts', {
+const AUDIO = import.meta.glob('../../src/rpg/audio/**/*.ts', {
   query: '?raw', import: 'default', eager: true,
 }) as Record<string, string>;
 
-const source = (files: Record<string, string>) => Object.values(files)[0] ?? '';
-const OLD = 999; // 제작 실패가 한참 전이었다는 뜻
+const CORE = import.meta.glob('../../src/rpg/core/**/*.ts', {
+  query: '?raw', import: 'default', eager: true,
+}) as Record<string, string>;
 
-const floater = (kind: Floater['kind'], text: string): FeedbackEvent => ({
-  at: 'floater',
-  kind,
-  text,
-  pos: { x: 0, y: 0 },
-});
+/** 주석을 걷어낸 알맹이 (주석의 한글은 설명이라 봐줍니다) */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
 
-describe('판별표', () => {
-  const table: Array<[string, FeedbackEvent, Cue | null]> = [
-    ['검이 맞음', floater('damage', '12'), 'sword'],
-    ['크리티컬', floater('crit', '31'), 'sword-crit'],
-    ['내가 맞음', floater('taken', '9'), 'taken'],
-    ['내 검이 헛나감', floater('miss', CUES.miss), 'miss'],
-    ['몬스터 공격을 피함', floater('miss', CUES.dodge), 'block'],
-    ['곡괭이질 허탕', floater('miss', CUES.failed), 'mine'],
-    ['광석이 나옴', floater('info', '+2 철광석'), 'mine-ore'],
-    ['구리광석이 나옴', floater('info', '+1 구리광석'), 'mine-ore'],
-    ['골드는 소리 없음', floater('info', '+12 골드'), null],
-    ['짐이 가득 참은 소리 없음', floater('info', '짐이 가득 참'), null],
-    ['회복은 소리 없음', floater('heal', '+60'), null],
-    ['실력이 늚은 소리 없음', floater('gain', '채광 31.2'), null],
-    ['제작 실패', { at: 'log', tone: 'bad', text: '철검 만들기에 실패했습니다' }, 'craft-fail'],
-    ['보통 기록은 소리 없음', { at: 'log', tone: 'normal', text: '초록 숲 진입' }, null],
-    ['우수품', { at: 'toast', tone: 'epic', text: '우수한 물건\n철검' }, 'fine'],
-    ['스킬 100 은 소리 없음', { at: 'toast', tone: 'epic', text: '채광 100' }, null],
-    ['흔들림은 소리 없음', { at: 'shake', seconds: 0.2 }, null],
+describe('원인 → 소리', () => {
+  const table: Array<[FeedbackCause, boolean]> = [
+    ['sword-hit', true],
+    ['sword-crit', true],
+    ['sword-miss', true],
+    ['dodge', true],
+    ['taken', true],
+    ['ore', true],
+    ['mine-fail', true],
+    ['pack-full', true],
+    ['craft-fail', true],
+    ['craft-fine', true],
+    // 아직 소리가 없는 것들 — 조용해야 합니다
+    ['gold', false],
+    ['heal', false],
+    ['skill', false],
   ];
 
-  for (const [name, event, expected] of table) {
-    it(`${name} → ${expected ?? '없음'}`, () => {
-      expect(decide(event, OLD)).toBe(expected);
+  for (const [cause, hasSound] of table) {
+    it(`${cause} → ${hasSound ? '소리 있음' : '조용함'}`, () => {
+      expect(soundFor(cause) !== null).toBe(hasSound);
     });
   }
 
-  it('제작 실패 직후의 "실패" 는 곡괭이 소리로 새어나가지 않는다', () => {
-    // 실패는 log 다음에 같은 순간 floater('실패') 가 따라옵니다
-    expect(decide(floater('miss', CUES.failed), 0.01)).toBeNull();
-    // 시간이 지난 뒤의 '실패' 는 곡괭이질입니다
-    expect(decide(floater('miss', CUES.failed), 1)).toBe('mine');
+  it('원인이 없으면 조용하다', () => {
+    // cause 를 안 적은 발신점이 남아 있어도 게임은 그대로 돌아가야 합니다
+    expect(soundFor(undefined)).toBeNull();
+  });
+
+  it('곡괭이질은 세 결말 모두 같은 소리를 낸다', () => {
+    // 캐냈든 허탕이든 짐이 찼든, 곡괭이가 바위를 때린 것은 같습니다
+    for (const cause of ['ore', 'mine-fail', 'pack-full'] as const) {
+      expect(soundFor(cause)).not.toBeNull();
+    }
   });
 });
 
-describe('core 가 쓰는 문구', () => {
-  it('전투 문구가 그대로 있다', () => {
-    expect(source(COMBAT), `'${CUES.miss}' 가 없어졌습니다`).toContain(`'${CUES.miss}'`);
-    expect(source(COMBAT), `'${CUES.dodge}' 가 없어졌습니다`).toContain(`'${CUES.dodge}'`);
+describe('audio 층은 문구를 읽지 않는다', () => {
+  it('판별에 쓰는 한국어 글자가 코드에 없다', () => {
+    expect(Object.keys(AUDIO).length, '읽어온 파일이 없습니다').toBeGreaterThan(3);
+    for (const [path, source] of Object.entries(AUDIO)) {
+      const hangul = code(source).match(/[가-힣]/g);
+      expect(hangul, `${path} 의 코드에 한국어가 남아 있습니다: ${hangul?.join('')}`).toBeNull();
+    }
   });
 
-  it('캐기·만들기 문구가 그대로 있다', () => {
-    const text = source(ACTION);
-    expect(text, `'${CUES.failed}' 가 없어졌습니다`).toContain(`'${CUES.failed}'`);
-    expect(text, `'${CUES.craftFailed}' 가 없어졌습니다`).toContain(CUES.craftFailed);
-    expect(text, `'${CUES.fine}' 가 없어졌습니다`).toContain(CUES.fine);
+  it('core 가 원인을 실어 보내고 있다', () => {
+    // 승인받은 12곳입니다. 하나라도 빠지면 그 소리가 조용히 죽습니다.
+    const all = Object.values(CORE).join('\n');
+    for (const cause of [
+      'sword-hit', 'sword-crit', 'sword-miss', 'dodge', 'taken',
+      'mine-fail', 'ore', 'pack-full', 'craft-fail', 'craft-fine',
+      'gold', 'heal', 'skill',
+    ] as const) {
+      expect(all, `core/ 어디에서도 '${cause}' 를 보내지 않습니다`).toContain(`'${cause}'`);
+    }
   });
 });
 
@@ -109,8 +113,7 @@ describe('소리 사양 (설계 문서 §4)', () => {
     for (const variant of MINE.variants) {
       expect(variant.tick.dur + variant.hit.dur).toBeLessThanOrEqual(200);
     }
-    const centers = MINE.variants.map((v) => v.tick.bp);
-    expect(new Set(centers).size, '변형이 서로 같습니다').toBe(4);
+    expect(new Set(MINE.variants.map((v) => v.tick.bp)).size, '변형이 서로 같습니다').toBe(4);
   });
 
   it('광석은 올라가고 제작 실패는 내려간다', () => {

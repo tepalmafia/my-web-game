@@ -19,7 +19,7 @@ export function dropLoot(world: World, monster: Monster): void {
   const gold = randInt(world, def.goldMin, def.goldMax);
   if (gold > 0) {
     world.me.gold += gold;
-    floater(world, monster.pos, `+${gold} 골드`, 'info');
+    floater(world, monster.pos, `+${gold} 골드`, 'info', 'gold');
   }
 
   for (const entry of def.drops) {
