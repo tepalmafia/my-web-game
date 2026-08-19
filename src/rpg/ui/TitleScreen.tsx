@@ -130,7 +130,7 @@ export function TitleScreen({
           <div>
             <h3 className="display mb-1 text-[15px] font-bold text-parch-100">무엇이 중요한가요</h3>
             <p>
-              <b className="text-brass-300">무게</b>입니다. 철광석 한 덩이가 12 스톤이라 금방 발이 무거워지고,
+              <b className="text-brass-300">무게</b>입니다. 철광석 한 덩이가 10 스톤이라 금방 발이 무거워지고,
               그래서 광산과 마을을 오가게 됩니다. 그 왕복이 이 게임의 리듬입니다.
             </p>
           </div>

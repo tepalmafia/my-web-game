@@ -45,6 +45,22 @@ export function drawShadow(ctx: CanvasRenderingContext2D, x: number, y: number, 
 const SKIN = '#e8b98c';
 const SKIN_SHADE = '#c2916a';
 
+/**
+ *  왼쪽을 보고 있는가.
+ *
+ *  ★ 그냥 cos(facing) < 0 으로 가르면 위아래로 곧게 걸을 때 cos 가 0 언저리를 떠돌아
+ *    좌우가 프레임마다 뒤집힙니다. 그래서 확실히 넘었을 때만 바꾸고, 그 사이에는
+ *    마지막으로 본 쪽을 그대로 둡니다. 규칙이 아니라 그림의 기억이라 저장하지 않습니다.
+ */
+let facedLeft = false;
+
+function facingLeft(facing: number): boolean {
+  const side = Math.cos(facing);
+  if (side < -0.12) facedLeft = true;
+  else if (side > 0.12) facedLeft = false;
+  return facedLeft;
+}
+
 export function drawPlayer(ctx: CanvasRenderingContext2D, world: World): void {
   const me = world.me;
   const { x, y } = me.pos;
@@ -71,6 +87,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, world: World): void {
   const heavyArmor = (armorDef?.defense ?? 0) >= 14;
 
   const facingUp = Math.sin(me.facing) < -0.35;
+  const flip = facingLeft(me.facing);
   const walk = world.meMoving ? Math.sin(world.meAnim) : 0;
   const bob = world.meMoving ? Math.abs(Math.sin(world.meAnim * 2)) * 1.6 : Math.sin(world.time * 2) * 0.7;
 
@@ -90,6 +107,11 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, world: World): void {
 
   ctx.save();
   ctx.translate(x, y - bob);
+  // ★ 왼쪽으로 갈 때는 여기 한 곳에서 통째로 뒤집습니다.
+  //   몸·팔·검이 모두 이 안에 있으므로 따로 돌 수가 없습니다 —
+  //   예전에 팔만 겨냥 각도로 돌리다가 방향마다 검이 제각각을 가리켰던 일이
+  //   구조적으로 되풀이될 수 없게 하려는 것입니다. 각도가 아니라 거울입니다.
+  if (flip) ctx.scale(-1, 1);
 
   const body = shades(bodyColor);
 
