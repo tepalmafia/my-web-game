@@ -13,6 +13,7 @@ import { mapDef } from '../../src/rpg/content/maps';
 import { startCraft, startMining, tickAction } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
 import { step } from '../../src/rpg/core/engine';
+import { clickWorld } from '../../src/rpg/core/commands';
 import { addItem, buyItem, canCarry, countOf } from '../../src/rpg/core/inventory';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
 import type { World } from '../../src/rpg/types';
@@ -135,5 +136,45 @@ describe('가방에 자리가 없을 때', () => {
     addItem(world, 'potion-heal', 1);
     world.me.backpack.push({ uid: world.nextId++, defId: 'potion-heal', count: 1 });
     expect(canCarry(world.me, 'potion-heal', 1)).toBe(true);
+  });
+});
+
+describe('광맥 위에 몬스터가 서 있을 때 무엇을 누른 것인가', () => {
+  /** 광맥 하나와 그 옆에 몬스터 하나를 세워 둡니다 */
+  function scene(gap: number) {
+    const world = inForest();
+    const vein = world.veins.find((v) => v.remaining > 0)!;
+    const monster = world.monsters[0]!;
+    monster.pos = { x: vein.pos.x + gap, y: vein.pos.y };
+    monster.state = 'idle';
+    world.me.pos = { x: vein.pos.x, y: vein.pos.y + 60 };
+    world.me.targetId = null;
+    return { world, vein, monster };
+  }
+
+  it('광맥 한가운데를 누르면 광맥이다 — 몬스터가 25px 옆에 있어도', () => {
+    // ★ 예전에는 몬스터를 무조건 먼저 봐서(반경 26px) 광맥을 누를 방법이 없었습니다
+    const { world, vein, monster } = scene(25);
+    clickWorld(world, vein.pos.x, vein.pos.y);
+
+    expect(world.me.targetId, '몬스터가 대상이 되었습니다').toBeNull();
+    expect(world.me.moveTarget, '광맥 쪽으로 걸어가지 않습니다').not.toBeNull();
+    void monster;
+  });
+
+  it('몬스터를 직접 누르면 몬스터다 — 광맥 앞을 막고 서 있어도', () => {
+    const { world, monster } = scene(20);
+    clickWorld(world, monster.pos.x, monster.pos.y);
+
+    expect(world.me.targetId).toBe(monster.id);
+  });
+
+  it('둘 다 멀면 그냥 그리로 걸어간다', () => {
+    const { world, vein } = scene(25);
+    const far = { x: vein.pos.x + 200, y: vein.pos.y + 200 };
+    clickWorld(world, far.x, far.y);
+
+    expect(world.me.targetId).toBeNull();
+    expect(world.me.moveTarget).toEqual(far);
   });
 });
