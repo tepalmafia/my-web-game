@@ -319,6 +319,27 @@ function PackPanel({ world, refresh }: { world: World; refresh: () => void }) {
  *  대장간
  * ======================================================================== */
 
+/**
+ *  대장장이 두린이 처음 하는 말.
+ *
+ *  ★ 이 게임은 무엇을 해야 하는지 알려주는 퀘스트가 없습니다. 그래서 적어도
+ *    "어디로 가서 무엇을 누르는가" 한 줄은 사람 입으로 나와야 합니다.
+ *    쇠가 없으면 캐 오라 하고, 쇠가 있으면 두드리라 합니다.
+ */
+function durinSays(world: World): string {
+  const me = world.me;
+  const iron = countOf(me, 'iron-ore') + countOf(me, 'iron-ingot');
+  const pickaxe = me.backpack.some((s) => itemDef(s.defId).tool === 'pickaxe' && (s.durability ?? 0) > 0);
+
+  if (!pickaxe) {
+    return '곡괭이부터 챙기게. 마르카에게 하나 사서 가방에 넣어 두면 되네 — 손에 들 것도 없어.';
+  }
+  if (iron <= 0) {
+    return '남쪽 문으로 나가면 초록 숲일세. 반짝이는 광맥을 찾아 눌러만 두게 — 걸어가서 알아서 캘 테니. 그걸 여기 화로로 가져오게.';
+  }
+  return '쇠를 가져왔군. 화로 앞에 서서 녹이고, 주괴가 모이면 두드려 보게. 몇 번은 망칠 걸세 — 그러면서 느는 거야.';
+}
+
 function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
   const me = world.me;
   const forge = nearForge(world);
@@ -328,6 +349,12 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
 
   return (
     <div className="space-y-3">
+      <p className="rounded-sm border border-ink-600 bg-ink-700/60 p-2 text-[11px] leading-snug text-parch-300">
+        <span className="font-bold text-[#e0764a]">대장장이 두린</span>
+        <span className="text-parch-400"> — </span>
+        {durinSays(world)}
+      </p>
+
       {!forge && (
         <p className="rounded-sm border border-[#5a3a12] bg-[#2a1c0a] p-2 text-[11px] text-[#e8b483]">
           화로 앞에 서야 만들 수 있습니다. 대장장이 두린 옆의 붉은 화로로 가세요.

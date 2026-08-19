@@ -26,6 +26,8 @@ import {
   drawNpc,
   drawPortal,
   drawTargetMark,
+  drawVein,
+  drawVeinLabels,
   drawVfx,
 } from './art/effects';
 import { ZONE_ART, alpha } from './art/palette';
@@ -46,6 +48,7 @@ export type { View } from './view';
 /** y 순으로 섞어 그릴 것들 */
 type Layer =
   | { y: number; kind: 'prop'; tx: number; ty: number }
+  | { y: number; kind: 'vein'; index: number }
   | { y: number; kind: 'npc'; index: number }
   | { y: number; kind: 'item'; index: number }
   | { y: number; kind: 'monster'; index: number }
@@ -116,6 +119,7 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
   drawDepthSorted(ctx, world, range);
 
   drawVfx(ctx, world);
+  drawVeinLabels(ctx, world);
   drawNameplates(ctx, world);
   drawFloaters(ctx, world);
   drawMotes(ctx, world, view, art);
@@ -150,6 +154,9 @@ function drawDepthSorted(ctx: CanvasRenderingContext2D, world: World, range: Til
       layers.push({ y: ty * TILE + TILE * 0.72, kind: 'prop', tx, ty });
     }
   }
+  for (let i = 0; i < world.veins.length; i++) {
+    layers.push({ y: world.veins[i]!.pos.y, kind: 'vein', index: i });
+  }
   for (let i = 0; i < def.npcs.length; i++) {
     layers.push({ y: tileCenter(def.npcs[i]!.ty), kind: 'npc', index: i });
   }
@@ -169,6 +176,9 @@ function drawDepthSorted(ctx: CanvasRenderingContext2D, world: World, range: Til
     switch (layer.kind) {
       case 'prop':
         drawProp(ctx, world, ZONE_ART[def.theme], layer.tx, layer.ty);
+        break;
+      case 'vein':
+        drawVein(ctx, world, world.veins[layer.index]!);
         break;
       case 'npc':
         drawNpc(ctx, world, def.npcs[layer.index]!);
