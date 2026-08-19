@@ -29,7 +29,16 @@ export const KIND_ICON: Record<ItemKind, string> = {
  *  창 껍데기
  * ======================================================================== */
 
-export function SidePanel({ world, refresh }: { world: World; refresh: () => void }) {
+export function SidePanel({
+  world, refresh, open, onOpen, onClose,
+}: {
+  world: World;
+  refresh: () => void;
+  /** 폰 세로에서 아래 창이 펼쳐져 있는가 (넓은 화면에서는 늘 펼쳐져 있습니다) */
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
   const inTown = world.map.def.safe;
   const tabs: { id: PanelId; label: string }[] = [
     { id: 'skills', label: '실력' },
@@ -41,25 +50,39 @@ export function SidePanel({ world, refresh }: { world: World; refresh: () => voi
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 gap-0.5 border-b border-ink-600 bg-ink-900 px-1 pt-1">
+      {/*
+        ★ 폰 세로에서는 이 줄만 늘 보이고 아래는 접혀 있습니다.
+          탭을 누르면 펼쳐지고, 오른쪽 손잡이로 다시 접습니다.
+          넓은 화면에서는 접는 개념이 없습니다 (오른쪽에 붙어 있으므로 게임 화면을 안 먹습니다).
+      */}
+      <div className="flex shrink-0 items-stretch gap-0.5 border-b border-ink-600 bg-ink-900 px-1 pt-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
-            onClick={() => { world.panel = tab.id; refresh(); }}
-            className={`display relative flex-1 px-2 py-2 text-[13px] font-bold transition ${
-              active === tab.id ? 'text-brass-300' : 'text-parch-400 hover:text-parch-200'
+            onClick={() => { world.panel = tab.id; onOpen(); refresh(); }}
+            className={`display relative flex-1 px-2 py-2.5 text-[13px] font-bold transition ${
+              open && active === tab.id ? 'text-brass-300' : 'text-parch-400 hover:text-parch-200'
             }`}
           >
             {tab.label}
-            {active === tab.id && (
+            {open && active === tab.id && (
               <span className="absolute inset-x-1 bottom-0 h-0.5 bg-gradient-to-r from-transparent via-brass-400 to-transparent" />
             )}
           </button>
         ))}
+
+        <button
+          type="button"
+          onClick={() => { onClose(); refresh(); }}
+          aria-label="아래 창 접기"
+          className={`w-11 shrink-0 text-[15px] text-parch-400 lg:hidden ${open ? '' : 'invisible'}`}
+        >
+          ∨
+        </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+      <div className={`min-h-0 flex-1 overflow-y-auto p-2.5 ${open ? '' : 'hidden lg:block'}`}>
         {active === 'skills' && <SkillPanel world={world} />}
         {active === 'pack' && <PackPanel world={world} refresh={refresh} />}
         {active === 'craft' && <CraftPanel world={world} refresh={refresh} />}
