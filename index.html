@@ -1,40 +1,53 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="A browser game about racing three rival labs to AGI: build datacenters, buy GPUs, contract power." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="사냥하고 모으고 강화하는 옛날식 온라인 RPG. 브라우저에서 혼자, 설치 없이." />
 
     <!--
       링크 미리보기 (카카오톡·슬랙·트위터 등에 주소를 붙여넣었을 때 뜨는 카드).
-      og:image 와 og:url 은 반드시 전체 주소여야 합니다 — '/og.png' 같은 상대 주소는
-      미리보기를 만드는 쪽에서 어느 사이트인지 알 수 없어 그림이 안 뜹니다.
-      배포 주소가 바뀌면 아래 두 줄을 함께 고쳐야 합니다.
+      og:image 와 og:url 은 반드시 전체 주소여야 합니다 — 상대 주소는 미리보기를 만드는 쪽에서
+      어느 사이트인지 알 수 없어 그림이 안 뜹니다. 배포 주소가 바뀌면 아래 두 줄을 함께 고쳐야 합니다.
     -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="AGI Race" />
-    <meta property="og:title" content="AGI Race — first lab to AGI wins" />
+    <meta property="og:site_name" content="아덴의 그림자" />
+    <meta property="og:title" content="아덴의 그림자 — 사냥하고, 모으고, 강화한다" />
     <meta
       property="og:description"
-      content="Build datacenters, buy GPUs, contract power, and reach AGI before three rival labs. No install, no sign-up, about 20 minutes a run. English / 한국어."
+      content="클릭으로 걷고 몬스터를 잡아 레벨을 올리는 옛날식 온라인 RPG. +3 위로는 강화에 실패하면 장비가 부서집니다. 설치도 가입도 없습니다."
     />
     <meta property="og:url" content="https://tepalmafia.github.io/my-web-game/" />
-    <meta property="og:image" content="https://tepalmafia.github.io/my-web-game/og.png" />
+    <meta property="og:image" content="https://tepalmafia.github.io/my-web-game/rpg-og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="AGI Race — four labs running a track toward the finish line" />
-    <meta property="og:locale" content="en_US" />
-    <meta property="og:locale:alternate" content="ko_KR" />
+    <meta property="og:image:alt" content="아덴의 그림자 — +6 무기를 +7 로 강화하는 화면, 성공 확률 33%" />
     <meta name="twitter:card" content="summary_large_image" />
-    <!-- 브라우저 탭 아이콘. 별도 파일 없이 주소 안에 그림을 직접 담았습니다 -->
+    <meta property="og:locale" content="ko_KR" />
+
+    <!-- 브라우저 탭 아이콘. 별도 파일 없이 주소 안에 그림을 직접 담았습니다 (검 한 자루) -->
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f172a'/%3E%3Crect x='9' y='9' width='14' height='14' rx='2.5' fill='none' stroke='%2322d3ee' stroke-width='2'/%3E%3Crect x='14' y='14' width='4' height='4' fill='%2322d3ee'/%3E%3Cg stroke='%2322d3ee' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M13 9V5M19 9V5M13 27v-4M19 27v-4M9 13H5M9 19H5M27 13h-4M27 19h-4'/%3E%3C/g%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f172a'/%3E%3Cpath d='M16 4l3 3v12l-3 3-3-3V7z' fill='%23fbbf24'/%3E%3Crect x='10' y='21' width='12' height='3' rx='1.5' fill='%23e2e8f0'/%3E%3Crect x='14.5' y='24' width='3' height='5' rx='1.5' fill='%23e2e8f0'/%3E%3C/svg%3E"
     />
-    <title>AGI Race</title>
+    <!--
+      글꼴. 제목은 명조(나눔명조), 본문과 숫자는 고딕A1 을 씁니다.
+      preconnect 를 먼저 걸어두면 글꼴이 눈에 띄게 빨리 옵니다.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;600;700;800&family=Nanum+Myeongjo:wght@400;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>아덴의 그림자</title>
+    <style>
+      /* 게임이 화면 전체를 쓰므로 페이지 자체는 스크롤되지 않게 합니다 */
+      html, body { background: #020617; overscroll-behavior: none; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/rpg/main.tsx"></script>
   </body>
 </html>

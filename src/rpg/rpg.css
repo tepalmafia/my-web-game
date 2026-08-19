@@ -1,0 +1,214 @@
+/**
+ * ===========================================================================
+ *  화면의 재질 — 낡은 가죽, 놋쇠, 양피지
+ * ===========================================================================
+ *
+ *  게임 화면은 흙과 이끼와 불빛으로 되어 있는데 창은 요즘 앱처럼 매끈하면
+ *  둘이 따로 놉니다. 그래서 창도 같은 재료로 만듭니다.
+ *
+ *    · 바탕은 먹빛에 가까운 짙은 갈색 (검정이 아닙니다 — 검정은 차갑습니다)
+ *    · 테두리와 강조는 놋쇠빛
+ *    · 글자는 양피지빛, 제목은 명조
+ *    · 체력은 피, 마나는 하늘, 경험치는 놋쇠
+ *
+ *  색을 바꾸려면 아래 @theme 의 값만 고치면 화면 전체가 따라옵니다.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* 바탕 — 짙은 것부터 옅은 것 순서 */
+  --color-ink-900: #0b0908;
+  --color-ink-800: #13100c;
+  --color-ink-700: #1b1611;
+  --color-ink-600: #251e17;
+  --color-ink-500: #322a20;
+
+  /* 놋쇠 */
+  --color-brass-600: #8a6f1c;
+  --color-brass-500: #c9a227;
+  --color-brass-400: #e0b23a;
+  --color-brass-300: #f2c14e;
+
+  /* 피와 물 */
+  --color-blood-600: #7e1a1d;
+  --color-blood-500: #a41e22;
+  --color-blood-400: #c2352f;
+  --color-aqua-500: #2f6f8f;
+  --color-aqua-400: #4b9dbd;
+
+  /* 양피지 글자 */
+  --color-parch-100: #efe6d2;
+  --color-parch-200: #d9cbaa;
+  --color-parch-300: #b3a488;
+  --color-parch-400: #8a7f6d;
+
+  --font-display: "Nanum Myeongjo", ui-serif, Georgia, serif;
+  --font-body: "Gothic A1", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--color-ink-900);
+    color: var(--color-parch-100);
+    font-family: var(--font-body);
+    overscroll-behavior: none;
+  }
+
+  /* 숫자가 줄줄이 바뀌어도 자리가 흔들리지 않게 */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /**
+   *  창 — 가죽을 덧댄 판.
+   *  위에서 아래로 아주 옅은 그늘이 지고, 놋쇠 실선이 테두리를 두릅니다.
+   */
+  .panel {
+    background:
+      linear-gradient(180deg, rgba(255, 240, 200, 0.045) 0%, rgba(0, 0, 0, 0) 38%),
+      var(--color-ink-800);
+    border: 1px solid rgba(201, 162, 39, 0.24);
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+      0 2px 12px rgba(0, 0, 0, 0.45);
+  }
+
+  /** 창 네 귀퉁이의 놋쇠 못 */
+  .studded {
+    position: relative;
+  }
+  .studded::before,
+  .studded::after {
+    content: "";
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border: 1px solid rgba(201, 162, 39, 0.5);
+    pointer-events: none;
+  }
+  .studded::before {
+    top: 3px;
+    left: 3px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .studded::after {
+    right: 3px;
+    bottom: 3px;
+    border-left: 0;
+    border-top: 0;
+  }
+
+  /** 눌리는 것들 */
+  .btn {
+    font-weight: 700;
+    color: var(--color-parch-100);
+    background: linear-gradient(180deg, var(--color-ink-500) 0%, var(--color-ink-700) 100%);
+    border: 1px solid rgba(201, 162, 39, 0.3);
+    box-shadow: inset 0 1px 0 rgba(255, 230, 170, 0.09);
+    transition: filter 120ms ease, border-color 120ms ease;
+  }
+  .btn:hover:not(:disabled) {
+    filter: brightness(1.25);
+    border-color: rgba(224, 178, 58, 0.6);
+  }
+  .btn:active:not(:disabled) {
+    filter: brightness(0.9);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+  .btn:disabled {
+    opacity: 0.42;
+  }
+
+  /** 중요한 단추 — 놋쇠판 */
+  .btn-brass {
+    color: #21180a;
+    background: linear-gradient(180deg, var(--color-brass-300) 0%, var(--color-brass-600) 100%);
+    border: 1px solid rgba(255, 232, 160, 0.5);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+  .btn-brass:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
+
+  /** 위험한 단추 — 강화의 일반 주문서처럼 */
+  .btn-blood {
+    color: #f7e6e0;
+    background: linear-gradient(180deg, var(--color-blood-400) 0%, var(--color-blood-600) 100%);
+    border: 1px solid rgba(255, 160, 150, 0.35);
+  }
+
+  /**
+   *  막대 — 체력·마나·경험치.
+   *  안쪽으로 파인 홈에 액체가 차오르는 모양입니다.
+   */
+  .socket {
+    background: var(--color-ink-900);
+    box-shadow:
+      inset 0 2px 3px rgba(0, 0, 0, 0.85),
+      0 0 0 1px rgba(201, 162, 39, 0.18);
+    overflow: hidden;
+    position: relative;
+  }
+  .socket > .fill {
+    height: 100%;
+    position: relative;
+    transition: width 160ms ease-out;
+  }
+  /* 액체 위쪽의 빛 */
+  .socket > .fill::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 40%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0));
+  }
+  /* 4분의 1마다 눈금 */
+  .socket::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(25% - 1px),
+      rgba(0, 0, 0, 0.55) calc(25% - 1px),
+      rgba(0, 0, 0, 0.55) 25%
+    );
+  }
+
+  .fill-hp {
+    background: linear-gradient(180deg, var(--color-blood-400), var(--color-blood-600));
+  }
+  .fill-mp {
+    background: linear-gradient(180deg, var(--color-aqua-400), #1d4a63);
+  }
+  .fill-exp {
+    background: linear-gradient(180deg, var(--color-brass-400), var(--color-brass-600));
+  }
+
+  /** 제목 글씨 */
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /** 작은 대문자 이름표 */
+  .eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--color-parch-400);
+    font-weight: 700;
+  }
+
+  /** 창 사이를 가르는 선 — 가운데가 밝은 놋쇠 실선 */
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(201, 162, 39, 0.4), transparent);
+  }
+}
