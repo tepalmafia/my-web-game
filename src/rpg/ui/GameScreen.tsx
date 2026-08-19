@@ -22,6 +22,7 @@ import { ActionBar, DeathOverlay, SkillPop, StatusBlock, Toast } from './Hud';
 import { LogPanel } from './LogPanel';
 import { SidePanel } from './Panels';
 import { draw, computeView, screenToWorld } from './draw';
+import { attachFlinch, tickFlinch } from './flinch';
 import { attachImpact, frozen, kick, tickImpact } from './impact';
 import { SoundControl } from './SoundControl';
 import { attachAudio } from '../audio';
@@ -39,6 +40,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   // 판단은 전부 audio/ 와 ui/impact.ts 가 합니다. 여기서는 잇기만 합니다.
   useEffect(() => attachAudio(), []);
   useEffect(() => attachImpact(), []);
+  useEffect(() => attachFlinch(), []);
 
   /* ---------------------------------------------------------- 게임 루프 */
   useEffect(() => {
@@ -52,8 +54,9 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
       const dt = Math.min(0.25, (now - last) / 1000);
       last = now;
 
-      // 히트스톱은 실제 시간으로 흐릅니다 — 멈춰 있는 동안에도 재워야 풀립니다
+      // 히트스톱과 움찔거림은 실제 시간으로 흐릅니다 — 멈춰 있는 동안에도 재워야 풀립니다
       tickImpact(dt);
+      tickFlinch(dt);
 
       // 한 번에 크게 뛰지 않도록 잘게 나눠 계산합니다 (탭을 다시 켰을 때 순간이동을 막습니다)
       if (!frozen()) {

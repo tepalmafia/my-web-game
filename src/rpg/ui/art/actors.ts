@@ -17,6 +17,7 @@
 import { itemDef } from '../../content/items';
 import { monsterDef } from '../../content/monsters';
 import type { Monster, MonsterShape, World } from '../../types';
+import { flinchFlash, flinchOffset } from '../flinch';
 import { MATERIAL, alpha, darken, lighten } from './palette';
 
 /** 한 색에서 밝은 면·기본·어두운 면을 만듭니다 */
@@ -105,8 +106,11 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, world: World): void {
     ctx.restore();
   }
 
+  // 맞은 순간 몸만 뒤로 밀립니다 — 그림자는 제자리에 남아 발이 붙어 있는 것처럼 보입니다
+  const shove = flinchOffset();
+
   ctx.save();
-  ctx.translate(x, y - bob);
+  ctx.translate(x + shove.x, y - bob + shove.y);
   // ★ 왼쪽으로 갈 때는 여기 한 곳에서 통째로 뒤집습니다.
   //   몸·팔·검이 모두 이 안에 있으므로 따로 돌 수가 없습니다 —
   //   예전에 팔만 겨냥 각도로 돌리다가 방향마다 검이 제각각을 가리켰던 일이
@@ -220,6 +224,17 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, world: World): void {
     ctx.arc(2.2, headY + 0.6, 0.9, 0, Math.PI * 2);
     ctx.fill();
     drawArmedHand(ctx, world);
+  }
+
+  // 맞은 순간의 번쩍임 — 몸 위에만 얹습니다 (몬스터와 같은 방식)
+  const flash = flinchFlash();
+  if (flash > 0) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = flash * 0.8;
+    ctx.fillStyle = '#ffd6cf';
+    ctx.beginPath();
+    ctx.ellipse(0, -6, 11, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   ctx.restore();
@@ -422,16 +437,49 @@ export function drawMonster(ctx: CanvasRenderingContext2D, world: World, monster
   ctx.restore();
 
   // 맞은 순간의 번쩍임
-  if (monster.hitFlash > 0) {
+  const flash = monsterFlash(monster, world.time);
+  if (flash > 0) {
     ctx.save();
-    ctx.globalAlpha = Math.min(0.75, monster.hitFlash * 6);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = '#ffffff';
+    // 하얗게 터졌다가 붉은 잔광으로 식습니다 — 흰색만으로는 0.12초가 눈에 안 걸렸습니다
+    ctx.globalAlpha = flash * 0.95;
+    ctx.fillStyle = flash > 0.55 ? '#ffffff' : '#ff8a72';
     ctx.beginPath();
-    ctx.arc(x, y, size * 1.05, 0, Math.PI * 2);
+    ctx.arc(x, y, size * (1.0 + (1 - flash) * 0.35), 0, Math.PI * 2);
     ctx.fill();
+    // 터지는 순간에만 테두리 한 겹 — 여러 마리가 엉켜 있을 때 누가 맞았는지 갈립니다
+    if (flash > 0.55) {
+      ctx.globalAlpha = (flash - 0.55) / 0.45;
+      ctx.strokeStyle = '#fff2e0';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, size * 1.25, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
+}
+
+/**
+ *  몬스터의 번쩍임 세기 (0~1).
+ *
+ *  ★ core 의 monster.hitFlash 는 0.12초짜리라 눈에 안 걸렸습니다.
+ *    규칙 값을 늘리는 대신, 번쩍이 시작된 때를 그림 쪽에서 기억해 두고
+ *    조금 더 길게 보여줍니다 — core 는 이 표가 있는지도 모릅니다.
+ */
+const FLASH_SECONDS = 0.26;
+const flashStart = new Map<number, number>();
+
+function monsterFlash(monster: Monster, now: number): number {
+  if (monster.hitFlash > 0.11) flashStart.set(monster.id, now); // 방금 세워진 참
+  const began = flashStart.get(monster.id);
+  if (began === undefined) return 0;
+  const elapsed = now - began;
+  if (elapsed < 0 || elapsed > FLASH_SECONDS) {
+    if (elapsed > FLASH_SECONDS) flashStart.delete(monster.id);
+    return 0;
+  }
+  return 1 - elapsed / FLASH_SECONDS;
 }
 
 function drawMonsterBody(
