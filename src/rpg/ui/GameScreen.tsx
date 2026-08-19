@@ -10,7 +10,7 @@
  *  매 프레임 다시 그릴 이유가 없고, 그렇게 하면 휴대폰이 뜨거워집니다.
  */
 
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { MAX_STEP } from '../balance';
 import { clickWorld, drinkBestPotion, moveTo, stopAction } from '../core/commands';
 import { startMining, veinAt } from '../core/action';
@@ -35,6 +35,24 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   const pendingVein = useRef<number | null>(null);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const refresh = useCallback(() => bump(), []);
+
+  /**
+   *  폰 세로에서 아래 창을 접어둡니다.
+   *
+   *  ★ 접혀 있으면 게임 화면이 88% 가 됩니다 (펼치면 46%). 폰에서 이 창은
+   *    늘 보고 있을 것이 아니라 필요할 때 여는 것입니다.
+   *  ★ 넓은 화면은 이 값과 무관합니다 — 창이 오른쪽에 붙어 있어 게임 화면을 먹지 않습니다.
+   */
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const lastPanel = useRef(world.panel);
+
+  // 대장장이에게 다가가거나(engine), I·S·C·Esc 를 누르면(아래 키보드) world.panel 이 바뀝니다.
+  // 그 변화를 따라 저절로 펼쳐지고 접힙니다 — 규칙 쪽은 이 창이 접힌다는 것을 모릅니다.
+  useEffect(() => {
+    if (world.panel === lastPanel.current) return;
+    lastPanel.current = world.panel;
+    setSheetOpen(world.panel !== null);
+  });
 
   /* ---------------------------------------------------------- 소리와 타격감 */
   // 판단은 전부 audio/ 와 ui/impact.ts 가 합니다. 여기서는 잇기만 합니다.
@@ -172,8 +190,8 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   return (
     <div className="flex h-dvh w-full flex-col bg-ink-900 text-parch-100 lg:flex-row">
       {/* ----------------------------------------------------- 화면 */}
-      {/* ★ 폰 세로에서 게임 화면이 가장 넓어야 합니다 — 56dvh 에서 64dvh 로 올렸습니다 */}
-      <div ref={wrapRef} className="relative h-[64dvh] shrink-0 overflow-hidden lg:h-full lg:min-h-0 lg:flex-1">
+      {/* ★ 폰 세로에서 게임 화면은 아래 창이 쓰고 남은 자리를 전부 가집니다 */}
+      <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden lg:h-full lg:flex-1">
         <canvas ref={canvasRef}
           className="absolute inset-0 h-full w-full touch-none select-none"
           onPointerDown={onPointerDown}
@@ -216,9 +234,19 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
       </div>
 
       {/* ----------------------------------------------------- 오른쪽 창 */}
-      <aside className="flex min-h-0 flex-1 flex-col border-ink-600 bg-ink-800 lg:h-full lg:w-[380px] lg:flex-none lg:border-l">
+      <aside
+        className={`flex min-h-0 shrink-0 flex-col border-ink-600 bg-ink-800 lg:h-full lg:w-[380px] lg:flex-none lg:border-l ${
+          sheetOpen ? 'h-[54dvh]' : ''
+        }`}
+      >
         <div className="flex min-h-0 flex-1 flex-col">
-          <SidePanel world={world} refresh={refresh} />
+          <SidePanel
+            world={world}
+            refresh={refresh}
+            open={sheetOpen}
+            onOpen={() => setSheetOpen(true)}
+            onClose={() => setSheetOpen(false)}
+          />
         </div>
         <LogPanel world={world} />
       </aside>
