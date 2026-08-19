@@ -22,6 +22,8 @@ import { ActionBar, DeathOverlay, SkillStrip, StatusBlock, Toast } from './Hud';
 import { LogPanel } from './LogPanel';
 import { SidePanel } from './Panels';
 import { draw, computeView, screenToWorld } from './draw';
+import { attachImpact, frozen, kick, tickImpact } from './impact';
+import { attachAudio } from '../audio';
 
 export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,6 +33,11 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   const pendingVein = useRef<number | null>(null);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const refresh = useCallback(() => bump(), []);
+
+  /* ---------------------------------------------------------- 소리와 타격감 */
+  // 판단은 전부 audio/ 와 ui/impact.ts 가 합니다. 여기서는 잇기만 합니다.
+  useEffect(() => attachAudio(), []);
+  useEffect(() => attachImpact(), []);
 
   /* ---------------------------------------------------------- 게임 루프 */
   useEffect(() => {
@@ -44,13 +51,18 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
       const dt = Math.min(0.25, (now - last) / 1000);
       last = now;
 
+      // 히트스톱은 실제 시간으로 흐릅니다 — 멈춰 있는 동안에도 재워야 풀립니다
+      tickImpact(dt);
+
       // 한 번에 크게 뛰지 않도록 잘게 나눠 계산합니다 (탭을 다시 켰을 때 순간이동을 막습니다)
-      let remaining = dt;
-      let guard = 0;
-      while (remaining > 0 && guard++ < 6) {
-        const slice = Math.min(MAX_STEP, remaining);
-        step(world, slice);
-        remaining -= slice;
+      if (!frozen()) {
+        let remaining = dt;
+        let guard = 0;
+        while (remaining > 0 && guard++ < 6) {
+          const slice = Math.min(MAX_STEP, remaining);
+          step(world, slice);
+          remaining -= slice;
+        }
       }
 
       const canvas = canvasRef.current;
@@ -65,7 +77,9 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
         }
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+          // 때린 순간 화면을 몇 픽셀 밀어줍니다 (world.shake 와는 별개로 그 위에 더해집니다)
+          const shove = kick();
+          ctx.setTransform(ratio, 0, 0, ratio, shove.x * ratio, shove.y * ratio);
           draw(ctx, world, width, height);
         }
       }
