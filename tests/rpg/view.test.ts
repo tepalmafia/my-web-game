@@ -17,17 +17,19 @@ import { TILE } from '../../src/rpg/balance';
 import { mapDef } from '../../src/rpg/content/maps';
 import { createWorld } from '../../src/rpg/core/create';
 import { enterMap } from '../../src/rpg/core/world';
-import { computeView, screenToWorld } from '../../src/rpg/ui/view';
+import { VIEW_LIMITS, computeView, screenToWorld } from '../../src/rpg/ui/view';
 import type { View } from '../../src/rpg/ui/view';
 import type { World } from '../../src/rpg/types';
 
 /** 실제 기기들 */
 const SIZES: Array<[string, number, number]> = [
-  ['폰 세로', 390, 540],
-  ['폰 가로', 844, 390],
+  ['폰 세로 (아래 창 접힘)', 390, 736],
+  ['폰 세로 (아래 창 펼침)', 390, 388],
+  ['폰 가로', 844, 250],
   ['작은 노트북', 1024, 768],
-  ['노트북', 1060, 900],
-  ['큰 모니터', 1540, 1080],
+  ['노트북', 1060, 820],
+  ['큰 모니터', 1100, 820],
+  ['아주 넓은 모니터', 1100, 820],
   ['아주 좁은 창', 320, 300],
 ];
 
@@ -75,12 +77,82 @@ describe('화면과 월드 사이', () => {
     }
   });
 
-  it('확대는 0.85 와 2.0 사이에 머문다', () => {
+  it('확대는 하한 아래로 내려가지 않는다', () => {
     const world = at('forest');
-    for (const [w, h] of [[100, 100], [390, 540], [3840, 2160], [10000, 10000]]) {
+    for (const [w, h] of [[100, 100], [390, 736], [3840, 2160], [10000, 10000]]) {
       const view = computeView(world, w!, h!);
-      expect(view.zoom).toBeGreaterThanOrEqual(0.85);
-      expect(view.zoom).toBeLessThanOrEqual(2.0);
+      expect(view.zoom).toBeGreaterThanOrEqual(VIEW_LIMITS.minZoom);
+    }
+  });
+
+  /* ---------------------------------------------------------- 시야 최대치 */
+
+  /**
+   *  ★ 예전 min 식은 "적어도 이만큼은 보이게" 였습니다. 화면이 커질수록 보이는 세상이
+   *    계속 넓어져, 2560 에서는 1090×720 — 폰의 2.4배가 보였습니다.
+   *    max 식은 "이보다 넓게는 안 보여준다" 입니다. 여기서 그걸 못 박습니다.
+   */
+  const EVERY_SIZE: Array<[string, number, number]> = [
+    ...SIZES,
+    ['2560 캔버스 (덮개 없이)', 2180, 1440],
+    ['4K 캔버스 (덮개 없이)', 3460, 2160],
+    ['말도 안 되게 넓은 창', 10000, 400],
+  ];
+
+  it('보이는 폭이 800 을 절대 넘지 않는다', () => {
+    for (const mapId of ['town', 'forest', 'mine'] as const) {
+      const world = at(mapId);
+      for (const [name, w, h] of EVERY_SIZE) {
+        const view = computeView(world, w, h);
+        expect(w / view.zoom, `${mapId} ${name}`).toBeLessThanOrEqual(VIEW_LIMITS.width + 0.001);
+      }
+    }
+  });
+
+  it('가로로 누운 화면에서는 800×640 을 넘지 않는다', () => {
+    // 폰 세로처럼 길쭉한 화면은 아래 하한(0.85)이 지켜주므로 높이가 더 보입니다.
+    // 가로로 누운 화면 — 즉 데스크톱 — 에서는 처음 약속한 800×640 이 그대로 지켜집니다.
+    const world = at('town');
+    for (const [name, w, h] of EVERY_SIZE) {
+      if (w < h) continue;
+      const view = computeView(world, w, h);
+      expect(w / view.zoom, `${name} 폭`).toBeLessThanOrEqual(800.001);
+      expect(h / view.zoom, `${name} 높이`).toBeLessThanOrEqual(640.001);
+    }
+  });
+
+  it('★ 마을에서 카메라가 가로로 절대 고정되지 않는다', () => {
+    // 지도가 화면보다 좁으면 카메라가 한가운데에 못 박히고 캐릭터만 구석으로 밀립니다.
+    // 마을은 960px 폭이고 보이는 폭은 800 을 넘을 수 없으므로, 이 일은 일어날 수 없습니다.
+    const world = at('town');
+    const mapW = world.map.def.width * TILE;
+    expect(mapW).toBe(960);
+
+    for (const [name, w, h] of EVERY_SIZE) {
+      const view = computeView(world, w, h);
+      expect(w / view.zoom, `${name}: 마을이 화면보다 좁습니다`).toBeLessThan(mapW);
+
+      // 실제로 서쪽 끝으로 걸어가면 카메라가 따라옵니다
+      world.camera.x = 80;
+      const west = computeView(world, w, h);
+      expect(west.camX, `${name}: 카메라가 안 따라옵니다`).toBeLessThan(mapW / 2);
+      world.camera.x = mapW - 80;
+      const east = computeView(world, w, h);
+      expect(east.camX, `${name}: 카메라가 안 따라옵니다`).toBeGreaterThan(mapW / 2);
+    }
+  });
+
+  it('★ 폰 세로는 한 픽셀도 안 바뀐다', () => {
+    // 390×844 화면에서 아래 창을 접었을 때(캔버스 390×736)와 펼쳤을 때(390×388)
+    const world = at('forest');
+    for (const [w, h, zoom, vw, vh] of [
+      [390, 736, 0.85, 459, 866],
+      [390, 388, 0.85, 459, 456],
+    ] as const) {
+      const view = computeView(world, w, h);
+      expect(view.zoom, `${w}x${h} 확대율`).toBeCloseTo(zoom, 6);
+      expect(Math.round(w / view.zoom), `${w}x${h} 보이는 폭`).toBe(vw);
+      expect(Math.round(h / view.zoom), `${w}x${h} 보이는 높이`).toBe(vh);
     }
   });
 

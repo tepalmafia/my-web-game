@@ -218,10 +218,18 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   };
 
   return (
-    <div className="flex h-dvh w-full flex-col bg-ink-900 text-parch-100 lg:flex-row">
+    <div className="flex h-dvh w-full flex-col bg-ink-900 text-parch-100 lg:flex-row lg:items-center lg:justify-center">
       {/* ----------------------------------------------------- 화면 */}
-      {/* ★ 폰 세로에서 게임 화면은 아래 창이 쓰고 남은 자리를 전부 가집니다 */}
-      <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden lg:h-full lg:flex-1">
+      {/*
+        ★ 폰 세로에서 게임 화면은 아래 창이 쓰고 남은 자리를 전부 가집니다.
+        ★ 넓은 화면에서는 여기서 멈춥니다(1100×820). 캔버스가 계속 커지면 확대율만
+          치솟아 지형이 흐려지고, 남는 자리를 시야로 채우면 다시 "너무 넓게 보임" 이 됩니다.
+          그래서 남는 곳은 여백으로 둡니다.
+      */}
+      <div
+        ref={wrapRef}
+        className="relative min-h-0 flex-1 overflow-hidden lg:h-full lg:max-h-[820px] lg:w-full lg:max-w-[1100px] lg:flex-1"
+      >
         <canvas ref={canvasRef}
           className="absolute inset-0 h-full w-full touch-none select-none"
           onPointerDown={onPointerDown}
@@ -265,7 +273,8 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
 
       {/* ----------------------------------------------------- 오른쪽 창 */}
       <aside
-        className={`flex min-h-0 shrink-0 flex-col border-ink-600 bg-ink-800 lg:h-full lg:w-[380px] lg:flex-none lg:border-l ${
+        // 넓은 화면에서는 게임 화면과 같은 높이로 나란히 섭니다 (혼자만 천장까지 뻗지 않게)
+        className={`flex min-h-0 shrink-0 flex-col border-ink-600 bg-ink-800 lg:h-full lg:max-h-[820px] lg:w-[380px] lg:flex-none lg:border-l ${
           sheetOpen ? 'h-[54dvh]' : ''
         }`}
       >
