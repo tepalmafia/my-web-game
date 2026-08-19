@@ -521,6 +521,13 @@ export interface World {
   nextId: number;
   /** 화면 중앙이 보고 있는 월드 좌표 */
   camera: Vec2;
+  /**
+   * 지금 걸어가고 있는 길 (남은 꺾이는 지점들).
+   * 나무와 바위를 돌아가기 위해 매번 다시 구하며, 저장하지 않습니다.
+   */
+  path: Vec2[];
+  /** 길을 다시 구하기까지 남은 시간 — 매 프레임 다시 구할 필요는 없습니다 */
+  pathTimer: Seconds;
   /** 화면이 흔들리는 남은 시간 */
   shake: Seconds;
 

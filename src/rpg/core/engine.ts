@@ -26,7 +26,7 @@ import { log, toast, vfx } from './feedback';
 import { pickUpNearby } from './loot';
 import { nextRandom, randRange } from './rng';
 import { derive } from './stats';
-import { blockedAt, enterMap, slideMove, tileCenter } from './world';
+import { blockedAt, enterMap, findPath, slideMove, tileCenter } from './world';
 import type { Monster, World } from '../types';
 
 export function step(world: World, rawDt: number): void {
@@ -135,6 +135,8 @@ function movePlayer(world: World, dt: number): void {
   const stats = derive(player);
   const target = currentTarget(world);
 
+  world.pathTimer = Math.max(0, world.pathTimer - dt);
+
   let destX: number | null = null;
   let destY: number | null = null;
   let stopAt = 4;
@@ -150,16 +152,37 @@ function movePlayer(world: World, dt: number): void {
     destY = player.moveTarget.y;
   }
 
-  if (destX === null || destY === null) return;
+  if (destX === null || destY === null) {
+    world.path = [];
+    return;
+  }
 
-  const dx = destX - player.pos.x;
-  const dy = destY - player.pos.y;
-  const distance = Math.hypot(dx, dy);
-
-  player.facing = Math.atan2(dy, dx);
-
-  if (distance <= stopAt) {
+  const straight = Math.hypot(destX - player.pos.x, destY - player.pos.y);
+  if (straight <= stopAt) {
     if (!target) player.moveTarget = null;
+    world.path = [];
+    player.facing = Math.atan2(destY - player.pos.y, destX - player.pos.x);
+    return;
+  }
+
+  // 목적지가 바뀌었거나(몬스터가 움직였거나) 길이 끊겼으면 다시 구합니다.
+  // 매 프레임 구하는 건 낭비라 0.35초에 한 번으로 제한합니다.
+  const end = world.path[world.path.length - 1];
+  const stale = !end || Math.hypot(end.x - destX, end.y - destY) > TILE * 1.2;
+  if ((stale || world.path.length === 0) && world.pathTimer <= 0) {
+    world.pathTimer = 0.35;
+    world.path = findPath(world.map, player.pos, { x: destX, y: destY }, PLAYER_RADIUS) ?? [];
+  }
+
+  // 다음 꺾이는 지점을 향해 한 걸음
+  const waypoint = world.path[0] ?? { x: destX, y: destY };
+  const dx = waypoint.x - player.pos.x;
+  const dy = waypoint.y - player.pos.y;
+  const distance = Math.hypot(dx, dy);
+  player.facing = Math.atan2(destY - player.pos.y, destX - player.pos.x);
+
+  if (distance < 6) {
+    world.path.shift();
     return;
   }
 
@@ -169,9 +192,10 @@ function movePlayer(world: World, dt: number): void {
 
   slideMove(world.map, player.pos, (dx / distance) * stepLength, (dy / distance) * stepLength, PLAYER_RADIUS);
 
-  // 완전히 막혀 한 발도 못 갔다면 목적지를 포기합니다 (벽에 붙어 덜덜 떠는 것을 막습니다)
-  if (!target && Math.hypot(player.pos.x - beforeX, player.pos.y - beforeY) < stepLength * 0.2) {
-    player.moveTarget = null;
+  // 그래도 한 발도 못 갔다면 길이 낡은 것이므로 다음 기회에 다시 구합니다
+  if (Math.hypot(player.pos.x - beforeX, player.pos.y - beforeY) < stepLength * 0.2) {
+    world.path = [];
+    world.pathTimer = 0;
   }
 }
 

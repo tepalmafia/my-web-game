@@ -305,6 +305,8 @@ export function enterMap(world: World, mapId: MapId, tx: number, ty: number): vo
   world.player.pos = { x: tileCenter(tx), y: tileCenter(ty) };
   world.player.moveTarget = null;
   world.player.targetId = null;
+  world.path = [];
+  world.pathTimer = 0;
   world.ground = [];
   world.floaters = [];
   world.vfx = [];
@@ -312,4 +314,129 @@ export function enterMap(world: World, mapId: MapId, tx: number, ty: number): vo
   populate(world);
 
   if (!world.player.discovered.includes(mapId)) world.player.discovered.push(mapId);
+}
+
+/* ===========================================================================
+ *  길찾기
+ *  ---------------------------------------------------------------------------
+ *  목표를 향해 그냥 직진하면, 사이에 바위가 하나만 있어도 거기 붙어서 멈춥니다.
+ *  (실제로 그 버그가 있었습니다 — 자동 사냥이 150초 동안 바위를 밀고 있었습니다.)
+ *
+ *  그래서 타일 격자 위에서 너비 우선 탐색으로 길을 찾고,
+ *  찾은 길에서 곧장 갈 수 있는 구간은 이어 붙여 꺾이는 지점만 남깁니다.
+ *  맵이 커야 50×40 칸이라 이 계산은 눈 깜짝할 사이에 끝납니다.
+ * ======================================================================== */
+
+/** a 에서 b 까지 벽에 걸리지 않고 곧장 갈 수 있는가 */
+export function lineOfSight(map: MapRuntime, ax: number, ay: number, bx: number, by: number, r: number): boolean {
+  const distance = Math.hypot(bx - ax, by - ay);
+  const steps = Math.ceil(distance / 6);
+
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    if (blockedAt(map, ax + (bx - ax) * t, ay + (by - ay) * t, r)) return false;
+  }
+  return true;
+}
+
+/** 목표 칸이 막혀 있으면, 그 근처에서 설 수 있는 칸을 찾습니다 */
+function nearestOpenTile(map: MapRuntime, tx: number, ty: number): { tx: number; ty: number } | null {
+  if (!tileBlocked(map, tx, ty)) return { tx, ty };
+
+  for (let ring = 1; ring <= 6; ring++) {
+    for (let dy = -ring; dy <= ring; dy++) {
+      for (let dx = -ring; dx <= ring; dx++) {
+        if (Math.abs(dx) !== ring && Math.abs(dy) !== ring) continue;
+        if (!tileBlocked(map, tx + dx, ty + dy)) return { tx: tx + dx, ty: ty + dy };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * from 에서 to 까지 걸어갈 길을 구합니다.
+ * 곧장 갈 수 있으면 목적지 하나만, 돌아가야 하면 꺾이는 지점들을 돌려줍니다.
+ * 길이 아예 없으면 null.
+ */
+export function findPath(map: MapRuntime, from: Vec2, to: Vec2, radius: number): Vec2[] | null {
+  if (lineOfSight(map, from.x, from.y, to.x, to.y, radius)) return [{ x: to.x, y: to.y }];
+
+  const { width, height } = map.def;
+  const startTx = Math.floor(from.x / TILE);
+  const startTy = Math.floor(from.y / TILE);
+
+  const goal = nearestOpenTile(map, Math.floor(to.x / TILE), Math.floor(to.y / TILE));
+  if (!goal) return null;
+  if (tileBlocked(map, startTx, startTy)) return null;
+
+  const start = startTy * width + startTx;
+  const target = goal.ty * width + goal.tx;
+  if (start === target) return [{ x: to.x, y: to.y }];
+
+  const cameFrom = new Int32Array(width * height).fill(-1);
+  cameFrom[start] = start;
+  const queue = [start];
+
+  // 대각선으로 질러가되, 모서리를 뚫고 지나가지는 않습니다
+  const moves = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+    [1, 1], [1, -1], [-1, 1], [-1, -1],
+  ];
+
+  let found = false;
+  for (let head = 0; head < queue.length && !found; head++) {
+    const index = queue[head]!;
+    const x = index % width;
+    const y = (index - x) / width;
+
+    for (const [dx, dy] of moves) {
+      const nx = x + dx!;
+      const ny = y + dy!;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+
+      const next = ny * width + nx;
+      if (cameFrom[next] !== -1 || tileBlocked(map, nx, ny)) continue;
+      // 대각선은 양옆이 뚫려 있을 때만
+      if (dx !== 0 && dy !== 0 && (tileBlocked(map, x + dx!, y) || tileBlocked(map, x, y + dy!))) continue;
+
+      cameFrom[next] = index;
+      if (next === target) {
+        found = true;
+        break;
+      }
+      queue.push(next);
+    }
+  }
+  if (!found) return null;
+
+  // 되짚어 올라가며 길을 만듭니다
+  const tiles: Vec2[] = [];
+  for (let index = target; index !== start; index = cameFrom[index]!) {
+    const x = index % width;
+    const y = (index - x) / width;
+    tiles.unshift({ x: tileCenter(x), y: tileCenter(y) });
+  }
+  // 마지막은 칸 한가운데가 아니라 실제로 누른 자리로
+  if (!tileBlocked(map, Math.floor(to.x / TILE), Math.floor(to.y / TILE))) {
+    tiles[tiles.length - 1] = { x: to.x, y: to.y };
+  }
+
+  // 곧장 갈 수 있는 구간은 건너뜁니다 — 안 그러면 칸을 따라 계단처럼 걷습니다
+  const path: Vec2[] = [];
+  let cursor = { x: from.x, y: from.y };
+  let i = 0;
+  while (i < tiles.length) {
+    let farthest = i;
+    for (let j = tiles.length - 1; j > i; j--) {
+      if (lineOfSight(map, cursor.x, cursor.y, tiles[j]!.x, tiles[j]!.y, radius)) {
+        farthest = j;
+        break;
+      }
+    }
+    path.push(tiles[farthest]!);
+    cursor = tiles[farthest]!;
+    i = farthest + 1;
+  }
+  return path;
 }

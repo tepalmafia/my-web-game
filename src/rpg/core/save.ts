@@ -91,6 +91,8 @@ export function loadWorld(): World | null {
     time: data.time ?? 0,
     nextId: data.nextId ?? 1000,
     camera: { x: player.pos.x, y: player.pos.y },
+    path: [],
+    pathTimer: 0,
     shake: 0,
     bossRespawnAt: data.bossRespawnAt ?? {},
     panel: null,

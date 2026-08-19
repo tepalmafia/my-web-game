@@ -1,0 +1,47 @@
+# 검사 — 올린 코드가 성한지 확인합니다
+#
+# 풀 리퀘스트를 열거나 새 커밋을 밀 때마다 자동으로 돌고,
+# 결과가 풀 리퀘스트 화면에 초록/빨강으로 붙습니다.
+#
+#   1) 타입검사 — 이름이 틀렸거나 형태가 안 맞는 곳
+#   2) 테스트   — 규칙이 실제로 그렇게 도는지 (tests/ 폴더)
+#   3) 빌드     — 두 게임이 실제로 만들어지는지
+#
+# 손으로 돌릴 때는 `npm run check` 하나면 1)+2) 가 함께 돕니다.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main] # main 은 배포 워크플로가 따로 빌드합니다
+  workflow_dispatch:
+
+# 같은 가지에 연달아 밀면 앞의 검사는 접습니다
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 받기
+        uses: actions/checkout@v4
+
+      - name: Node 준비
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 타입검사
+        run: npm run typecheck
+
+      - name: 테스트
+        run: npm test
+
+      - name: 빌드
+        run: npx vite build

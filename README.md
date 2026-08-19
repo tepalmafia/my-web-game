@@ -51,12 +51,42 @@
 같은 지도가 나옵니다. 만든 뒤에는 입구에서 모든 문까지 실제로 걸어갈 수 있는지 확인하고,
 닿지 않는 구덩이는 아예 막아버립니다 — 거기 태어난 몬스터는 영영 잡을 수 없기 때문입니다.
 
-난수에 씨앗이 있어서, 봇으로 몇 시간 치를 자동으로 돌려 밸런스를 숫자로 확인할 수 있습니다.
+## 어떻게 확인하는가
+
+화면을 눌러보지 않고도 규칙이 맞는지 알 수 있어야 합니다. 그래서 검사가 두 겹입니다.
+
+### 1. 테스트 — `npm test` (190개, 2초)
+
+```bash
+npm test          # 한 번 돌리기
+npm run test:watch # 고칠 때마다 자동으로
+npm run check     # 타입검사까지 함께
+```
+
+| 파일 | 무엇을 지키는가 |
+|---|---|
+| `content.test.ts` | 표의 오타. 없는 아이템을 떨구거나, 없는 지역으로 이어지는 문이 없는지 |
+| `enhance.test.ts` | 확률표와 실제 결과가 맞는지. 축복 주문서가 정말 장비를 남기는지 (1000번 실패시켜 확인) |
+| `world.test.ts` | 만들어진 지도에 **걸어서 닿지 않는 칸이 없는지**. 길찾기가 벽을 뚫지 않는지 |
+| `engine.test.ts` | 3분을 실제로 돌려보고 벽에 끼거나 좌표가 깨지지 않는지 |
+| `combat.test.ts` · `stats.test.ts` | 피해·방어·강화 효과가 숫자대로 나오는지 |
+| `progression.test.ts` · `quests.test.ts` | 레벨업, 죽음의 대가, 의뢰 완료와 보상 |
+| `inventory.test.ts` · `commands.test.ts` | 가방·상점(무한 돈벌이가 없는지)·스킬·순간이동 |
+| `save.test.ts` | 저장한 게 그대로 돌아오는지. 기록이 깨져 있어도 게임이 멈추지 않는지 |
+
+풀 리퀘스트를 올리면 GitHub Actions 가 이 셋(타입검사·테스트·빌드)을 자동으로 돌립니다.
+
+> 이 테스트로 실제로 잡은 버그: **자동 사냥이 바위 뒤 몬스터를 향해 직진하다 150초 동안 멈춰 있던 문제.**
+> 눈으로 보던 화면에서는 입구 근처가 트여 있어 드러나지 않았습니다. 지금은 길찾기가 들어가 있습니다.
+
+### 2. 봇 — 몇 시간 치를 몇 초에
+
+난수에 씨앗이 있어서 같은 판을 그대로 재현할 수 있습니다. 밸런스는 눈이 아니라 이걸로 맞췄습니다.
 
 ```bash
 npx esbuild tools/sim.ts --bundle --format=esm --platform=node --outfile=/tmp/sim.mjs
-node /tmp/sim.mjs knight 3          # 기사로 3시간 자동 사냥
-node /tmp/sim.mjs wizard 0 boss     # 만렙 전설 장비로 고룡전
+node /tmp/sim.mjs knight 3            # 기사로 3시간 자동 사냥
+node /tmp/sim.mjs wizard 0 boss       # 만렙 전설 장비로 고룡전
 node /tmp/sim.mjs wizard 0 boss-early # 희귀 +3 장비로 고룡전 (아직 무리입니다)
 ```
 
@@ -95,8 +125,9 @@ node /tmp/sim.mjs wizard 0 boss-early # 희귀 +3 장비로 고룡전 (아직 �
 ```bash
 npm install
 npm run dev        # 개발 서버 — / 는 RPG, /agi-race.html 은 AGI 경주
+npm test           # 테스트 190개
+npm run check      # 타입검사 + 테스트
 npm run build      # 타입검사 + 두 게임 모두 빌드
-npm run typecheck  # 타입검사만
 ```
 
 `main` 에 푸시하면 GitHub Actions 가 빌드해서 GitHub Pages 에 자동 배포합니다.

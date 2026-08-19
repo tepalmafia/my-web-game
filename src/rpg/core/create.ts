@@ -69,6 +69,8 @@ export function createWorld(name: string, classId: ClassId): World {
     time: 0,
     nextId: 1,
     camera: { x: player.pos.x, y: player.pos.y },
+    path: [],
+    pathTimer: 0,
     shake: 0,
     bossRespawnAt: {},
     panel: null,
