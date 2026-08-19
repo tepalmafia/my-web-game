@@ -20,7 +20,7 @@ import { useEffect, useState } from 'react';
 
 import { MAX_SKILL } from '../balance';
 import { ITEMS, itemDef } from '../content/items';
-import { MAPS, mapDef } from '../content/maps';
+import { MAPS, MAP_ORDER, mapDef } from '../content/maps';
 import { SKILL_ORDER, SKILLS } from '../content/skills';
 import { step } from '../core/engine';
 import { addItem } from '../core/inventory';
@@ -258,7 +258,8 @@ export function DevTools({ world, refresh }: { world: World; refresh: () => void
         </div>
 
         <Row title="지역">
-          {(['town', 'forest', 'mine'] as const).map((id) => (
+          {/* ★ 목록을 여기 다시 적지 않습니다 — 지역을 늘리면 단추도 저절로 생깁니다 */}
+          {MAP_ORDER.map((id) => (
             <button key={id} type="button" className={BTN} onClick={() => run(() => api.go(id))}>
               {mapDef(id).name}
             </button>

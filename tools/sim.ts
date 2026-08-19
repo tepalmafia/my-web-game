@@ -216,6 +216,17 @@ function run(): void {
         .map(([id, sec]) => `${id} ${((sec / totalTime) * 100).toFixed(0)}%`)
         .join(' · '),
   );
+  // ★ 길을 못 찾으면 봇은 엉뚱한 데서 일하면서도 숫자는 멀쩡히 냅니다. 그래서 함께 찍습니다.
+  if (pilot.stranded.length > 0) {
+    const tally: Record<string, number> = {};
+    for (const pair of pilot.stranded) tally[pair] = (tally[pair] ?? 0) + 1;
+    console.log(
+      '★ 길을 못 찾음: ' +
+        Object.entries(tally)
+          .map(([pair, n]) => `${pair} ${n}회`)
+          .join(' · '),
+    );
+  }
   console.log(
     '목표 전환: ' +
       Object.entries(transitions)

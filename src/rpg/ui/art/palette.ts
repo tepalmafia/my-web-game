@@ -134,6 +134,32 @@ export const ZONE_ART: Record<MapTheme, ZoneArt> = {
   },
 
 
+  /* --------------------------------------------------------------- 강가 */
+  /**
+   *  ★ 숲과 갈려 보여야 합니다. 숲이 초록이면 여기는 물빛입니다 —
+   *    바닥에 청록을 섞고, 물은 셋 중 가장 밝게 두어 물길이 멀리서도 읽히게 했습니다.
+   *    갈대는 마른 색이라 초록 나무와 실루엣도 색도 다릅니다.
+   */
+  river: {
+    ground: ['#3b4f45', '#44584a', '#2f4239'],
+    detail: '#2a3c35',
+    wall: '#3d4038',
+    wallTop: '#5b6151',
+    wallEdge: '#1a1d18',
+    propLight: '#8a9463',
+    prop: '#5e6a43',
+    propDark: '#39422a',
+    liquid: '#2a6a86',
+    liquidLight: '#63bcd8',
+    liquidGlow: '#a9ecff',
+    ambient: '#bfe6ec',
+    ambientAlpha: 0.05,
+    fog: 'rgba(8,16,18,0.34)',
+    motes: { kind: 'spore', color: '#cdefff', count: 20 },
+    road: '#6a5c40',
+    roadEdge: '#4e432e',
+  },
+
 };
 
 /* ===========================================================================

@@ -10,7 +10,7 @@
  */
 
 import { AI, TILE } from '../balance';
-import { mapDef } from '../content/maps';
+import { MAPS, mapDef } from '../content/maps';
 import { monsterDef } from '../content/monsters';
 import { hash2, nextRandom, randInt } from './rng';
 import { veinDef } from '../content/veins';
@@ -88,6 +88,54 @@ const TOWN_BUILDINGS = [
   { x: 4, y: 12, w: 4, h: 5 },
   { x: 22, y: 12, w: 4, h: 5 },
 ];
+
+/**
+ *  다른 지도들이 이 지도의 어느 칸으로 내려놓는가.
+ *
+ *  ★ 문은 나가는 쪽 지도에만 적혀 있어서, 받는 쪽 지도는 자기 어디에 사람이
+ *    떨어지는지 모릅니다. 그래서 여기서 한 번 훑습니다.
+ */
+function arrivalsInto(mapId: MapId): Array<{ tx: number; ty: number }> {
+  const spots: Array<{ tx: number; ty: number }> = [];
+  for (const other of Object.values(MAPS)) {
+    for (const portal of other.portals) {
+      if (portal.to === mapId) spots.push({ tx: portal.toTx, ty: portal.toTy });
+    }
+  }
+  return spots;
+}
+
+/**
+ *  물길을 놓습니다.
+ *
+ *  ★ 물은 못 지나갑니다. 그래서 물길은 지도를 두 쪽으로 가르고, 건너는 자리(여울)가
+ *    곧 길목이 됩니다. 여울을 길찾기(carve)가 알아서 뚫어주기를 기다리지 않고
+ *    ★ 데이터가 정한 자리에 손으로 놓습니다 — 저절로 되는 것에 기대면
+ *    씨앗 하나 바뀔 때 여울이 엉뚱한 곳으로 갑니다.
+ */
+function carveRiver(map: MapRuntime, river: NonNullable<MapDef['river']>): void {
+  const { def } = map;
+  const half = river.width / 2;
+  const centerAt = (ty: number) => river.x + Math.sin(ty / 5.5) * river.wobble;
+
+  for (let ty = 1; ty < def.height - 1; ty++) {
+    const cx = centerAt(ty);
+    for (let tx = Math.round(cx - half); tx <= Math.round(cx + half); tx++) {
+      if (tx <= 0 || tx >= def.width - 1) continue; // 바깥 테두리는 벽으로 둡니다
+      set(map, tx, ty, LIQUID);
+    }
+  }
+
+  // 여울 — 물길이 끊기고 바닥이 드러나는 세 줄
+  for (let ty = river.fordY - 1; ty <= river.fordY + 1; ty++) {
+    if (ty <= 0 || ty >= def.height - 1) continue;
+    const cx = centerAt(ty);
+    for (let tx = Math.round(cx - half) - 2; tx <= Math.round(cx + half) + 2; tx++) {
+      if (tx <= 0 || tx >= def.width - 1) continue;
+      set(map, tx, ty, FLOOR);
+    }
+  }
+}
 
 function set(map: MapRuntime, tx: number, ty: number, value: number): void {
   if (tx < 0 || ty < 0 || tx >= map.def.width || ty >= map.def.height) return;
@@ -193,16 +241,27 @@ export function buildMap(def: MapDef): MapRuntime {
     }
   }
 
-  // 3) 문·사람·입구 앞은 반드시 비워둡니다
+  // 3) 물길 — 지도를 세로로 가르고, ★ 건너는 자리는 손으로 놓습니다
+  if (def.river) carveRiver(map, def.river);
+
+  // 4) 문·사람·입구 앞은 반드시 비워둡니다
   clearAround(map, def.entryTx, def.entryTy, 2);
   for (const portal of def.portals) clearAround(map, portal.tx, portal.ty, 2);
   for (const npc of def.npcs) clearAround(map, npc.tx, npc.ty, 2);
+  // ★ 다른 지도에서 이리로 내려놓는 칸도 비웁니다.
+  //   예전에는 도착 칸이 어쩌다 문 옆(clearAround 반경 안)이라 우연히 걸을 수 있었을 뿐이고,
+  //   문을 하나만 옮겨도 나무 한가운데에 떨어질 수 있었습니다.
+  for (const spot of arrivalsInto(def.id)) clearAround(map, spot.tx, spot.ty, 2);
 
-  // 4) 입구에서 모든 문까지 실제로 걸어갈 수 있는지 확인하고, 막혔으면 길을 냅니다
+  // 5) 입구에서 모든 문·도착 칸까지 실제로 걸어갈 수 있는지 확인하고, 막혔으면 길을 냅니다
   let mask = reachableMask(map, def.entryTx, def.entryTy);
-  for (const portal of def.portals) {
-    if (!mask[portal.ty * def.width + portal.tx]) {
-      carve(map, def.entryTx, def.entryTy, portal.tx, portal.ty);
+  const mustReach = [
+    ...def.portals.map((p) => ({ tx: p.tx, ty: p.ty })),
+    ...arrivalsInto(def.id),
+  ];
+  for (const spot of mustReach) {
+    if (!mask[spot.ty * def.width + spot.tx]) {
+      carve(map, def.entryTx, def.entryTy, spot.tx, spot.ty);
       mask = reachableMask(map, def.entryTx, def.entryTy);
     }
   }

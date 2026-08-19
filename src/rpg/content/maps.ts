@@ -1,7 +1,21 @@
 /**
- *  지역 셋.
+ *  지역 넷.
  *
- *      실버우드 마을 ── 초록 숲 ── 버려진 광산
+ *      마을 ┬ 초록 숲 ── 버려진 광산
+ *           ├ 버려진 광산   (직통 — 광석을 지고 숲을 되짚지 않아도 됩니다)
+ *           └ 강가
+ *
+ *  ★ 마을에서 나가는 길이 하나뿐이면 "오늘 뭘 해볼까"의 답이 늘 같습니다.
+ *    셋으로 갈리되, 갈 이유가 서로 달라야 갈림길이 됩니다.
+ *      숲   가깝고 만만하다. 철과 검술
+ *      광산 가장 좋은 광석. 대신 깊이와 거미
+ *      강가 구리로 가는 두 번째 길. 깊이 대신 다른 위험(큰게)
+ *
+ *  ★ 문을 늘릴 때 지켜야 하는 것이 둘 있습니다 (tests/rpg/maps.test.ts 가 지킵니다).
+ *    1) 문은 양쪽에 적습니다. 한쪽만 적으면 아무도 모릅니다.
+ *    2) 도착 칸은 그 지도의 모든 문에서 3칸 넘게 떨어뜨립니다 —
+ *       engine 의 checkPortals 는 22.4px 안에 들어오면 곧바로 다시 보내므로,
+ *       가까우면 두 지역을 무한히 오갑니다.
  *
  *  ★ 문 앞에 권장 레벨이 없습니다. 들어갈지 말지는 스스로 판단합니다.
  *    다만 광산 깊은 곳에는 거미가 있고, 준비 없이 들어가면 죽습니다.
@@ -32,6 +46,11 @@ const LIST: MapDef[] = [
     forge: { tx: 21, ty: 11 },
     portals: [
       { tx: 15, ty: 21, to: 'forest', toTx: 5, toTy: 18, label: '초록 숲' },
+      // ★ 광산 직통. 광석은 무겁고 짐칸은 작아서, 숲을 되짚어 나오는 왕복이
+      //   광산의 값어치를 깎고 있었습니다. 도착 칸은 광산의 기존 입구 그대로입니다 —
+      //   minDepth 기울기가 그 한 점에서만 재어지므로 다른 데로 내려놓으면 거미 옆입니다.
+      { tx: 27, ty: 19, to: 'mine', toTx: 4, toTy: 20, label: '버려진 광산' },
+      { tx: 3, ty: 19, to: 'river', toTx: 5, toTy: 15, label: '강가' },
     ],
   },
   {
@@ -56,7 +75,7 @@ const LIST: MapDef[] = [
     ],
     npcs: [],
     portals: [
-      { tx: 2, ty: 18, to: 'town', toTx: 15, toTy: 19, label: '마을' },
+      { tx: 2, ty: 18, to: 'town', toTx: 15, toTy: 18, label: '마을' },
       { tx: 43, ty: 18, to: 'mine', toTx: 4, toTy: 20, label: '버려진 광산' },
     ],
   },
@@ -85,7 +104,37 @@ const LIST: MapDef[] = [
     ],
     npcs: [],
     portals: [
-      { tx: 2, ty: 20, to: 'forest', toTx: 41, toTy: 18, label: '초록 숲' },
+      { tx: 1, ty: 20, to: 'forest', toTx: 40, toTy: 18, label: '초록 숲' },
+      { tx: 4, ty: 24, to: 'town', toTx: 24, toTy: 19, label: '마을' },
+    ],
+  },
+  {
+    id: 'river',
+    name: '강가',
+    subtitle: '물길이 갈라놓은 자리. 건너편에 구리가 비칩니다',
+    theme: 'river',
+    width: 40, height: 30,
+    safe: false,
+    seed: 3003,
+    clutter: 0.1,
+    entryTx: 5, entryTy: 15,
+    spawns: [
+      // ★ 큰게는 입구가 아니라 ★물길을 지킵니다. minDepth 6 으로 두었더니 들어서자마자
+      //   서넛이 몰려 시작 장비로는 발도 못 붙였습니다 — 서쪽 기슭은 일할 수 있어야 하고,
+      //   값은 건널 때 치르는 것이 이 지역의 뜻입니다.
+      { monsterId: 'river-crab', count: 6, minDepth: 12 },
+    ],
+    veins: [
+      // 건너지 않아도 캘 것은 있습니다 — 다만 좋은 것은 물 건너입니다
+      { veinId: 'iron-deep', count: 4, minDepth: 8 },
+      // ★ 구리로 가는 두 번째 길. 광산 30칸 안쪽(거미)까지 가지 않아도 되지만,
+      //   대신 물을 건너고 큰게를 상대해야 합니다.
+      { veinId: 'copper-shallow', count: 5, minDepth: 18 },
+    ],
+    npcs: [],
+    river: { x: 20, wobble: 3, width: 3, fordY: 20 },
+    portals: [
+      { tx: 2, ty: 15, to: 'town', toTx: 6, toTy: 19, label: '마을' },
     ],
   },
 ];

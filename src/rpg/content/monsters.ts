@@ -1,5 +1,5 @@
 /**
- *  몬스터 넷.
+ *  몬스터 다섯.
  *
  *  ★ 레벨도 권장 레벨도 없습니다. 난이도(difficulty)만 있습니다.
  *
@@ -41,6 +41,19 @@ const LIST: MonsterDef[] = [
     shape: 'bat', color: '#8a7aa8', size: 11,
     goldMin: 6, goldMax: 15, respawn: 60,
     drops: [{ defId: 'potion-heal', chance: 0.07 }],
+  },
+  {
+    // ★ 늑대(30)와 거미(65) 사이가 비어 있었습니다. 강가가 그 자리입니다.
+    //   게 다리는 거미와 같은 실루엣을 쓰되 색이 달라서, 동굴 것과 헷갈리지 않습니다.
+    id: 'river-crab', name: '강가 큰게', difficulty: 45,
+    hp: 130, minDamage: 11, maxDamage: 18, defense: 9,
+    attackRange: 32, attackInterval: 1.35, moveSpeed: 104, aggroRange: 200,
+    shape: 'spider', color: '#9c5a44', size: 15,
+    goldMin: 14, goldMax: 34, respawn: 85,
+    drops: [
+      { defId: 'potion-heal', chance: 0.1 },
+      { defId: 'copper-ore', chance: 0.12 },
+    ],
   },
   {
     id: 'cave-spider', name: '동굴 거미', difficulty: 65,

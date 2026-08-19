@@ -14,7 +14,7 @@
 
 import { GATHER } from '../src/rpg/balance';
 import { itemDef } from '../src/rpg/content/items';
-import { mapDef } from '../src/rpg/content/maps';
+import { MAP_ORDER, mapDef } from '../src/rpg/content/maps';
 import { monsterDef } from '../src/rpg/content/monsters';
 import { RECIPE_ORDER, recipeDef } from '../src/rpg/content/recipes';
 import { veinDef } from '../src/rpg/content/veins';
@@ -49,32 +49,70 @@ export interface Pilot {
   traveling: boolean;
   /** 이 시각까지는 마을로 돌아가지 않습니다 (마을에서 막 나왔을 때) */
   outUntil: number;
+  /** 길을 못 찾은 적 — 비어 있어야 정상입니다 (조용히 넘어가지 않으려고 남깁니다) */
+  stranded: string[];
 }
 
 export function newPilot(focus: Focus = 'balanced'): Pilot {
-  return { goal: 'gather', focus, hunting: 'forest', traveling: false, outUntil: 0 };
+  return { goal: 'gather', focus, hunting: 'forest', traveling: false, outUntil: 0, stranded: [] };
 }
 
 /* --------------------------------------------------------------- 길 안내 */
 
-const LINE: MapId[] = ['town', 'forest', 'mine'];
+/**
+ *  다음에 넘어갈 지역 한 칸.
+ *
+ *  ★ 예전에는 ['town','forest','mine'] 한 줄을 박아두고 앞뒤로만 갔습니다.
+ *    마을에서 나가는 길이 셋이 되자 그 가정이 무너집니다 —
+ *    광산 직통이 있어도 숲으로 돌아가고, 그 줄에 없는 강은 아예 못 찾습니다.
+ *    이제 문이 만든 그래프를 그대로 너비 우선으로 훑습니다.
+ *    지역이 몇 개든, 어떤 모양이든, 문만 이어져 있으면 길을 찾습니다.
+ */
+export function nextHop(from: MapId, to: MapId): MapId | null {
+  if (from === to) return null;
 
-/** 세 지역이 한 줄이므로 다음 한 칸만 알면 됩니다 */
-function nextHop(from: MapId, to: MapId): MapId | null {
-  const a = LINE.indexOf(from);
-  const b = LINE.indexOf(to);
-  if (a < 0 || b < 0 || a === b) return null;
-  return LINE[a + (b > a ? 1 : -1)]!;
+  const cameFrom = new Map<MapId, MapId>();
+  const seen = new Set<MapId>([from]);
+  const queue: MapId[] = [from];
+
+  while (queue.length > 0) {
+    const here = queue.shift()!;
+    for (const portal of mapDef(here).portals) {
+      if (seen.has(portal.to)) continue;
+      seen.add(portal.to);
+      cameFrom.set(portal.to, here);
+
+      if (portal.to === to) {
+        // 목적지에서 거슬러 올라가, 지금 지역 바로 다음 칸을 집어냅니다
+        let step: MapId = to;
+        while (cameFrom.get(step) !== from) {
+          const back = cameFrom.get(step);
+          if (back === undefined) return null;
+          step = back;
+        }
+        return step;
+      }
+      queue.push(portal.to);
+    }
+  }
+  return null;
 }
 
 /** 목표 지역 쪽 문으로 걸어갑니다. 도착했으면 true */
 function travel(world: World, to: MapId, pilot: Pilot): boolean {
   if (world.mapId === to) return true;
-  const hop = nextHop(world.mapId, to);
-  if (!hop) return true;
 
-  const portal = world.map.def.portals.find((p) => p.to === hop);
-  if (!portal) return true;
+  const hop = nextHop(world.mapId, to);
+  const portal = hop === null ? undefined : world.map.def.portals.find((p) => p.to === hop);
+
+  if (hop === null || !portal) {
+    // ★ 예전에는 여기서 그냥 true("도착했다")를 돌려줬습니다.
+    //   봇은 엉뚱한 지역에 선 채로 캐기 시작하고, 실측은 아무 일 없다는 듯 숫자를 냈습니다.
+    //   길이 없으면 없다고 적어둡니다 — sim 이 이 값을 함께 찍습니다.
+    pilot.stranded.push(`${world.mapId} → ${to}`);
+    pilot.traveling = false;
+    return true;
+  }
 
   pilot.traveling = true;
   world.me.targetId = null;
@@ -383,7 +421,8 @@ function betterMineMap(world: World): MapId | null {
   const here = bestVeinChance(world.mapId, skill);
   let best: MapId | null = null;
   let bestChance = here * 1.6; // 늑대밭을 가로지를 값어치가 있을 만큼 확실히 나을 때만
-  for (const mapId of LINE) {
+  // ★ 지역 목록을 여기서 다시 적지 않습니다. 지역을 늘리면 저절로 후보가 됩니다.
+  for (const mapId of MAP_ORDER) {
     const chance = bestVeinChance(mapId, skill);
     if (chance > bestChance) {
       best = mapId;
