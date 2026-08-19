@@ -212,12 +212,12 @@ function finishMining(world: World, veinId: number, repeat: boolean): void {
     const amount = randInt(world, def.amountMin, def.amountMax);
     if (!canCarry(me, def.yields, amount)) {
       toast(world, '더 들 수 없습니다. 마을로 돌아가세요.', 'bad');
-      floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '짐이 가득 참', 'info');
+      floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '짐이 가득 참', 'info', 'pack-full');
       return;
     }
     addItem(world, def.yields, amount);
     me.tally[def.yields] = (me.tally[def.yields] ?? 0) + amount;
-    floater(world, vein.pos, `+${amount} ${itemDef(def.yields).name}`, 'info');
+    floater(world, vein.pos, `+${amount} ${itemDef(def.yields).name}`, 'info', 'ore');
     vein.remaining -= 1;
 
     if (vein.remaining <= 0) {
@@ -226,7 +226,7 @@ function finishMining(world: World, veinId: number, repeat: boolean): void {
       return;
     }
   } else {
-    floater(world, vein.pos, '실패', 'miss');
+    floater(world, vein.pos, '실패', 'miss', 'mine-fail');
   }
 
   if (repeat) startMining(world, veinId, true);
@@ -261,7 +261,7 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
       if (back > 0) addItem(world, need.defId, back);
     }
     log(world, `${recipe.name} 만들기에 실패했습니다`, 'bad');
-    floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '실패', 'miss');
+    floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '실패', 'miss', 'craft-fail');
     if (repeat) startCraft(world, recipeId, true);
     return;
   }
@@ -279,7 +279,9 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
 
   const madeName = quality === 'fine' ? `우수한 ${itemDef(recipe.makes).name}` : itemDef(recipe.makes).name;
   log(world, `${madeName} 완성`, quality === 'fine' ? 'epic' : 'good');
-  if (quality === 'fine') toast(world, `우수한 물건\n${itemDef(recipe.makes).name}`, 'epic');
+  if (quality === 'fine') {
+    toast(world, `우수한 물건\n${itemDef(recipe.makes).name}`, 'epic', 'craft-fine');
+  }
 
   if (repeat) startCraft(world, recipeId, true);
 }

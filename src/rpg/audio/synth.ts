@@ -43,6 +43,8 @@ export interface Common {
   jitter?: number;
   /** 같은 소리인지 가리는 이름. 없으면 종류 이름을 씁니다 */
   key?: string;
+  /** 정적(§4.7) 중에도 통과시킵니다 — 정적 한가운데 울려야 하는 소리 하나뿐입니다 */
+  force?: boolean;
 }
 
 export interface NoiseOptions extends Common {
@@ -138,7 +140,7 @@ function noiseSource(ctx: BaseAudioContext, voice: Voice, durSeconds: number): A
 }
 
 function begin(kind: string, options: Common): { voice: Voice; ctx: BaseAudioContext; dur: number } | null {
-  const voice = takeVoice(options.key ?? kind, options.dur, options.at ?? 0);
+  const voice = takeVoice(options.key ?? kind, options.dur, options.at ?? 0, options.force ?? false);
   if (!voice) return null;
   const ctx = voice.out.context;
   return { voice, ctx, dur: Math.max(0.001, options.dur / 1000) };
