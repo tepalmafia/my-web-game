@@ -186,14 +186,64 @@ export function exportSave(world: World): string {
   return toBase64(JSON.stringify(pack(world)));
 }
 
-/** 글자에서 되살립니다. 형식이 아니면 null */
-export function importSave(code: string): World | null {
+/**
+ *  글자를 읽어본 결과.
+ *
+ *  ★ 예전에는 importSave 가 null 하나만 돌려줬습니다. 붙여넣기가 안 먹으면
+ *    글자가 잘린 건지, 다른 게임 글자인지, 판이 다른 건지 알 방법이 없었습니다 —
+ *    이 프로젝트가 계속 잡고 있는 그 조용한 실패입니다.
+ */
+export type SaveCodeResult = { ok: true; world: World } | { ok: false; problem: string };
+
+/** 글자를 읽어봅니다. 안 되면 왜 안 되는지 함께 돌려줍니다 (저장은 하지 않습니다) */
+export function readSaveCode(code: string): SaveCodeResult {
+  const trimmed = code.trim();
+  if (!trimmed) return { ok: false, problem: '붙여넣은 글자가 없습니다.' };
+
+  let json: string;
   try {
-    const data = JSON.parse(fromBase64(code)) as SaveData;
-    const world = rebuild(data);
-    if (world) saveWorld(world);
-    return world;
+    json = fromBase64(trimmed);
   } catch {
-    return null;
+    return {
+      ok: false,
+      problem: '기록 글자가 아닙니다. 내보내기로 받은 글자를 통째로(앞뒤 하나도 빠짐없이) 붙여넣으세요.',
+    };
   }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    return { ok: false, problem: '글자가 중간에 잘렸거나 섞였습니다. 전체를 다시 복사해 보세요.' };
+  }
+
+  if (!data || typeof data !== 'object') {
+    return { ok: false, problem: '이 게임의 기록이 아닙니다.' };
+  }
+
+  const save = data as Partial<SaveData>;
+  if (typeof save.version !== 'number' || !save.me) {
+    return { ok: false, problem: '이 게임의 기록이 아닙니다.' };
+  }
+  if (save.version !== VERSION) {
+    return {
+      ok: false,
+      problem: `${save.version}판 기록입니다. 지금 게임은 ${VERSION}판만 읽을 수 있습니다.`,
+    };
+  }
+  if (typeof save.me.name !== 'string' || !save.me.skills) {
+    return { ok: false, problem: '기록 안의 인물이 망가졌습니다.' };
+  }
+
+  const world = rebuild(save as SaveData);
+  if (!world) return { ok: false, problem: '기록을 되살리지 못했습니다.' };
+  return { ok: true, world };
+}
+
+/** 글자에서 되살리고 저장까지 합니다. 형식이 아니면 null */
+export function importSave(code: string): World | null {
+  const result = readSaveCode(code);
+  if (!result.ok) return null;
+  saveWorld(result.world);
+  return result.world;
 }

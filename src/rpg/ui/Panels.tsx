@@ -17,10 +17,11 @@ import { SLOT_LABEL, craft, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
-import type { EquipSlot, ItemStack, PanelId, World } from '../types';
+import type { EquipSlot, ItemKind, ItemStack, PanelId, World } from '../types';
 import { duration, fmt, percent } from './format';
 
-const KIND_ICON: Record<string, string> = {
+/** 가방 줄 앞에 붙는 한 글자 — 종류를 늘리면 컴파일이 막습니다 */
+export const KIND_ICON: Record<ItemKind, string> = {
   weapon: '검', armor: '갑', helmet: '투', tool: '연', resource: '광', potion: '물',
 };
 

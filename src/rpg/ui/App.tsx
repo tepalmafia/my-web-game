@@ -20,6 +20,12 @@ export function App() {
           if (loaded) setWorld(loaded);
           else setSaveExists(false);
         }}
+        onImported={(imported: World) => {
+          // readSaveCode 가 이미 읽어본 세계입니다 — 그대로 저장하고 바로 들어갑니다
+          saveWorld(imported);
+          setSaveExists(true);
+          setWorld(imported);
+        }}
         onStart={(name: string, templateId: string) => {
           clearSave();
           newSlot();

@@ -19,6 +19,8 @@ import { monsterDef } from '../../src/rpg/content/monsters';
 import { nearForge } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
+import { WEAPON_LOOK } from '../../src/rpg/ui/art/actors';
+import { KIND_ICON } from '../../src/rpg/ui/Panels';
 import {
   drawForge,
   drawForgeLabel,
@@ -26,7 +28,9 @@ import {
   drawThreatMarks,
   drawThreatRings,
   drawVeinRings,
+  ITEM_TINT,
   label,
+  NPC_ROLE,
   setLabelBlockout,
 } from '../../src/rpg/ui/art/effects';
 import { MATERIAL } from '../../src/rpg/ui/art/palette';
@@ -369,5 +373,107 @@ describe('작은 지도에 가리는 이름표', () => {
     expect(outside.texts).toContain('늑대');
 
     setLabelBlockout(null);
+  });
+});
+
+/* ===========================================================================
+ *  표와 실제 것들을 맞춰본다 (MATERIAL 과 같은 양방향 검사)
+ * ======================================================================== */
+
+/**
+ *  ★ 이 네 표는 모두 "없으면 조용히 기본값" 으로 떨어집니다.
+ *    MATERIAL 이 옛 아이템 id 를 들고 있으면서 한 번도 조회에 성공하지 못했던 것과 같은 고장입니다.
+ *
+ *  ★ ITEM_TINT · KIND_ICON · NPC_ROLE 은 이번에 Record<string,…> 에서
+ *    Record<ItemKind,…> · Record<NpcKind,…> 로 바꿨습니다 — 빠뜨리면 컴파일이 막습니다.
+ *    그래도 컴파일이 못 잡는 것이 남습니다: 값이 서로 겹치면 구분이 안 됩니다.
+ *    WEAPON_LOOK 만은 키가 아이템 id(그냥 string)라 컴파일이 지켜주지 못하므로
+ *    여기 검사가 유일한 그물입니다.
+ */
+
+const WEAPONS = Object.values(ITEMS).filter((def) => def.kind === 'weapon');
+
+describe('WEAPON_LOOK ↔ 무기', () => {
+  it('무기에는 빠짐없이 생김새가 있다', () => {
+    const missing = WEAPONS.filter((def) => !WEAPON_LOOK[def.id]).map((def) => `${def.id}(${def.name})`);
+    expect(missing, `실루엣이 없는 무기: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('없는 물건의 생김새가 남아 있지 않다', () => {
+    const ids = new Set(Object.keys(ITEMS));
+    const dead = Object.keys(WEAPON_LOOK).filter((id) => !ids.has(id));
+    expect(dead, `없는 물건의 실루엣: ${dead.join(', ')}`).toEqual([]);
+  });
+
+  it('표에 적힌 것은 전부 무기다', () => {
+    const notWeapon = Object.keys(WEAPON_LOOK).filter((id) => ITEMS[id] && ITEMS[id]!.kind !== 'weapon');
+    expect(notWeapon, `무기가 아닌데 실루엣이 있습니다: ${notWeapon.join(', ')}`).toEqual([]);
+  });
+
+  it('무기마다 실루엣이 다르다 — 같으면 바꿔 든 것을 알 수 없다', () => {
+    const shapes = WEAPONS.map((def) => {
+      const look = WEAPON_LOOK[def.id]!;
+      return `${look.grip}/${look.guard}/${look.width}/${look.tip}/${look.reach}`;
+    });
+    expect(new Set(shapes).size, `실루엣이 겹칩니다: ${shapes.join(' · ')}`).toBe(WEAPONS.length);
+  });
+});
+
+describe('ITEM_TINT ↔ 물건 종류', () => {
+  it('실제로 쓰이는 종류가 빠짐없이 있다', () => {
+    const used = new Set(Object.values(ITEMS).map((def) => def.kind));
+    const missing = [...used].filter((kind) => !ITEM_TINT[kind]);
+    expect(missing, `바닥에 떨어지면 색이 없는 종류: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('쓰이지 않는 종류가 남아 있지 않다', () => {
+    const used = new Set(Object.values(ITEMS).map((def) => def.kind));
+    const dead = Object.keys(ITEM_TINT).filter((kind) => !used.has(kind as never));
+    expect(dead, `아무 물건도 쓰지 않는 종류: ${dead.join(', ')}`).toEqual([]);
+  });
+
+  it('갑옷과 투구를 뺀 종류끼리는 색이 다르다', () => {
+    // 갑옷·투구는 일부러 같은 색입니다 (둘 다 '입는 쇠붙이')
+    const tints = Object.entries(ITEM_TINT).filter(([kind]) => kind !== 'helmet').map(([, color]) => color);
+    expect(new Set(tints).size, `색이 겹칩니다: ${tints.join(' ')}`).toBe(tints.length);
+  });
+});
+
+describe('KIND_ICON ↔ 물건 종류', () => {
+  it('실제로 쓰이는 종류가 빠짐없이 있다', () => {
+    const used = new Set(Object.values(ITEMS).map((def) => def.kind));
+    const missing = [...used].filter((kind) => !KIND_ICON[kind]);
+    expect(missing, `가방에서 글자가 안 붙는 종류: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('쓰이지 않는 종류가 남아 있지 않다', () => {
+    const used = new Set(Object.values(ITEMS).map((def) => def.kind));
+    const dead = Object.keys(KIND_ICON).filter((kind) => !used.has(kind as never));
+    expect(dead, `아무 물건도 쓰지 않는 종류: ${dead.join(', ')}`).toEqual([]);
+  });
+
+  it('종류마다 글자가 다르고, 한 글자다', () => {
+    const icons = Object.values(KIND_ICON);
+    expect(new Set(icons).size, `글자가 겹칩니다: ${icons.join(' ')}`).toBe(icons.length);
+    expect(icons.filter((icon) => [...icon].length !== 1), '한 글자가 아닌 것이 있습니다').toEqual([]);
+  });
+});
+
+describe('NPC_ROLE ↔ 마을 사람', () => {
+  it('지도에 서 있는 사람의 역할이 빠짐없이 있다', () => {
+    const standing = new Set(Object.values(MAPS).flatMap((def) => def.npcs.map((npc) => npc.kind)));
+    const missing = [...standing].filter((kind) => !NPC_ROLE[kind]);
+    expect(missing, `역할이 없는 사람: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('지도에 없는 역할이 남아 있지 않다', () => {
+    const standing = new Set(Object.values(MAPS).flatMap((def) => def.npcs.map((npc) => npc.kind)));
+    const dead = Object.keys(NPC_ROLE).filter((kind) => !standing.has(kind as never));
+    expect(dead, `아무도 맡지 않은 역할: ${dead.join(', ')}`).toEqual([]);
+  });
+
+  it('역할 이름이 서로 다르다', () => {
+    const roles = Object.values(NPC_ROLE);
+    expect(new Set(roles).size, `역할 이름이 겹칩니다: ${roles.join(' ')}`).toBe(roles.length);
   });
 });

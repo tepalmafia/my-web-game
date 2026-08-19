@@ -233,7 +233,14 @@ interface WeaponLook {
 const IRON = '#c3cbd6';
 const BRASS = '#c9a227';
 
-const WEAPON_LOOK: Record<string, WeaponLook> = {
+/**
+ *  무기 하나하나의 생김새.
+ *
+ *  ★ 여기 키는 아이템 id 입니다. id 가 그냥 string 이라 컴파일이 지켜주지 못합니다.
+ *    무기를 늘리고 여기를 잊으면 조용히 기본 실루엣으로 떨어집니다 —
+ *    그래서 tests/rpg/art.test.ts 가 밖에서 맞춰봅니다.
+ */
+export const WEAPON_LOOK: Record<string, WeaponLook> = {
   // 짧고 넓다. 코등이는 거의 없다시피
   'iron-dagger': { grip: 4, guard: 2.4, width: 2.7, tip: 1, reach: 0.72, blade: IRON, metal: '#9c8f79' },
   // 낡아서 날이 탁하다

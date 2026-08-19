@@ -4,13 +4,15 @@ import { useState } from 'react';
 
 import { SKILLS } from '../content/skills';
 import { TEMPLATES } from '../core/create';
-import type { SkillId } from '../types';
+import type { SkillId, World } from '../types';
+import { SaveCodePanel } from './SaveCodePanel';
 
 export function TitleScreen({
-  onStart, onContinue, hasSave,
+  onStart, onContinue, onImported, hasSave,
 }: {
   onStart: (name: string, templateId: string) => void;
   onContinue: () => void;
+  onImported: (world: World) => void;
   hasSave: boolean;
 }) {
   const [name, setName] = useState('');
@@ -114,6 +116,8 @@ export function TitleScreen({
             {hasSave ? '새로 시작하기 (기존 기록은 지워집니다)' : '모험 시작'}
           </button>
         </section>
+
+        <SaveCodePanel hasSave={hasSave} onImported={onImported} />
 
         <section className="grid gap-x-8 gap-y-4 text-[13px] leading-relaxed text-parch-300 sm:grid-cols-2">
           <div>
