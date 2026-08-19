@@ -204,59 +204,159 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, world: World): void {
   void weapon;
 }
 
+/* ===========================================================================
+ *  손에 든 무기
+ * ======================================================================== */
+
 /**
- * 무기를 든 팔. 쉴 때는 아래로 늘어뜨렸다가 때릴 때만 앞으로 휘두릅니다.
- * (몸 한가운데에서 방향대로 뻗게 했더니 머리를 뚫는 창처럼 보였습니다)
+ *  무기 하나하나의 생김새.
+ *
+ *  ★ 만드는 게임이므로 **만든 것이 무엇인지 한눈에 보여야** 합니다.
+ *    길이만 다르면 단검과 장검이 같은 물건으로 보이고, 제작의 보람이 줄어듭니다.
+ *    그래서 자루 길이 · 코등이 크기 · 날의 폭과 색으로 실루엣을 갈랐습니다.
+ */
+interface WeaponLook {
+  /** 자루 길이 */
+  grip: number;
+  /** 코등이 반높이 (클수록 십자가 크게) */
+  guard: number;
+  /** 날 밑동 반너비 */
+  width: number;
+  /** 날 끝 반너비 (작을수록 뾰족) */
+  tip: number;
+  /** 길이 배수 */
+  reach: number;
+  blade: string;
+  metal: string;
+}
+
+const IRON = '#c3cbd6';
+const BRASS = '#c9a227';
+
+const WEAPON_LOOK: Record<string, WeaponLook> = {
+  // 짧고 넓다. 코등이는 거의 없다시피
+  'iron-dagger': { grip: 4, guard: 2.4, width: 2.7, tip: 1, reach: 0.72, blade: IRON, metal: '#9c8f79' },
+  // 낡아서 날이 탁하다
+  'rusty-sword': { grip: 5, guard: 3.2, width: 2.4, tip: 1.1, reach: 0.9, blade: '#9c968b', metal: '#7d6a4a' },
+  'iron-sword': { grip: 5, guard: 4.4, width: 2.8, tip: 1.1, reach: 1, blade: IRON, metal: BRASS },
+  // 자루가 길어 두 손으로 쥔다. 가늘고 길다
+  'iron-longsword': { grip: 7.5, guard: 5.6, width: 2.5, tip: 0.9, reach: 1.16, blade: '#cfd6df', metal: BRASS },
+  // 구릿빛. 코등이가 넓고 날이 두껍다
+  'copper-sword': { grip: 5.5, guard: 5.2, width: 3.3, tip: 1.4, reach: 1.04, blade: '#c98f5e', metal: '#8a5a30' },
+};
+
+const DEFAULT_LOOK: WeaponLook = {
+  grip: 5, guard: 4, width: 2.6, tip: 1.1, reach: 1, blade: IRON, metal: BRASS,
+};
+
+/** engine 이 정해 두는 휘두르는 시간. 값은 core 의 것을 따라 읽기만 합니다 */
+const SWING_TIME = 0.28;
+
+/**
+ *  대기 자세 — 검을 앞·위로 세워 듭니다 (약 -54°).
+ *  ★ 예전에는 아래로 늘어뜨렸는데, 어깨가 회전 중심이라 손이 위·칼끝이 아래로 가서
+ *    거꾸로 쥔 것처럼 보였습니다.
+ */
+const GUARD_ANGLE = -0.85;
+
+/**
+ *  때린 순간의 자세 — 앞·아래로 베어 내린 곳 (약 +36°).
+ *
+ *  ★ 임팩트는 **애니메이션 0프레임**입니다. engine 이 world.meSwing 을 세우는 바로
+ *    그 순간에 피해·소리·히트스톱이 함께 일어나기 때문입니다(engine.ts playerAttack).
+ *    그래서 '치켜들었다가 내려친다'의 치켜드는 쪽은 앞선 공격의 **복귀 동작**이
+ *    맡습니다 — 대기 자세가 곧 치켜든 자세입니다.
+ */
+const STRIKE_ANGLE = 0.62;
+
+/** 때린 자세를 잠깐 머물렀다가 부드럽게 돌아옵니다 */
+function smoothstep(t: number): number {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+}
+
+/**
+ * 무기를 든 팔.
+ *
+ * 어깨를 중심으로 팔 → 주먹 → 자루 → 코등이 → 날 순서로 바깥을 향해 뻗습니다.
+ * (몸 한가운데에서 바라보는 방향대로 뻗게 했더니 머리를 뚫는 창처럼 보였습니다.
+ *  그래서 방향과 무관하게 어깨 옆에서만 움직입니다 — 겨냥은 칼자국 효과가 알립니다.)
  */
 function drawArmedHand(ctx: CanvasRenderingContext2D, world: World): void {
   const me = world.me;
   const weapon = me.equipped.weapon;
   const weaponDef = weapon ? itemDef(weapon.defId) : null;
 
-  const swing = world.meSwing > 0 ? Math.sin((1 - world.meSwing / 0.28) * Math.PI) : 0;
-  const aim = Math.cos(me.facing) < 0 ? Math.PI - me.facing : me.facing;
-  const rest = 0.75;
+  // 0 = 때린 순간, 1 = 다 돌아옴
+  const phase = world.meSwing > 0 ? 1 - world.meSwing / SWING_TIME : 1;
+  const angle = STRIKE_ANGLE + (GUARD_ANGLE - STRIKE_ANGLE) * smoothstep(phase);
+
+  const armed = !!weaponDef && weaponDef.minDamage !== undefined;
+  const look = armed ? WEAPON_LOOK[weaponDef!.id] ?? DEFAULT_LOOK : DEFAULT_LOOK;
+  const reach = armed ? (14 + (weaponDef!.maxDamage ?? 8) * 0.5) * look.reach : 0;
 
   ctx.save();
   ctx.translate(7, -6);
-  ctx.rotate(rest + swing * (aim - rest - 1.2));
+
+  // 지나간 자리 — 실제로 칼끝이 훑고 간 호를 그대로 그립니다
+  if (armed && phase < 0.55) {
+    ctx.save();
+    ctx.strokeStyle = alpha('#ffffff', (1 - phase / 0.55) * 0.45);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 12 + reach * 0.8, angle, STRIKE_ANGLE);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.rotate(angle);
 
   // 팔
   ctx.fillStyle = SKIN;
   ctx.fillRect(4, -1.8, 6, 3.6);
 
-  if (weaponDef && weaponDef.minDamage !== undefined) {
-    const blade = weapon?.quality === 'fine' ? '#dfe6ee' : '#c3cbd6';
-    const reach = 14 + (weaponDef.maxDamage ?? 8) * 0.5;
+  if (armed) {
+    const blade = weapon?.quality === 'fine' ? lighten(look.blade, 0.25) : look.blade;
+    const gripEnd = 10 + look.grip;
+    const guardX = gripEnd + 0.5;
+    const bladeX = guardX + 2.4;
 
+    // 자루 — 손보다 안쪽에서 시작해 손에 물립니다
     ctx.fillStyle = '#3a2c20';
-    ctx.fillRect(9, -1.4, 5, 2.8);
-    ctx.fillStyle = '#c9a227';
-    ctx.fillRect(13.5, -4.5, 2.4, 9);
-    ctx.fillStyle = lighten(blade, 0.35);
+    ctx.fillRect(9, -1.5, look.grip + 1, 3);
+    // 자루끝
+    ctx.fillStyle = look.metal;
+    ctx.fillRect(8, -2, 1.6, 4);
+
+    // ★ 쥔 주먹. 어디를 잡았는지 보이지 않으면 어느 쪽이 손잡이인지 알 수 없습니다
+    ctx.fillStyle = SKIN_SHADE;
     ctx.beginPath();
-    ctx.moveTo(16, -2.6);
-    ctx.lineTo(16 + reach, -1.2);
-    ctx.lineTo(16 + reach, 1.2);
-    ctx.lineTo(16, 2.6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = alpha(darken(blade, 0.35), 0.9);
-    ctx.beginPath();
-    ctx.moveTo(16, 0.4);
-    ctx.lineTo(16 + reach, 0.6);
-    ctx.lineTo(16 + reach, 1.2);
-    ctx.lineTo(16, 2.6);
-    ctx.closePath();
+    ctx.arc(11, 0, 2.7, 0, Math.PI * 2);
     ctx.fill();
 
-    if (swing > 0.2) {
-      ctx.strokeStyle = alpha('#ffffff', swing * 0.5);
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(6, 0, 26, -0.7, 0.7);
-      ctx.stroke();
-    }
+    // 코등이
+    ctx.fillStyle = look.metal;
+    ctx.fillRect(guardX, -look.guard, 2.4, look.guard * 2);
+
+    // 날
+    ctx.fillStyle = lighten(blade, 0.3);
+    ctx.beginPath();
+    ctx.moveTo(bladeX, -look.width);
+    ctx.lineTo(bladeX + reach, -look.tip);
+    ctx.lineTo(bladeX + reach + look.tip * 2.2, 0);
+    ctx.lineTo(bladeX + reach, look.tip);
+    ctx.lineTo(bladeX, look.width);
+    ctx.closePath();
+    ctx.fill();
+    // 아래쪽 그늘 — 빛은 언제나 왼쪽 위에서
+    ctx.fillStyle = alpha(darken(blade, 0.4), 0.9);
+    ctx.beginPath();
+    ctx.moveTo(bladeX, 0.3);
+    ctx.lineTo(bladeX + reach, 0.2);
+    ctx.lineTo(bladeX + reach, look.tip);
+    ctx.lineTo(bladeX, look.width);
+    ctx.closePath();
+    ctx.fill();
   } else {
     // 맨손 — 주먹만
     ctx.fillStyle = SKIN_SHADE;
@@ -369,90 +469,6 @@ function drawMonsterBody(
       ctx.fill();
       break;
     }
-
-    /* --------------------------------------------------- 고블린·오크 */
-    case 'humanoid': {
-      // 다리
-      ctx.fillStyle = tone.dark;
-      ctx.fillRect(-s * 0.45, s * 0.35, s * 0.32, s * 0.6 + walk * s * 0.18);
-      ctx.fillRect(s * 0.12, s * 0.35, s * 0.32, s * 0.6 - walk * s * 0.18);
-      // 몸통
-      ctx.fillStyle = tone.base;
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.6, -s * 0.35);
-      ctx.lineTo(s * 0.6, -s * 0.35);
-      ctx.lineTo(s * 0.45, s * 0.45);
-      ctx.lineTo(-s * 0.45, s * 0.45);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = alpha(tone.light, 0.7);
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.6, -s * 0.35);
-      ctx.lineTo(-s * 0.1, -s * 0.35);
-      ctx.lineTo(-s * 0.15, s * 0.45);
-      ctx.lineTo(-s * 0.45, s * 0.45);
-      ctx.closePath();
-      ctx.fill();
-      // 허리 가죽
-      ctx.fillStyle = '#4a3524';
-      ctx.fillRect(-s * 0.5, s * 0.15, s, s * 0.2);
-      // 팔
-      ctx.fillStyle = tone.dark;
-      ctx.fillRect(-s * 0.85, -s * 0.3, s * 0.28, s * 0.7);
-      ctx.fillRect(s * 0.6, -s * 0.3 + walk * s * 0.12, s * 0.28, s * 0.7);
-      // 머리
-      ctx.fillStyle = tone.base;
-      ctx.beginPath();
-      ctx.arc(0, -s * 0.75, s * 0.42, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = alpha(tone.light, 0.8);
-      ctx.beginPath();
-      ctx.arc(-s * 0.14, -s * 0.86, s * 0.22, 0, Math.PI * 2);
-      ctx.fill();
-      // 귀
-      ctx.fillStyle = tone.dark;
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.38, -s * 0.82);
-      ctx.lineTo(-s * 0.78, -s * 1.02);
-      ctx.lineTo(-s * 0.34, -s * 0.6);
-      ctx.closePath();
-      ctx.moveTo(s * 0.38, -s * 0.82);
-      ctx.lineTo(s * 0.78, -s * 1.02);
-      ctx.lineTo(s * 0.34, -s * 0.6);
-      ctx.closePath();
-      ctx.fill();
-      // 눈과 엄니
-      ctx.fillStyle = '#f8d34a';
-      ctx.beginPath();
-      ctx.arc(-s * 0.15, -s * 0.78, s * 0.08, 0, Math.PI * 2);
-      ctx.arc(s * 0.15, -s * 0.78, s * 0.08, 0, Math.PI * 2);
-      ctx.fill();
-      if (s > 13) {
-        ctx.fillStyle = '#e8e2d0';
-        ctx.beginPath();
-        ctx.moveTo(-s * 0.16, -s * 0.62);
-        ctx.lineTo(-s * 0.1, -s * 0.44);
-        ctx.lineTo(-s * 0.04, -s * 0.62);
-        ctx.closePath();
-        ctx.moveTo(s * 0.16, -s * 0.62);
-        ctx.lineTo(s * 0.1, -s * 0.44);
-        ctx.lineTo(s * 0.04, -s * 0.62);
-        ctx.closePath();
-        ctx.fill();
-      }
-      // 손에 든 몽둥이
-      ctx.fillStyle = '#5a4326';
-      ctx.save();
-      ctx.translate(s * 0.8, -s * 0.1);
-      ctx.rotate(-0.5 + walk * 0.2);
-      ctx.fillRect(0, -s * 0.1, s * 0.9, s * 0.2);
-      ctx.fillStyle = '#3f2e1c';
-      ctx.fillRect(s * 0.6, -s * 0.2, s * 0.36, s * 0.4);
-      ctx.restore();
-      break;
-    }
-
-
 
     /* -------------------------------------------------------- 광산 박쥐 */
     case 'bat': {
