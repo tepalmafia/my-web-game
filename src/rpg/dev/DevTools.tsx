@@ -1,20 +1,22 @@
 /**
  * ===========================================================================
- *  시험용 명령 (게임 규칙이 아닙니다)
+ *  시험용 도구 — 게임이 아닙니다
  * ===========================================================================
  *
- *  검이 닳는 것, 상위 광맥, 제작 확률 같은 것을 판단하려면 몇 시간을 놀아야 합니다.
+ *  검이 닳는 것, 상위 광맥, 제작 확률을 판단하려면 몇 시간을 놀아야 합니다.
  *  그래서 밖에서 상태를 밀어넣는 길을 둡니다.
  *
  *  ★ 규칙 안에는 if (테스트) 가 한 줄도 없습니다.
- *    여기 있는 것은 전부 core/ 가 이미 내보내고 있는 함수와, 그냥 필드 대입뿐입니다.
- *    그래서 이 파일을 통째로 지워도 게임은 한 글자도 안 달라집니다.
- *
- *  ★ 일반 플레이에서는 열리지 않습니다 — 주소에 ?dev=1 을 손으로 붙여야 합니다.
- *    그 전까지는 이 파일이 내려받아지지도 않습니다 (동적 import 라 따로 떨어진 덩어리입니다).
+ *    여기 있는 것은 전부 core/ 가 이미 내보내고 있는 함수와 그냥 필드 대입뿐입니다.
+ *    그래서 ★ 이 파일 하나와 GameScreen 의 두 줄만 지우면 흔적 없이 사라집니다.
  *
  *  ★ 세계의 난수를 건드리지 않습니다. 봇 실측(tools/sim.ts)과 같은 씨앗이면 같은 결과입니다.
+ *
+ *  손가락으로만 쓰는 폰에는 콘솔이 없어서 화면 패널을 함께 둡니다.
+ *  콘솔 명령(window.aden)도 그대로 남아 있습니다.
  */
+
+import { useEffect, useState } from 'react';
 
 import { MAX_SKILL } from '../balance';
 import { ITEMS, itemDef } from '../content/items';
@@ -49,14 +51,18 @@ function durables(world: World): ItemStack[] {
   );
 }
 
-export function attach(world: World, refresh: () => void): () => void {
-  const done = <T>(value: T): T => {
+/* ===========================================================================
+ *  명령
+ * ======================================================================== */
+
+export function createApi(world: World, refresh: () => void) {
+  const done = <T,>(value: T): T => {
     saveWorld(world);
     refresh();
     return value;
   };
 
-  const api = {
+  return {
     /** 스킬 값을 그대로 세웁니다 — aden.skill('mining', 60) */
     skill(id: string, value: number) {
       if (!isSkill(id)) throw new Error(`스킬은 ${SKILL_ORDER.join(' · ')} 중 하나입니다 (받은 것: ${id})`);
@@ -67,7 +73,7 @@ export function attach(world: World, refresh: () => void): () => void {
 
     /** 물건을 줍니다 — aden.give('iron-ingot', 100) */
     give(defId: string, count = 1) {
-      if (!ITEMS[defId]) throw new Error(`그런 물건이 없습니다: ${defId} (aden.help() 로 목록)`);
+      if (!ITEMS[defId]) throw new Error(`그런 물건이 없습니다: ${defId} (aden.items 로 목록)`);
       // ★ addItem 을 그대로 씁니다. 무게·칸 규칙에 막히면 그 사실을 알려줍니다 —
       //   규칙을 우회하면 여기서 만든 상태가 게임에서 나올 수 없는 상태가 됩니다.
       if (!addItem(world, defId, count)) {
@@ -144,7 +150,7 @@ export function attach(world: World, refresh: () => void): () => void {
     help() {
       return [
         "aden.skill('mining'|'blacksmithing'|'swordsmanship'|'defense', 0~100)",
-        "aden.give(물건id, 개수)   물건id 목록: aden.items",
+        'aden.give(물건id, 개수)   물건id 목록: aden.items',
         `aden.go('${Object.keys(MAPS).join("'|'")}')`,
         "aden.dur(0~1, 'weapon'|'armor'|'helmet'|물건id)",
         'aden.fast(초)            시간만 흘려보냅니다',
@@ -156,12 +162,154 @@ export function attach(world: World, refresh: () => void): () => void {
       return Object.keys(ITEMS);
     },
   };
+}
 
-  const holder = globalThis as unknown as { aden?: typeof api };
-  holder.aden = api;
-  console.info('[아덴] 시험용 명령이 열렸습니다. aden.help()');
+export type DevApi = ReturnType<typeof createApi>;
 
+/** 콘솔에서도 쓸 수 있게 window.aden 에 걸어둡니다 */
+export function attach(world: World, refresh: () => void): () => void {
+  const holder = globalThis as unknown as { aden?: DevApi };
+  holder.aden = createApi(world, refresh);
   return () => {
     delete holder.aden;
   };
+}
+
+/* ===========================================================================
+ *  화면 패널 — 폰에는 콘솔이 없습니다
+ * ======================================================================== */
+
+const BTN = 'btn h-10 rounded-sm px-2.5 text-[12px] text-parch-200';
+
+function Row({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="eyebrow mb-1">{title}</div>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+export function DevTools({ world, refresh }: { world: World; refresh: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null);
+  const [skillId, setSkillId] = useState<SkillId>('mining');
+
+  // 콘솔 명령은 패널을 열지 않아도 늘 붙어 있습니다
+  useEffect(() => attach(world, refresh), [world, refresh]);
+
+  const api = createApi(world, refresh);
+  const run = (fn: () => string) => {
+    try {
+      setSaid({ text: fn(), bad: false });
+    } catch (error) {
+      setSaid({ text: error instanceof Error ? error.message : String(error), bad: true });
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="btn absolute right-2 top-32 z-30 h-9 rounded-sm px-2 text-[11px] text-parch-400"
+      >
+        시험
+      </button>
+    );
+  }
+
+  return (
+    <div className="panel absolute inset-2 z-30 flex flex-col overflow-hidden rounded-sm">
+      <div className="flex shrink-0 items-center justify-between border-b border-ink-600 px-2.5 py-2">
+        <span className="display text-[13px] font-bold text-brass-300">시험용 도구</span>
+        <button type="button" onClick={() => setOpen(false)} className="btn h-9 rounded-sm px-3 text-[12px] text-parch-300">
+          닫기
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2.5">
+        <Row title="봇이 대신 놀기">
+          {[5, 15, 30, 60].map((m) => (
+            <button key={m} type="button" className={BTN} onClick={() => run(() => api.bot(m, 'balanced'))}>
+              {m}분
+            </button>
+          ))}
+        </Row>
+
+        <Row title="스킬 고르기">
+          {SKILL_ORDER.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setSkillId(id)}
+              className={`${BTN} ${skillId === id ? 'text-brass-300' : 'text-parch-400'}`}
+            >
+              {SKILLS[id].name}
+            </button>
+          ))}
+        </Row>
+        <div className="-mt-1.5 flex flex-wrap gap-1.5">
+          {[25, 50, 75, 100].map((v) => (
+            <button key={v} type="button" className={BTN} onClick={() => run(() => api.skill(skillId, v))}>
+              {SKILLS[skillId].name} {v}
+            </button>
+          ))}
+        </div>
+
+        <Row title="지역">
+          {(['town', 'forest', 'mine'] as const).map((id) => (
+            <button key={id} type="button" className={BTN} onClick={() => run(() => api.go(id))}>
+              {mapDef(id).name}
+            </button>
+          ))}
+        </Row>
+
+        <Row title="장비 닳게 하기">
+          {[0.5, 0.1, 0.02].map((r) => (
+            <button key={r} type="button" className={BTN} onClick={() => run(() => api.dur(r))}>
+              {Math.round(r * 100)}% 남기기
+            </button>
+          ))}
+        </Row>
+
+        <Row title="물건">
+          <button type="button" className={BTN} onClick={() => run(() => api.give('iron-ingot', 100))}>
+            철 주괴 100
+          </button>
+          <button type="button" className={BTN} onClick={() => run(() => api.give('iron-ore', 50))}>
+            철광석 50
+          </button>
+          <button type="button" className={BTN} onClick={() => run(() => api.give('potion-heal', 20))}>
+            물약 20
+          </button>
+        </Row>
+
+        <Row title="시간">
+          <button type="button" className={BTN} onClick={() => run(() => api.fast(30))}>
+            30초
+          </button>
+          <button type="button" className={BTN} onClick={() => run(() => api.fast(300))}>
+            5분
+          </button>
+        </Row>
+
+        {said && (
+          <p
+            className={`rounded-sm border px-2.5 py-2 text-[12px] leading-snug ${
+              said.bad
+                ? 'border-[#e88a86]/50 bg-[#3a1512]/40 text-[#e88a86]'
+                : 'border-ink-600 bg-ink-700/60 text-parch-200'
+            }`}
+          >
+            {said.text}
+          </p>
+        )}
+
+        <p className="text-[11px] leading-snug text-parch-400/70">
+          콘솔에서는 <b className="text-parch-300">aden.help()</b> — 이 패널과 같은 명령입니다.
+        </p>
+      </div>
+    </div>
+  );
 }

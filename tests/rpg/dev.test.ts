@@ -13,7 +13,7 @@ import { MAX_SKILL } from '../../src/rpg/balance';
 import { mapDef } from '../../src/rpg/content/maps';
 import { createWorld } from '../../src/rpg/core/create';
 import { countOf } from '../../src/rpg/core/inventory';
-import { attach } from '../../src/rpg/dev/console';
+import { attach } from '../../src/rpg/dev/DevTools';
 import type { World } from '../../src/rpg/types';
 
 type Api = {
