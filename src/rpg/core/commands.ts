@@ -37,32 +37,45 @@ export function clickWorld(world: World, x: number, y: number): void {
   const me = world.me;
   if (me.dead) return;
 
-  // 1) 몬스터
+  // 1) 몬스터 — 누른 자리에서 가장 가까운 것
   let picked: number | null = null;
-  let best = Infinity;
+  let monsterAt = Infinity;
   for (const monster of world.monsters) {
     if (monster.state === 'dead') continue;
     const def = monsterDef(monster.defId);
     const distance = Math.hypot(monster.pos.x - x, monster.pos.y - y);
-    if (distance <= def.size + 12 && distance < best) {
+    if (distance <= def.size + 12 && distance < monsterAt) {
       picked = monster.id;
-      best = distance;
+      monsterAt = distance;
     }
   }
-  if (picked !== null) {
+
+  // 2) 광맥 — 마찬가지로 가장 가까운 것
+  let veinId: number | null = null;
+  let veinAt = Infinity;
+  for (const vein of world.veins) {
+    const distance = Math.hypot(vein.pos.x - x, vein.pos.y - y);
+    if (distance <= TILE * 0.7 && distance < veinAt) {
+      veinId = vein.id;
+      veinAt = distance;
+    }
+  }
+
+  // ★ 둘 다 후보에 들면 **누른 자리에서 더 가까운 쪽**입니다.
+  //   예전에는 몬스터를 무조건 먼저 봐서, 광맥 한가운데를 정확히 눌러도
+  //   25px 옆에 선 늑대가 대상이 됐습니다. 광맥을 누를 방법이 없었습니다.
+  //   같은 거리면 몬스터가 이깁니다 — 광맥 앞을 막고 선 것도 때릴 수 있어야 하니까.
+  if (picked !== null && monsterAt <= veinAt) {
     cancelAction(world);
     me.targetId = picked;
     me.moveTarget = null;
     world.pendingNpc = null;
     return;
   }
-
-  // 2) 광맥
-  for (const vein of world.veins) {
-    if (Math.hypot(vein.pos.x - x, vein.pos.y - y) > TILE * 0.7) continue;
+  if (veinId !== null) {
     me.targetId = null;
     world.pendingNpc = null;
-    mineVein(world, vein.id);
+    mineVein(world, veinId);
     return;
   }
 
