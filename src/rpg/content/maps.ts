@@ -1,173 +1,100 @@
 /**
- *  지역 여섯 곳.
+ *  지역 셋.
  *
- *  마을에서 시작해 오른쪽으로 한 줄로 이어집니다.
- *      실버우드 마을 → 초원 → 고블린 협곡 → 버려진 광산 → 오크 요새 → 용의 둥지
+ *      실버우드 마을 ── 초록 숲 ── 버려진 광산
  *
- *  지형(나무·바위·물)은 여기 적지 않습니다. seed 값으로 그때그때 만들어내며,
- *  같은 seed 면 언제나 똑같은 지형이 나옵니다 (core/world.ts).
+ *  ★ 문 앞에 권장 레벨이 없습니다. 들어갈지 말지는 스스로 판단합니다.
+ *    다만 광산 깊은 곳에는 거미가 있고, 준비 없이 들어가면 죽습니다.
+ *
+ *  minDepth 는 "입구에서 이만큼 떨어진 곳부터 나타난다"는 뜻입니다(타일 단위).
+ *  깊이가 곧 위험이고, 동시에 좋은 광맥이 있는 곳입니다.
  */
 
 import type { MapDef, MapId } from '../types';
 
-const MAP_LIST: MapDef[] = [
+const LIST: MapDef[] = [
   {
     id: 'town',
     name: '실버우드 마을',
-    subtitle: '몬스터가 들어올 수 없는 유일한 곳',
+    subtitle: '화로와 상인이 있는 유일한 곳',
     theme: 'town',
-    width: 30,
-    height: 24,
+    width: 30, height: 24,
     safe: true,
     seed: 1001,
     clutter: 0.05,
-    entryTx: 15,
-    entryTy: 13,
+    entryTx: 15, entryTy: 13,
     spawns: [],
+    veins: [],
     npcs: [
-      { tx: 10, ty: 8, kind: 'shop', name: '상인 마르카', color: '#fbbf24' },
-      { tx: 20, ty: 8, kind: 'enhance', name: '대장장이 두린', color: '#f97316' },
-      { tx: 15, ty: 6, kind: 'teleport', name: '마법사 리엔', color: '#a78bfa' },
-      { tx: 15, ty: 17, kind: 'guide', name: '촌장 아이렌', color: '#38bdf8' },
+      { tx: 9, ty: 9, kind: 'shop', name: '상인 마르카', color: '#c9a227' },
+      { tx: 21, ty: 9, kind: 'smith', name: '대장장이 두린', color: '#e0764a' },
     ],
+    forge: { tx: 21, ty: 11 },
     portals: [
-      { tx: 15, ty: 21, to: 'field', toTx: 4, toTy: 18, label: '초원', recommendLevel: 1 },
+      { tx: 15, ty: 21, to: 'forest', toTx: 5, toTy: 18, label: '초록 숲' },
     ],
   },
   {
-    id: 'field',
-    name: '실버우드 초원',
-    subtitle: '풀숲에서 무언가 부스럭거립니다',
-    theme: 'field',
-    width: 46,
-    height: 36,
+    id: 'forest',
+    name: '초록 숲',
+    subtitle: '들개가 어슬렁대고, 바위 틈에 철이 비칩니다',
+    theme: 'forest',
+    width: 46, height: 36,
     safe: false,
     seed: 2002,
-    clutter: 0.14,
-    entryTx: 4,
-    entryTy: 18,
+    clutter: 0.15,
+    entryTx: 5, entryTy: 18,
     spawns: [
-      { monsterId: 'rat', count: 10 },
-      { monsterId: 'slime', count: 9 },
-      { monsterId: 'wolf', count: 8 },
+      { monsterId: 'stray-dog', count: 9, minDepth: 6 },
+      { monsterId: 'wolf', count: 5, minDepth: 20 },
+    ],
+    veins: [
+      { veinId: 'iron-shallow', count: 7, minDepth: 5 },
+      // 숲 안쪽 바위턱 — 늑대가 있는 자리입니다. 광산까지 가지 않고도
+      // 다음 단계의 광맥을 만나되, 값은 치르게 하려는 배치입니다.
+      { veinId: 'iron-deep', count: 3, minDepth: 26 },
     ],
     npcs: [],
     portals: [
-      { tx: 2, ty: 18, to: 'town', toTx: 15, toTy: 19, label: '마을', recommendLevel: 1 },
-      { tx: 43, ty: 18, to: 'canyon', toTx: 4, toTy: 19, label: '고블린 협곡', recommendLevel: 8 },
-    ],
-  },
-  {
-    id: 'canyon',
-    name: '고블린 협곡',
-    subtitle: '바위 틈마다 초록 눈이 반짝입니다',
-    theme: 'canyon',
-    width: 48,
-    height: 38,
-    safe: false,
-    seed: 3003,
-    clutter: 0.18,
-    entryTx: 4,
-    entryTy: 19,
-    spawns: [
-      { monsterId: 'goblin', count: 12 },
-      { monsterId: 'goblin-archer', count: 8 },
-      { monsterId: 'goblin-chief', count: 1 },
-    ],
-    npcs: [],
-    portals: [
-      { tx: 2, ty: 19, to: 'field', toTx: 41, toTy: 18, label: '초원', recommendLevel: 1 },
-      { tx: 45, ty: 19, to: 'mine', toTx: 4, toTy: 20, label: '버려진 광산', recommendLevel: 15 },
+      { tx: 2, ty: 18, to: 'town', toTx: 15, toTy: 19, label: '마을' },
+      { tx: 43, ty: 18, to: 'mine', toTx: 4, toTy: 20, label: '버려진 광산' },
     ],
   },
   {
     id: 'mine',
     name: '버려진 광산',
-    subtitle: '갱도 안쪽에서 곡괭이 소리가 들립니다',
+    subtitle: '안으로 갈수록 광석이 좋아지고, 그만큼 조용해집니다',
     theme: 'cave',
-    width: 46,
-    height: 40,
+    width: 44, height: 40,
     safe: false,
     seed: 4004,
     clutter: 0.22,
-    entryTx: 4,
-    entryTy: 20,
+    entryTx: 4, entryTy: 20,
     spawns: [
-      { monsterId: 'bat', count: 10 },
-      { monsterId: 'miner', count: 11 },
-      { monsterId: 'golem', count: 7 },
-      { monsterId: 'overseer', count: 1 },
+      // ★ 광산의 앞쪽(철이 나는 곳)은 비교적 조용합니다.
+      //   박쥐와 거미는 구리가 나는 안쪽에 있습니다 —
+      //   "위험한 곳에서 캘 것인가"라는 물음이 구리에서만 생기도록.
+      { monsterId: 'cave-bat', count: 6, minDepth: 22 },
+      { monsterId: 'cave-spider', count: 4, minDepth: 30 },
+    ],
+    veins: [
+      { veinId: 'iron-shallow', count: 4, minDepth: 4 },
+      { veinId: 'iron-deep', count: 6, minDepth: 12 },
+      { veinId: 'copper-shallow', count: 5, minDepth: 22 },
+      { veinId: 'copper-deep', count: 3, minDepth: 30 },
     ],
     npcs: [],
     portals: [
-      { tx: 2, ty: 20, to: 'canyon', toTx: 43, toTy: 19, label: '고블린 협곡', recommendLevel: 8 },
-      { tx: 43, ty: 20, to: 'fortress', toTx: 4, toTy: 20, label: '오크 요새', recommendLevel: 23 },
-    ],
-  },
-  {
-    id: 'fortress',
-    name: '오크 요새',
-    subtitle: '북소리가 멎지 않습니다',
-    theme: 'fortress',
-    width: 50,
-    height: 40,
-    safe: false,
-    seed: 5005,
-    clutter: 0.18,
-    entryTx: 4,
-    entryTy: 20,
-    spawns: [
-      { monsterId: 'orc', count: 13 },
-      { monsterId: 'orc-shaman', count: 8 },
-      { monsterId: 'orc-chief', count: 1 },
-    ],
-    npcs: [],
-    portals: [
-      { tx: 2, ty: 20, to: 'mine', toTx: 41, toTy: 20, label: '버려진 광산', recommendLevel: 15 },
-      { tx: 47, ty: 20, to: 'nest', toTx: 4, toTy: 19, label: '용의 둥지', recommendLevel: 31 },
-    ],
-  },
-  {
-    id: 'nest',
-    name: '용의 둥지',
-    subtitle: '재가 눈처럼 내립니다',
-    theme: 'volcano',
-    width: 46,
-    height: 38,
-    safe: false,
-    seed: 6006,
-    clutter: 0.16,
-    entryTx: 4,
-    entryTy: 19,
-    spawns: [
-      { monsterId: 'drake', count: 9 },
-      { monsterId: 'flame', count: 8 },
-      { monsterId: 'carnas', count: 1 },
-    ],
-    npcs: [],
-    portals: [
-      { tx: 2, ty: 19, to: 'fortress', toTx: 45, toTy: 20, label: '오크 요새', recommendLevel: 23 },
+      { tx: 2, ty: 20, to: 'forest', toTx: 41, toTy: 18, label: '초록 숲' },
     ],
   },
 ];
 
-export const MAPS: Record<MapId, MapDef> = Object.fromEntries(MAP_LIST.map((m) => [m.id, m]));
+export const MAPS: Record<MapId, MapDef> = Object.fromEntries(LIST.map((m) => [m.id, m]));
+export const MAP_ORDER: MapId[] = LIST.map((m) => m.id);
 
 export function mapDef(id: MapId): MapDef {
   const def = MAPS[id];
   if (!def) throw new Error(`알 수 없는 지역: ${id}`);
   return def;
 }
-
-/** 순간이동 목록에 뜨는 순서 */
-export const MAP_ORDER: MapId[] = ['town', 'field', 'canyon', 'mine', 'fortress', 'nest'];
-
-/** 각 지역의 권장 레벨 (순간이동 요금과 경고 문구에 씁니다) */
-export const MAP_LEVEL: Record<MapId, number> = {
-  town: 1,
-  field: 1,
-  canyon: 8,
-  mine: 15,
-  fortress: 23,
-  nest: 31,
-};

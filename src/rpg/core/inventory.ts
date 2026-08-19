@@ -1,143 +1,188 @@
 /**
  *  가방 — 넣고, 빼고, 입고, 사고, 팝니다.
  *
- *  겹칠 수 있는 물건(물약·주문서·재료)은 한 칸에 쌓이고,
- *  장비는 강화 수치가 저마다 달라서 한 칸에 하나씩 들어갑니다.
+ *  ★ 이 게임에서 가방의 진짜 제약은 칸이 아니라 무게입니다.
+ *    철광석 한 덩이가 10 스톤이라, 광맥 앞에서 "몇 덩이까지 지고 갈까"를 계속 재게 됩니다.
  */
 
 import { LOOT } from '../balance';
 import { itemDef } from '../content/items';
 import { log, toast } from './feedback';
-import { derive, equipProblem, itemName } from './stats';
-import type { EquipSlot, ItemStack, Player, World } from '../types';
+import { derive, equipProblem, itemName, stackWeight, totalWeight } from './stats';
+import type { Character, EquipSlot, ItemStack, Stones, World } from '../types';
 
-/** 같은 종류의 물건을 몇 개 가지고 있는가 */
-export function countOf(player: Player, defId: string): number {
+const SLOTS: EquipSlot[] = ['weapon', 'armor', 'helmet'];
+
+export function countOf(me: Character, defId: string): number {
   let total = 0;
-  for (const stack of player.inventory) {
-    if (stack.defId === defId) total += stack.count;
-  }
+  for (const stack of me.backpack) if (stack.defId === defId) total += stack.count;
   return total;
 }
 
-export function findStack(player: Player, uid: number): ItemStack | undefined {
-  return player.inventory.find((s) => s.uid === uid);
+export function findStack(me: Character, uid: number): ItemStack | undefined {
+  return me.backpack.find((s) => s.uid === uid);
 }
 
-/** 가방에 자리가 있는가 */
-export function hasRoom(player: Player, defId: string): boolean {
-  if (player.inventory.length < LOOT.inventorySlots) return true;
+/** 입은 것까지 통틀어 이 uid 를 찾습니다 */
+export function findAnywhere(me: Character, uid: number): { stack: ItemStack; slot: EquipSlot | null } | null {
+  const inPack = findStack(me, uid);
+  if (inPack) return { stack: inPack, slot: null };
+  for (const slot of SLOTS) {
+    const worn = me.equipped[slot];
+    if (worn && worn.uid === uid) return { stack: worn, slot };
+  }
+  return null;
+}
+
+/** 남은 여유 무게 */
+export function freeWeight(me: Character): Stones {
+  return derive(me).carry - totalWeight(me);
+}
+
+/** 이만큼 더 들 수 있는가 */
+export function canCarry(me: Character, defId: string, count = 1): boolean {
+  return itemDef(defId).weight * count <= freeWeight(me);
+}
+
+/** 새 물건에 붙일 내구도 (닳는 물건이면) */
+function freshDurability(defId: string, quality: 'normal' | 'fine' | undefined): Partial<ItemStack> {
   const def = itemDef(defId);
-  if (!def.stackable) return false;
-  return player.inventory.some((s) => s.defId === defId);
+  if (!def.durability) return {};
+  const max = Math.round(def.durability * (quality === 'fine' ? 1.25 : 1));
+  return { durability: max, maxDurability: max };
 }
 
 /**
- * 물건을 가방에 넣습니다. 자리가 없으면 false 를 돌려주고 아무 일도 하지 않습니다.
+ * 가방에 넣습니다.
+ * 무게가 넘치거나 칸이 없으면 false 를 돌려주고 아무 일도 하지 않습니다.
  */
-export function addItem(world: World, defId: string, count = 1, plus = 0): boolean {
-  const player = world.player;
+export function addItem(
+  world: World,
+  defId: string,
+  count = 1,
+  options: { quality?: 'normal' | 'fine'; durability?: number; maxDurability?: number } = {},
+): boolean {
+  const me = world.me;
   const def = itemDef(defId);
 
+  if (!canCarry(me, defId, count)) return false;
+
   if (def.stackable) {
-    const stack = player.inventory.find((s) => s.defId === defId);
+    const stack = me.backpack.find((s) => s.defId === defId);
     if (stack) {
       stack.count += count;
       return true;
     }
   }
-  if (player.inventory.length >= LOOT.inventorySlots) return false;
+  if (me.backpack.length >= LOOT.packSlots) return false;
 
-  player.inventory.push({ uid: world.nextId++, defId, plus, count });
+  me.backpack.push({
+    uid: world.nextId++,
+    defId,
+    count,
+    quality: options.quality,
+    ...freshDurability(defId, options.quality),
+    ...(options.durability !== undefined ? { durability: options.durability } : {}),
+    ...(options.maxDurability !== undefined ? { maxDurability: options.maxDurability } : {}),
+  });
   return true;
 }
 
-/** 물건을 덜어냅니다 (개수가 0 이 되면 칸이 사라집니다) */
-export function removeItem(player: Player, uid: number, count = 1): void {
-  const index = player.inventory.findIndex((s) => s.uid === uid);
+export function removeItem(me: Character, uid: number, count = 1): void {
+  const index = me.backpack.findIndex((s) => s.uid === uid);
   if (index < 0) return;
-  const stack = player.inventory[index]!;
+  const stack = me.backpack[index]!;
   stack.count -= count;
-  if (stack.count <= 0) player.inventory.splice(index, 1);
+  if (stack.count <= 0) me.backpack.splice(index, 1);
 }
 
-/** 장비를 착용합니다. 이미 낀 게 있으면 가방으로 돌아갑니다 */
+/** 재료를 defId 기준으로 필요한 만큼 덜어냅니다 (제작이 씁니다) */
+export function consume(me: Character, defId: string, count: number): boolean {
+  if (countOf(me, defId) < count) return false;
+  let left = count;
+  for (const stack of [...me.backpack]) {
+    if (stack.defId !== defId || left <= 0) continue;
+    const take = Math.min(left, stack.count);
+    stack.count -= take;
+    left -= take;
+    if (stack.count <= 0) me.backpack = me.backpack.filter((s) => s.uid !== stack.uid);
+  }
+  return true;
+}
+
+/** 착용 — 이미 낀 게 있으면 가방으로 돌아갑니다 */
 export function equip(world: World, uid: number): void {
-  const player = world.player;
-  const stack = findStack(player, uid);
+  const me = world.me;
+  const stack = findStack(me, uid);
   if (!stack) return;
 
-  const def = itemDef(stack.defId);
-  const problem = equipProblem(player, def);
+  const problem = equipProblem(me, stack);
   if (problem) {
     toast(world, problem, 'bad');
     return;
   }
-  const slot = def.slot as EquipSlot;
-  const previous = player.equipped[slot];
+  const slot = itemDef(stack.defId).slot as EquipSlot;
+  const previous = me.equipped[slot];
 
-  removeItem(player, uid, stack.count);
-  player.equipped[slot] = stack;
-  if (previous) player.inventory.push(previous);
+  removeItem(me, uid, stack.count);
+  // ★ removeItem 이 같은 객체의 count 를 0 으로 만들어 놓습니다.
+  //   그대로 입히면 '입은 것은 무게가 0' 이 되어 무게 규칙 전체가 무너집니다.
+  //   (실제로 녹슨 검을 차고도 짐이 늘지 않았습니다)
+  stack.count = 1;
+  me.equipped[slot] = stack;
+  if (previous) me.backpack.push(previous);
 
   log(world, `${itemName(stack)} 착용`, 'normal');
-  clampVitals(world);
 }
 
-/** 장비를 벗습니다 */
 export function unequip(world: World, slot: EquipSlot): void {
-  const player = world.player;
-  const stack = player.equipped[slot];
+  const me = world.me;
+  const stack = me.equipped[slot];
   if (!stack) return;
-  if (player.inventory.length >= LOOT.inventorySlots) {
+  if (me.backpack.length >= LOOT.packSlots) {
     toast(world, '가방이 가득 찼습니다.', 'bad');
     return;
   }
-  player.equipped[slot] = null;
-  player.inventory.push(stack);
-  clampVitals(world);
+  me.equipped[slot] = null;
+  me.backpack.push(stack);
 }
 
-/** 최대치가 줄었을 때 현재 체력·마나가 넘치지 않게 맞춥니다 */
-export function clampVitals(world: World): void {
-  const stats = derive(world.player);
-  world.player.hp = Math.min(world.player.hp, stats.maxHp);
-  world.player.mp = Math.min(world.player.mp, stats.maxMp);
-}
-
-/** 상점에 팔기 */
+/** 상점에 팔기 — 닳은 물건은 값이 깎입니다 */
 export function sellItem(world: World, uid: number, count = 1): void {
-  const player = world.player;
-  const stack = findStack(player, uid);
+  const me = world.me;
+  const stack = findStack(me, uid);
   if (!stack) return;
   const def = itemDef(stack.defId);
 
   const sold = Math.min(count, stack.count);
-  // 강화한 장비는 더 쳐줍니다
-  const unit = Math.round(def.sell * (1 + stack.plus * 0.4));
-  const total = unit * sold;
+  const worn = stack.maxDurability ? Math.max(0.3, (stack.durability ?? 0) / stack.maxDurability) : 1;
+  const fine = stack.quality === 'fine' ? 1.4 : 1;
+  const total = Math.max(1, Math.round(def.sell * worn * fine)) * sold;
 
-  removeItem(player, uid, sold);
-  player.gold += total;
+  removeItem(me, uid, sold);
+  me.gold += total;
   log(world, `${itemName(stack)}${sold > 1 ? ` ${sold}개` : ''} 판매 — ${total.toLocaleString()} 골드`, 'normal');
 }
 
 /** 상점에서 사기 */
 export function buyItem(world: World, defId: string, count = 1): void {
-  const player = world.player;
+  const me = world.me;
   const def = itemDef(defId);
   if (def.price <= 0) return;
 
   const total = def.price * count;
-  if (player.gold < total) {
+  if (me.gold < total) {
     toast(world, '골드가 부족합니다.', 'bad');
     return;
   }
-  if (!hasRoom(player, defId)) {
-    toast(world, '가방이 가득 찼습니다.', 'bad');
+  if (!canCarry(me, defId, count)) {
+    toast(world, '그만큼 들 수 없습니다.', 'bad');
     return;
   }
-  player.gold -= total;
+  me.gold -= total;
   addItem(world, defId, count);
   log(world, `${def.name}${count > 1 ? ` ${count}개` : ''} 구입 — ${total.toLocaleString()} 골드`, 'normal');
 }
+
+/** 지금 지고 있는 무게 (화면용 재수출) */
+export { totalWeight, stackWeight };

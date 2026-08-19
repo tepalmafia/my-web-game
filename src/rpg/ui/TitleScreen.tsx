@@ -2,19 +2,19 @@
 
 import { useState } from 'react';
 
-import { CLASSES, CLASS_ORDER } from '../content/classes';
-import type { ClassId } from '../types';
-import { ClassPortrait } from './ClassPortrait';
+import { SKILLS } from '../content/skills';
+import { TEMPLATES } from '../core/create';
+import type { SkillId } from '../types';
 
 export function TitleScreen({
   onStart, onContinue, hasSave,
 }: {
-  onStart: (name: string, classId: ClassId) => void;
+  onStart: (name: string, templateId: string) => void;
   onContinue: () => void;
   hasSave: boolean;
 }) {
   const [name, setName] = useState('');
-  const [classId, setClassId] = useState<ClassId>('knight');
+  const [templateId, setTemplateId] = useState<string>(TEMPLATES[0]!.id);
 
   return (
     <div
@@ -26,7 +26,7 @@ export function TitleScreen({
     >
       <div className="mx-auto flex min-h-dvh max-w-4xl flex-col justify-center gap-7 px-5 py-12">
         <header className="text-center">
-          <p className="eyebrow mb-2">옛날식 온라인 RPG</p>
+          <p className="eyebrow mb-2">스킬로 자라는 샌드박스 RPG</p>
           <h1
             className="display text-5xl font-bold tracking-tight sm:text-6xl"
             style={{
@@ -41,7 +41,7 @@ export function TitleScreen({
           </h1>
           <div className="rule mx-auto mt-4 w-64" />
           <p className="mt-3 text-sm text-parch-300">
-            사냥하고, 모으고, <b className="text-parch-100">강화한다</b>. 혼자서, 브라우저에서.
+            캐고, 만들고, 싸운다. <b className="text-parch-100">레벨은 없습니다.</b>
           </p>
         </header>
 
@@ -64,16 +64,20 @@ export function TitleScreen({
             className="socket mt-1.5 w-full rounded-sm px-3 py-2.5 text-sm text-parch-100 outline-none placeholder:text-parch-400/60 focus:ring-1 focus:ring-brass-500"
           />
 
-          <h2 className="eyebrow mb-2 mt-5">직업</h2>
+          <h2 className="eyebrow mb-2 mt-5">시작 자리</h2>
+          <p className="mb-2 text-[11px] text-parch-400">
+            직업이 아닙니다. 처음 스킬을 어디에 조금 얹어줄지만 정합니다 —
+            그 뒤로는 <b className="text-parch-200">무엇을 하든 자유입니다.</b>
+          </p>
           <div className="grid gap-2 sm:grid-cols-3">
-            {CLASS_ORDER.map((id) => {
-              const cls = CLASSES[id];
-              const selected = id === classId;
+            {TEMPLATES.map((cls) => {
+              const id = cls.id;
+              const selected = id === templateId;
               return (
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setClassId(id)}
+                  onClick={() => setTemplateId(id)}
                   className={`relative overflow-hidden rounded-sm border p-3 text-left transition ${
                     selected ? 'border-brass-400' : 'border-ink-500 hover:border-brass-500/50'
                   }`}
@@ -83,33 +87,19 @@ export function TitleScreen({
                       : 'linear-gradient(180deg,#1b1611,#13100c)',
                   }}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="display text-lg font-bold" style={{ color: cls.color }}>
-                        {cls.name}
-                      </div>
-                      <div className="text-[11px] font-semibold text-parch-300">{cls.tagline}</div>
-                    </div>
-                    <ClassPortrait classId={id} size={72} />
+                  <div className="display text-lg font-bold" style={{ color: cls.color }}>
+                    {cls.name}
                   </div>
-
+                  <div className="text-[11px] font-semibold text-parch-300">{cls.tagline}</div>
                   <p className="mt-1 text-[11px] leading-snug text-parch-400">{cls.desc}</p>
 
                   <dl className="tabular mt-2.5 space-y-0.5 text-[10px] text-parch-400">
-                    <div className="flex justify-between">
-                      <dt>체력</dt>
-                      <dd className="text-parch-200">
-                        {cls.baseHp} <span className="text-parch-400">(+{cls.hpPerLevel}/Lv)</span>
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt>사거리</dt>
-                      <dd className="text-parch-200">{cls.attackRange >= 150 ? '원거리' : '근접'}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt>공격 속도</dt>
-                      <dd className="text-parch-200">{cls.attackInterval.toFixed(2)}초</dd>
-                    </div>
+                    {Object.entries(cls.skills).map(([skill, value]) => (
+                      <div key={skill} className="flex justify-between">
+                        <dt>{SKILLS[skill as SkillId].name}</dt>
+                        <dd className="text-parch-200">{value}</dd>
+                      </div>
+                    ))}
                   </dl>
                 </button>
               );
@@ -118,7 +108,7 @@ export function TitleScreen({
 
           <button
             type="button"
-            onClick={() => onStart(name, classId)}
+            onClick={() => onStart(name, templateId)}
             className="btn btn-brass mt-5 w-full rounded-sm px-5 py-3.5 text-base"
           >
             {hasSave ? '새로 시작하기 (기존 기록은 지워집니다)' : '모험 시작'}
@@ -129,29 +119,29 @@ export function TitleScreen({
           <div>
             <h3 className="display mb-1 text-[15px] font-bold text-parch-100">어떻게 하나요</h3>
             <p>
-              땅을 누르면 걷고, 몬스터를 누르면 다가가 알아서 때립니다. 1·2·3 으로 스킬, Q·W 로 물약, Space 로 자동
-              사냥. 휴대폰에서는 아래 단추로 같은 일을 합니다.
+              땅을 누르면 걷고, 몬스터를 누르면 다가가 때리고, <b className="text-parch-200">바위에 비치는 광맥을
+              누르면 캡니다.</b> Q 로 물약, S·I·C 로 실력·가방·대장간.
             </p>
           </div>
           <div>
             <h3 className="display mb-1 text-[15px] font-bold text-parch-100">무엇이 중요한가요</h3>
             <p>
-              <b className="text-brass-300">강화</b>입니다. +3 까지는 공짜지만 그 위로는 실패하면 장비가 부서집니다. +7
-              짜리 무기 한 자루가 레벨 다섯보다 셉니다. 그래서 다들 주문서를 모읍니다.
+              <b className="text-brass-300">무게</b>입니다. 철광석 한 덩이가 12 스톤이라 금방 발이 무거워지고,
+              그래서 광산과 마을을 오가게 됩니다. 그 왕복이 이 게임의 리듬입니다.
             </p>
           </div>
           <div>
             <h3 className="display mb-1 text-[15px] font-bold text-parch-100">죽으면요</h3>
             <p>
-              지금 레벨에서 모은 경험치의 30%와 골드의 8%를 잃고 마을에서 깨어납니다. 부활 주문서를 사두면 그 절반을
-              되찾습니다.
+              골드의 10%만 잃고 마을에서 깨어납니다. <b className="text-parch-200">배운 것은 그대로입니다</b> —
+              스킬은 해본 만큼 남습니다.
             </p>
           </div>
           <div>
             <h3 className="display mb-1 text-[15px] font-bold text-parch-100">끝이 있나요</h3>
             <p>
-              용의 둥지의 <b className="text-[#e88a86]">고룡 카르나스</b>를 잡으면 한 바퀴가 끝납니다. 4분마다 다시
-              나타나므로, 몇 번이고 다시 도전할 수 있습니다.
+              없습니다. 검을 만들고, 닳으면 고치고, 결국 다시 만듭니다. 광산 깊은 곳의
+              <b className="text-[#e88a86]"> 구리 광맥</b>까지 갈 수 있게 되는 것이 지금의 목표입니다.
             </p>
           </div>
         </section>

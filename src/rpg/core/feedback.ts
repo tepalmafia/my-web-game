@@ -14,7 +14,7 @@ export function log(world: World, text: string, tone: LogLine['tone'] = 'normal'
 }
 
 export function floater(world: World, pos: Vec2, text: string, kind: Floater['kind']): void {
-  const life = kind === 'exp' || kind === 'info' ? VIEW.floaterLife * 1.6 : VIEW.floaterLife;
+  const life = kind === 'gain' || kind === 'info' ? VIEW.floaterLife * 1.6 : VIEW.floaterLife;
   world.floaters.push({
     id: world.nextId++,
     text,

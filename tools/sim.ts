@@ -1,225 +1,237 @@
 /**
- *  밸런스 확인용 봇 (게임에는 들어가지 않습니다. tsconfig 의 검사 대상에서도 빠져 있습니다)
+ * ===========================================================================
+ *  밸런스 확인용 봇 (게임에는 들어가지 않습니다)
+ * ===========================================================================
  *
- *  자동 사냥만 켠 채 몇 시간 치를 빠르게 돌려보고
- *  "레벨이 언제 오르는가 · 몇 번 죽는가 · 골드가 도는가"를 숫자로 확인합니다.
+ *  캐고 → 만들고 → 싸우고 → 닳고 → 다시 만드는 한 바퀴를 몇 시간 치 돌려보고,
+ *  지시서 §4.3 의 지표를 잽니다.
  *
  *      npx esbuild tools/sim.ts --bundle --format=esm --platform=node --outfile=/tmp/sim.mjs
- *      node /tmp/sim.mjs knight 3
+ *      node /tmp/sim.mjs miner 3
  */
 
-import { MAP_LEVEL, MAP_ORDER, mapDef } from '../src/rpg/content/maps';
 import { ITEMS, itemDef } from '../src/rpg/content/items';
-import { buyItem, countOf, equip } from '../src/rpg/core/inventory';
+import { MONSTERS } from '../src/rpg/content/monsters';
 import { createWorld } from '../src/rpg/core/create';
 import { step } from '../src/rpg/core/engine';
-import { respawnInTown } from '../src/rpg/core/commands';
-import { enterMap } from '../src/rpg/core/world';
-import { derive, equipProblem, itemName } from '../src/rpg/core/stats';
-import type { ClassId, EquipSlot, MapId, World } from '../src/rpg/types';
+import { countOf } from '../src/rpg/core/inventory';
+import { derive, wearRatio } from '../src/rpg/core/stats';
+import { autopilot, newPilot } from './autopilot';
+import type { Focus } from './autopilot';
+import type { World } from '../src/rpg/types';
 
 declare const process: { argv: string[] };
 
 const DT = 1 / 20;
-const CLASS = (process.argv[2] ?? 'knight') as ClassId;
+const TEMPLATE = process.argv[2] ?? 'miner';
 const HOURS = Number(process.argv[3] ?? 3);
-const MODE = process.argv[4] ?? '';
+/** 네 번째 인자: balanced | mine | fight — 무엇의 곡선을 잴 것인가 */
+const FOCUS = (process.argv[4] ?? 'balanced') as Focus;
+/** 다섯 번째 인자에 trace 를 주면 목표가 바뀔 때마다 찍습니다 (원인 찾기용) */
+const TRACE = process.argv[5] === 'trace';
+/** 여섯 번째 인자: 세계 씨앗 (여러 번 돌려 편차를 봅니다) */
+const SEED = Number(process.argv[6] ?? 20250819);
 
-/** 지금 레벨에서 가야 할 사냥터 */
-function bestZone(level: number): MapId {
-  let chosen: MapId = 'field';
-  for (const id of MAP_ORDER) {
-    if (id === 'town') continue;
-    if (level >= MAP_LEVEL[id]!) chosen = id;
-  }
-  return chosen;
+interface Marks {
+  firstIronSword: number | null;
+  mining50: number | null;
+  mining100: number | null;
+  smithing100: number | null;
+  firstFullCycle: number | null;
+  swordLives: number[];
 }
 
-/** 상점에서 살 수 있는 것 중 지금 낄 수 있는 가장 좋은 장비로 갈아입습니다 */
-function upgradeGear(world: World): void {
-  const player = world.player;
-
-  for (const slot of ['weapon', 'armor', 'helmet', 'ring'] as EquipSlot[]) {
-    const candidates = Object.values(ITEMS)
-      .filter((def) => def.slot === slot && def.price > 0 && !equipProblem(player, def))
-      .sort((a, b) => b.price - a.price);
-
-    for (const def of candidates) {
-      const worn = player.equipped[slot];
-      const wornDef = worn ? itemDef(worn.defId) : null;
-      if (wornDef && wornDef.price >= def.price) break;
-      // 물약값은 남겨둡니다
-      if (player.gold < def.price + 15000) break;
-      buyItem(world, def.id, 1);
-      const bought = player.inventory.find((s) => s.defId === def.id);
-      if (bought) equip(world, bought.uid);
-      break;
-    }
-  }
+/** 기록표에는 물건 id 와 몬스터 id 가 섞여 있습니다 */
+function nameOfTally(tally: Record<string, number>): string {
+  const rows = Object.entries(tally).map(([id, n]) => {
+    const monster = MONSTERS[id];
+    const item = ITEMS[id];
+    return `${monster?.name ?? item?.name ?? id} ${n}`;
+  });
+  return rows.join(' · ') || '(없음)';
 }
 
-/** 재료를 팔고 물약을 채웁니다 */
-function shop(world: World): void {
-  const player = world.player;
-
-  for (const stack of [...player.inventory]) {
-    const def = itemDef(stack.defId);
-    if (def.kind === 'misc') {
-      player.gold += def.sell * stack.count;
-      player.inventory = player.inventory.filter((s) => s.uid !== stack.uid);
-    }
-  }
-
-  upgradeGear(world);
-
-  const potion = player.level >= 22 ? 'pot-hp-l' : player.level >= 10 ? 'pot-hp' : 'pot-hp-s';
-  const want = 40 - countOf(player, potion);
-  if (want > 0) {
-    buyItem(world, potion, Math.max(0, Math.min(want, Math.floor((player.gold * 0.6) / itemDef(potion).price))));
-  }
-  const mana = player.level >= 20 ? 'pot-mp' : 'pot-mp-s';
-  const wantMana = 20 - countOf(player, mana);
-  if (wantMana > 0 && player.gold > itemDef(mana).price * wantMana * 3) buyItem(world, mana, wantMana);
-}
-
-function goTo(world: World, id: MapId): void {
-  const def = mapDef(id);
-  enterMap(world, id, def.entryTx, def.entryTy);
-  world.player.auto = true;
-}
-
-/**
- * 고룡 카르나스 전투만 따로 재봅니다.
- * 만렙 근처에 전설 장비 +7 을 갖춘 사람이 몇 분 만에 잡는지 / 잡히긴 하는지 봅니다.
- */
-function bossTest(geared: boolean): void {
-  const world = createWorld('용잡이', CLASS);
-  world.seed = 777;
-  const player = world.player;
-  player.level = geared ? 34 : 31;
-
-  const legend: Record<ClassId, string> = {
-    knight: 'sword-fang', elf: 'bow-dragon', wizard: 'staff-carnas',
-  };
-  const rare: Record<ClassId, string> = {
-    knight: 'sword-claymore', elf: 'bow-silver', wizard: 'staff-arch',
-  };
-  const kit = geared
-    ? [legend[CLASS], 'armor-dragon', 'helm-mithril', 'ring-dragon']
-    : [rare[CLASS], 'armor-plate', 'helm-knight', 'ring-power'];
-  const plus = geared ? 7 : 3;
-  for (const defId of kit) {
-    player.inventory.push({ uid: world.nextId++, defId, plus, count: 1 });
-    const stack = player.inventory[player.inventory.length - 1]!;
-    equip(world, stack.uid);
-  }
-  buyItemFree(world, 'pot-hp-l', 200);
-  buyItemFree(world, 'pot-mp', 100);
-
-  const stats = derive(player);
-  player.hp = stats.maxHp;
-  player.mp = stats.maxMp;
-  player.auto = true;
-  player.autoPotionAt = 0.65;
-
-  goTo(world, 'nest');
-  // 맵을 다시 들어가면 몬스터가 새로 배치되므로, 그때마다 보스를 다시 찾아야 합니다
-  let boss = world.monsters.find((m) => m.defId === 'carnas')!;
-  const started = world.time;
-  let killed = false;
-
-  while (world.time - started < 900) {
-    if (boss.state !== 'dead') player.targetId = boss.id;
-    step(world, DT);
-    if (boss.state === 'dead') {
-      killed = true;
-      break;
-    }
-    if (player.dead) {
-      console.log(`  ...${Math.round(world.time - started)}초에 사망 (보스 체력 ${Math.round((boss.hp / boss.maxHp) * 100)}%)`);
-      respawnInTown(world);
-      goTo(world, 'nest');
-      boss = world.monsters.find((m) => m.defId === 'carnas')!;
-      player.hp = derive(player).maxHp;
-    }
-  }
-
-  console.log(`\n=== ${CLASS} · 고룡 카르나스 (Lv.${player.level}, ${geared ? '전설 +7' : '희귀 +3'}) ===`);
-  console.log(killed
-    ? `처치 성공 — ${Math.round(world.time - started)}초, 사망 ${player.deaths}회`
-    : `실패 — 15분 안에 못 잡음 (남은 체력 ${Math.round((boss.hp / boss.maxHp) * 100)}%, 사망 ${player.deaths}회)`);
-  console.log(`쓴 물약 ${200 - countOf(player, 'pot-hp-l')}병`);
-}
-
-/** 시험용 — 돈 안 내고 물건을 채웁니다 */
-function buyItemFree(world: World, defId: string, count: number): void {
-  world.player.gold += itemDef(defId).price * count;
-  buyItem(world, defId, count);
+function minutes(seconds: number | null): string {
+  return seconds === null ? '—' : `${(seconds / 60).toFixed(1)}분`;
 }
 
 function run(): void {
-  const world = createWorld('봇', CLASS);
-  world.seed = 12345;
-  world.player.auto = true;
+  const world: World = createWorld('봇', TEMPLATE);
+  world.seed = SEED;
+  const pilot = newPilot(FOCUS);
 
-  const marks: Record<number, number> = {};
-  let lastLevel = 1;
+  const marks: Marks = {
+    firstIronSword: null,
+    mining50: null,
+    mining100: null,
+    smithing100: null,
+    firstFullCycle: null,
+    swordLives: [],
+  };
+
+  // 검 한 자루의 수명 — 그 검을 들고 잡은 몬스터 수
+  const lives = new Map<number, number>();
+  /** 마지막으로 본 상태 — 성한 채로 팔린 검은 '수명을 다했다'고 볼 수 없습니다 */
+  const seen = new Map<number, { durability: number; max: number; born: number }>();
+  let lastKills = 0;
+
+  // 한 바퀴(채집 → 제작 → 전투) 완결 여부
+  let minedOnce = false;
+  let craftedOnce = false;
+
+  // 시간이 어디로 가는지 — 지표가 나쁠 때 원인을 찾는 유일한 방법입니다
+  const spent: Record<string, number> = { gather: 0, haul: 0, work: 0, hunt: 0 };
+  const mapTime: Record<string, number> = {};
+  let mineSwings = 0;
+  let fighting = 0;
+  let walking = 0;
+
   const limit = HOURS * 3600;
-  let sinceCheck = 0;
-
+  let lastGoal = pilot.goal;
+  const transitions: Record<string, number> = {};
   while (world.time < limit) {
+    autopilot(world, pilot);
+    if (pilot.goal !== lastGoal) {
+      const key = `${lastGoal}→${pilot.goal}`;
+      transitions[key] = (transitions[key] ?? 0) + 1;
+      if (TRACE && world.time < 900) {
+        const w = world.me.equipped.weapon;
+        console.log(
+          `${(world.time / 60).toFixed(1)}분 ${key.padEnd(14)} ${world.mapId.padEnd(6)} ` +
+            `짐 ${derive(world.me).load}/${derive(world.me).carry} · 금 ${Math.floor(world.me.gold)} · ` +
+            `무기 ${w ? `${itemDef(w.defId).name} ${Math.round((wearRatio(w) ?? 0) * 100)}%` : '맨손'} · ` +
+            `광석 ${countOf(world.me, 'iron-ore')} · 주괴 ${countOf(world.me, 'iron-ingot')}`,
+        );
+      }
+      lastGoal = pilot.goal;
+    }
+    spent[pilot.goal] = (spent[pilot.goal] ?? 0) + DT;
+    mapTime[world.mapId] = (mapTime[world.mapId] ?? 0) + DT;
+    if (world.me.action?.kind === 'mine') mineSwings += DT;
+    if (world.monsters.some((m) => m.id === world.me.targetId && m.state !== 'dead')) fighting += DT;
+    else if (world.me.moveTarget) walking += DT;
     step(world, DT);
 
-    if (world.player.level !== lastLevel) {
-      lastLevel = world.player.level;
-      marks[lastLevel] = world.time;
+    const me = world.me;
+
+    // 지표
+    if (marks.mining50 === null && me.skills.mining >= 50) marks.mining50 = world.time;
+    if (marks.mining100 === null && me.skills.mining >= 100) marks.mining100 = world.time;
+    if (marks.smithing100 === null && me.skills.blacksmithing >= 100) marks.smithing100 = world.time;
+    if (marks.firstIronSword === null && (me.tally['iron-sword'] ?? 0) > 0) {
+      marks.firstIronSword = world.time;
     }
 
-    if (world.player.dead) {
-      respawnInTown(world);
-      shop(world);
-      goTo(world, bestZone(world.player.level));
-      continue;
+    if (!minedOnce && (me.tally['iron-ore'] ?? 0) > 0) minedOnce = true;
+    if (!craftedOnce && ((me.tally['iron-ingot'] ?? 0) > 0 || (me.tally['iron-dagger'] ?? 0) > 0)) {
+      craftedOnce = true;
+    }
+    const kills = ['stray-dog', 'wolf', 'cave-bat', 'cave-spider'].reduce(
+      (a, id) => a + (me.tally[id] ?? 0),
+      0,
+    );
+    if (marks.firstFullCycle === null && minedOnce && craftedOnce && kills > 0) {
+      marks.firstFullCycle = world.time;
     }
 
-    sinceCheck += DT;
-    if (sinceCheck > 20) {
-      sinceCheck = 0;
-      const potions = world.player.inventory
-        .filter((s) => itemDef(s.defId).healHp)
-        .reduce((a, b) => a + b.count, 0);
-      const zone = bestZone(world.player.level);
+    // 검 수명 — 한 자루가 만들어져서 손을 떠날 때까지 잡은 수
+    const weapon = me.equipped.weapon;
+    if (weapon && weapon.defId !== 'rusty-sword') {
+      if (!lives.has(weapon.uid)) lives.set(weapon.uid, 0);
+      lives.set(weapon.uid, lives.get(weapon.uid)! + (kills - lastKills));
+      seen.set(weapon.uid, {
+        durability: weapon.durability ?? 0,
+        max: weapon.maxDurability ?? 0,
+        born: itemDef(weapon.defId).durability ?? 0,
+      });
+    }
+    lastKills = kills;
 
-      if (potions < 5 || world.mapId !== zone) {
-        const town = mapDef('town');
-        enterMap(world, 'town', town.entryTx, town.entryTy);
-        shop(world);
-        goTo(world, zone);
-      }
+    // 사라진 검은 수명을 마감합니다 (부러졌거나 팔았거나)
+    for (const uid of [...lives.keys()]) {
+      const alive =
+        me.equipped.weapon?.uid === uid || me.backpack.some((s) => s.uid === uid);
+      if (alive) continue;
+      const life = lives.get(uid)!;
+      const last = seen.get(uid);
+      lives.delete(uid);
+      seen.delete(uid);
+      // 부러졌거나 수리로 수명이 반 넘게 깎인 검만 셉니다
+      const spent = last && (last.durability <= 0 || last.max <= last.born * 0.6);
+      if (life > 0 && spent) marks.swordLives.push(life);
     }
   }
 
-  const stats = derive(world.player);
-  const gear = (['weapon', 'armor', 'helmet', 'ring'] as EquipSlot[])
-    .map((slot) => {
-      const worn = world.player.equipped[slot];
-      return worn ? itemName(worn) : '없음';
-    })
-    .join(' / ');
+  // 아직 손에 남아 있는 검은 '한창 쓰는 중'이므로 세지 않습니다
 
-  console.log(`\n=== ${CLASS} · ${HOURS}시간 자동 사냥 ===`);
-  console.log(`레벨 ${world.player.level}  ·  사망 ${world.player.deaths}회  ·  골드 ${Math.floor(world.player.gold).toLocaleString()}`);
-  console.log(`장비: ${gear}`);
-  console.log(`체력 ${Math.round(stats.maxHp)}  공격 ${Math.round(stats.minDamage)}~${Math.round(stats.maxDamage)}  AC ${stats.ac}`);
-  console.log(`퀘스트 ${world.player.questIndex}/16  ·  마지막 사냥터 ${world.map.def.name}`);
-  console.log('레벨 도달(분):');
-  for (const level of Object.keys(marks).map(Number).sort((a, b) => a - b)) {
-    if (level % 5 === 0 || level < 4) console.log(`  Lv.${level}  ${(marks[level]! / 60).toFixed(1)}분`);
-  }
-  const kills = Object.entries(world.player.kills).sort((a, b) => b[1] - a[1]);
-  console.log('처치:', kills.map(([id, n]) => `${id} ${n}`).join(', '));
+  const me = world.me;
+  const stats = derive(me);
+  const kills = ['stray-dog', 'wolf', 'cave-bat', 'cave-spider'].reduce(
+    (a, id) => a + (me.tally[id] ?? 0),
+    0,
+  );
+  const weapon = me.equipped.weapon;
+
+  console.log(`\n=== ${TEMPLATE} · ${HOURS}시간 · ${FOCUS} · 씨앗 ${SEED} ===`);
+  console.log(
+    `채광 ${me.skills.mining.toFixed(1)} · 대장 ${me.skills.blacksmithing.toFixed(1)} · ` +
+      `검술 ${me.skills.swordsmanship.toFixed(1)} · 방어 ${me.skills.defense.toFixed(1)}`,
+  );
+  console.log(
+    `힘 ${me.str.toFixed(1)} · 민첩 ${me.dex.toFixed(1)} · 지능 ${me.int.toFixed(1)} ` +
+      `(합 ${(me.str + me.dex + me.int).toFixed(1)})`,
+  );
+  console.log(`골드 ${Math.floor(me.gold).toLocaleString()} · 사망 ${me.deaths}회 · 처치 ${kills}마리`);
+  console.log(
+    `장비: ${weapon ? `${itemDef(weapon.defId).name} (내구 ${Math.round((wearRatio(weapon) ?? 0) * 100)}%)` : '맨손'}` +
+      ` / ${me.equipped.armor ? itemDef(me.equipped.armor.defId).name : '없음'}`,
+  );
+  console.log(`체력 ${stats.maxHp} · 공격 ${stats.minDamage.toFixed(0)}~${stats.maxDamage.toFixed(0)} · 짐 ${stats.load}/${stats.carry}`);
+
+  console.log('\n--- §4.3 지표 ---');
+  console.log(`첫 철검              ${minutes(marks.firstIronSword)}   (목표 15~25분)`);
+  console.log(`채광 50              ${minutes(marks.mining50)}   (목표 약 60분)`);
+  console.log(`한 바퀴 완결         ${minutes(marks.firstFullCycle)}   (목표 30분 안에 1회)`);
+  console.log(
+    `철검 한 자루 수명    ${
+      marks.swordLives.length > 0
+        ? `${Math.round(marks.swordLives.reduce((a, b) => a + b, 0) / marks.swordLives.length)}마리 ` +
+          `(${marks.swordLives.join(', ')})`
+        : '—'
+    }   (목표 80~120마리)`,
+  );
+  console.log(`채광 100             ${minutes(marks.mining100)}   (실측만)`);
+  console.log(`대장 100             ${minutes(marks.smithing100)}   (실측만)`);
+
+  console.log('\n--- 시간이 어디로 갔나 ---');
+  const totalTime = HOURS * 3600;
+  console.log(
+    Object.entries(spent)
+      .map(([goal, sec]) => `${goal} ${((sec / totalTime) * 100).toFixed(0)}%`)
+      .join(' · '),
+  );
+  console.log(
+    '지역: ' +
+      Object.entries(mapTime)
+        .map(([id, sec]) => `${id} ${((sec / totalTime) * 100).toFixed(0)}%`)
+        .join(' · '),
+  );
+  console.log(
+    '목표 전환: ' +
+      Object.entries(transitions)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => `${k} ${n}`)
+        .join(' · '),
+  );
+  console.log(
+    `곡괭이질 ${((mineSwings / totalTime) * 100).toFixed(1)}% · ` +
+      `싸움 ${((fighting / totalTime) * 100).toFixed(1)}% · ` +
+      `걷기 ${((walking / totalTime) * 100).toFixed(1)}%`,
+  );
+
+  console.log('\n--- 만든 것과 캔 것 ---');
+  console.log(nameOfTally(me.tally));
+  console.log(`남은 광석 ${countOf(me, 'iron-ore')} · 주괴 ${countOf(me, 'iron-ingot')}`);
 }
 
-if (MODE === 'boss') bossTest(true);
-else if (MODE === 'boss-early') bossTest(false);
-else run();
+run();

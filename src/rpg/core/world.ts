@@ -13,6 +13,7 @@ import { AI, TILE } from '../balance';
 import { mapDef } from '../content/maps';
 import { monsterDef } from '../content/monsters';
 import { hash2, nextRandom, randInt } from './rng';
+import { veinDef } from '../content/veins';
 import type { MapDef, MapId, MapRuntime, Monster, Vec2, World } from '../types';
 
 /* 타일 값 */
@@ -257,8 +258,8 @@ function makeMonster(world: World, defId: string, tx: number, ty: number): Monst
     respawnIn: 0,
     wanderTarget: null,
     wanderTimer: nextRandom(world) * AI.wanderInterval,
-    castTimer: 0,
-    aoeCooldown: def.aoe ? def.aoe.cooldown * 0.5 : 0,
+    path: [],
+    pathTimer: 0,
     anim: nextRandom(world) * 10,
     moving: false,
     swing: 0,
@@ -267,37 +268,46 @@ function makeMonster(world: World, defId: string, tx: number, ty: number): Monst
 }
 
 /**
- * 지금 맵에 몬스터를 배치합니다.
- * 잡몹은 입구에서 조금 떨어진 곳에, 보스는 입구 반대편 깊숙한 곳에 둡니다.
+ * 지금 지역에 몬스터와 광맥을 놓습니다.
+ *
+ * ★ 깊이가 곧 위험이자 보상입니다.
+ *   입구에서 멀수록 사나운 것이 살고, 좋은 광맥이 있습니다.
+ *   그래서 "어디까지 들어갈 것인가"가 이 게임의 판단이 됩니다.
  */
 export function populate(world: World): void {
   const { def } = world.map;
   world.monsters = [];
+  world.veins = [];
+
+  const depthFrom = (tx: number, ty: number) => Math.hypot(tx - def.entryTx, ty - def.entryTy);
 
   for (const spawn of def.spawns) {
-    const mdef = monsterDef(spawn.monsterId);
-    const boss = mdef.boss === true;
-
     for (let i = 0; i < spawn.count; i++) {
-      const spot = findOpenTile(world, (tx, ty) => {
-        const dx = tx - def.entryTx;
-        const dy = ty - def.entryTy;
-        const dist = Math.hypot(dx, dy);
-        if (boss) return dist > def.width * 0.55;
-        return dist > 6;
-      });
-      const monster = makeMonster(world, spawn.monsterId, spot.tx, spot.ty);
+      const spot = findOpenTile(world, (tx, ty) => depthFrom(tx, ty) >= spawn.minDepth);
+      world.monsters.push(makeMonster(world, spawn.monsterId, spot.tx, spot.ty));
+    }
+  }
 
-      // 이미 죽여둔 보스라면 시계가 돌 때까지 누워 있습니다
-      if (boss) {
-        const respawnAt = world.bossRespawnAt[spawn.monsterId];
-        if (respawnAt !== undefined && respawnAt > world.time) {
-          monster.state = 'dead';
-          monster.hp = 0;
-          monster.respawnIn = respawnAt - world.time;
-        }
-      }
-      world.monsters.push(monster);
+  for (const patch of def.veins) {
+    const vdef = veinDef(patch.veinId);
+    for (let i = 0; i < patch.count; i++) {
+      // 광맥은 바위 옆에 붙어 있어야 광맥처럼 보입니다
+      const spot = findOpenTile(world, (tx, ty) => {
+        if (depthFrom(tx, ty) < patch.minDepth) return false;
+        return (
+          tileBlocked(world.map, tx + 1, ty) ||
+          tileBlocked(world.map, tx - 1, ty) ||
+          tileBlocked(world.map, tx, ty + 1) ||
+          tileBlocked(world.map, tx, ty - 1)
+        );
+      });
+      world.veins.push({
+        id: world.nextId++,
+        defId: patch.veinId,
+        pos: { x: tileCenter(spot.tx), y: tileCenter(spot.ty) },
+        remaining: vdef.capacity,
+        respawnIn: 0,
+      });
     }
   }
 }
@@ -306,9 +316,10 @@ export function populate(world: World): void {
 export function enterMap(world: World, mapId: MapId, tx: number, ty: number): void {
   world.mapId = mapId;
   world.map = buildMap(mapDef(mapId));
-  world.player.pos = { x: tileCenter(tx), y: tileCenter(ty) };
-  world.player.moveTarget = null;
-  world.player.targetId = null;
+  world.me.pos = { x: tileCenter(tx), y: tileCenter(ty) };
+  world.me.moveTarget = null;
+  world.me.targetId = null;
+  world.me.action = null;
   world.path = [];
   world.pathTimer = 0;
   world.ground = [];
@@ -317,7 +328,7 @@ export function enterMap(world: World, mapId: MapId, tx: number, ty: number): vo
   world.pendingNpc = null;
   populate(world);
 
-  if (!world.player.discovered.includes(mapId)) world.player.discovered.push(mapId);
+  if (!world.me.discovered.includes(mapId)) world.me.discovered.push(mapId);
 }
 
 /* ===========================================================================
