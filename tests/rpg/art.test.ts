@@ -19,7 +19,7 @@ import { monsterDef } from '../../src/rpg/content/monsters';
 import { nearForge } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
-import { WEAPON_LOOK } from '../../src/rpg/ui/art/actors';
+import { WEAPON_LOOK, drawMonster } from '../../src/rpg/ui/art/actors';
 import { KIND_ICON } from '../../src/rpg/ui/Panels';
 import {
   drawForge,
@@ -122,6 +122,9 @@ function fakeCtx() {
     closePath: record('closePath'),
     moveTo: record('moveTo'),
     lineTo: record('lineTo'),
+    quadraticCurveTo: record('quadraticCurveTo'),
+    bezierCurveTo: record('bezierCurveTo'),
+    clip: record('clip'),
     arc: record('arc'),
     ellipse: record('ellipse'),
     rect: record('rect'),
@@ -475,5 +478,78 @@ describe('NPC_ROLE ↔ 마을 사람', () => {
   it('역할 이름이 서로 다르다', () => {
     const roles = Object.values(NPC_ROLE);
     expect(new Set(roles).size, `역할 이름이 겹칩니다: ${roles.join(' ')}`).toBe(roles.length);
+  });
+});
+
+/* ===========================================================================
+ *  맞은 몬스터의 번쩍임
+ * ======================================================================== */
+
+/**
+ *  ★ core 의 monster.hitFlash 는 0.12초짜리라 눈에 안 걸렸습니다.
+ *    규칙 값을 늘리는 대신 그림 쪽에서 시작 시각을 기억해 조금 더 길게 보여줍니다.
+ *    여기서 지킬 것은 "core 값은 그대로" 와 "0.12초보다 오래 보인다" 둘입니다.
+ */
+describe('맞은 몬스터가 번쩍인다', () => {
+  const flashCalls = (ctx: { strokes: string[] }) => ctx.strokes.filter((c) => c === '#fff2e0').length;
+
+  it('맞지 않은 몬스터는 번쩍이지 않는다', () => {
+    const world = inForest();
+    const monster = monsterAt(world, 'wolf', 400, 400, 'idle');
+    monster.hitFlash = 0;
+
+    const ctx = fakeCtx();
+    drawMonster(ctx, world, monster);
+    expect(flashCalls(ctx)).toBe(0);
+  });
+
+  it('맞은 순간에는 테두리가 한 겹 돈다', () => {
+    const world = inForest();
+    const monster = monsterAt(world, 'wolf', 400, 400, 'idle');
+    monster.hitFlash = 0.12; // combat.ts 가 세우는 값 그대로
+
+    const ctx = fakeCtx();
+    drawMonster(ctx, world, monster);
+    expect(flashCalls(ctx), '번쩍임이 없습니다').toBeGreaterThan(0);
+  });
+
+  it('core 가 정한 0.12초보다 오래 보인다 — 그런데 core 값은 그대로다', () => {
+    const world = inForest();
+    const monster = monsterAt(world, 'wolf', 400, 400, 'idle');
+    world.time = 100;
+    monster.hitFlash = 0.12;
+
+    // 첫 프레임에 번쩍이 시작됩니다
+    drawMonster(fakeCtx(), world, monster);
+
+    // core 는 0.12초 만에 hitFlash 를 0 으로 내립니다
+    monster.hitFlash = 0;
+    world.time = 100.2; // 0.2초 뒤 — 예전이라면 이미 꺼졌을 때
+    const later = fakeCtx();
+    drawMonster(later, world, monster);
+    expect(later.strokes.length, '0.12초 만에 꺼졌습니다').toBeGreaterThan(0);
+
+    // 그래도 영영 켜져 있지는 않습니다
+    world.time = 100.4;
+    const gone = fakeCtx();
+    drawMonster(gone, world, monster);
+    expect(flashCalls(gone), '번쩍임이 안 꺼집니다').toBe(0);
+  });
+
+  it('맞은 놈만 번쩍인다', () => {
+    const world = inForest();
+    world.time = 50;
+    const hurt = monsterAt(world, 'wolf', 400, 400, 'idle');
+    const calm = monsterAt(world, 'wolf', 460, 400, 'idle');
+    hurt.hitFlash = 0.12;
+    calm.hitFlash = 0;
+
+    const a = fakeCtx();
+    drawMonster(a, world, hurt);
+    const b = fakeCtx();
+    drawMonster(b, world, calm);
+
+    expect(flashCalls(a)).toBeGreaterThan(0);
+    expect(flashCalls(b), '안 맞은 놈이 번쩍입니다').toBe(0);
   });
 });
