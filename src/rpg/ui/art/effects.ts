@@ -13,8 +13,13 @@
 import { CRAFT, GATHER, TILE } from '../../balance';
 import { itemDef } from '../../content/items';
 
-/** 바닥에 떨어진 물건의 색 — 종류만 구분되면 충분합니다 */
-const ITEM_TINT: Record<string, string> = {
+/**
+ *  바닥에 떨어진 물건의 색 — 종류만 구분되면 충분합니다.
+ *
+ *  ★ Record<string, …> 이 아니라 Record<ItemKind, …> 입니다.
+ *    종류를 하나 늘리면 여기를 채울 때까지 컴파일이 통과하지 않습니다.
+ */
+export const ITEM_TINT: Record<ItemKind, string> = {
   weapon: '#c3cbd6',
   armor: '#9aa6b4',
   helmet: '#9aa6b4',
@@ -26,7 +31,7 @@ import { monsterDef } from '../../content/monsters';
 import { veinDef } from '../../content/veins';
 import { nearForge } from '../../core/action';
 import { tileCenter } from '../../core/world';
-import type { GroundItem, Monster, Npc, Vein, World } from '../../types';
+import type { GroundItem, ItemKind, Monster, Npc, NpcKind, Vein, World } from '../../types';
 import { LIGHT, alpha, darken, lighten } from './palette';
 import { drawShadow } from './actors';
 
@@ -350,7 +355,8 @@ export function drawGroundItem(ctx: CanvasRenderingContext2D, world: World, item
 
 /* --------------------------------------------------------------- 마을 사람 */
 
-const NPC_ROLE: Record<string, string> = {
+/** 마을 사람의 머리 위에 적는 역할 — 종류를 늘리면 컴파일이 막습니다 */
+export const NPC_ROLE: Record<NpcKind, string> = {
   shop: '상점',
   smith: '대장간',
 };

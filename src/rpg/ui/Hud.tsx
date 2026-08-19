@@ -153,11 +153,14 @@ export function ActionBar({ world, refresh }: { world: World; refresh: () => voi
       )}
 
       <div className="flex items-end gap-2">
+        {/*
+          ★ 물약이 없어도 눌립니다. 눌러야 "물약이 없습니다" 라고 말해줄 수 있고,
+            손가락으로만 노는 폰에는 Q 키가 없습니다. 없다는 것은 흐리게 보여줍니다.
+        */}
         <button
           type="button"
           onClick={() => { drinkBestPotion(world); refresh(); }}
-          disabled={potions === 0}
-          className="btn h-14 w-14 rounded-sm text-[10px]"
+          className={`btn h-14 w-14 rounded-sm text-[10px] ${potions === 0 ? 'opacity-50' : ''}`}
           style={{ borderColor: 'rgba(194,53,47,0.55)' }}
         >
           <span className="block font-bold text-[#e88a86]">물약</span>

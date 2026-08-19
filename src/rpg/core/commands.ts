@@ -121,17 +121,89 @@ export function stopAction(world: World): void {
  *  물약
  * ======================================================================== */
 
+/**
+ *  물약을 못 마시는 다섯 가지 이유.
+ *
+ *  ★ 전부 조용히 false 만 돌려주고 있었습니다. Q 를 눌렀는데 아무 일도 안 일어나면
+ *    "물약이 없나? 아직인가? 이미 다 찼나?" 를 알 길이 없습니다.
+ *
+ *  ★ 알리는 방식이 이유마다 다릅니다. 싸우는 중에 Q 를 연타하는 상황이 기준입니다.
+ *      none      토스트 — 죽기 직전인데 물약이 없다는 건 크게 알려야 합니다
+ *      cooldown  머리 위 작은 글자 — 0.55초 뒤면 풀립니다. 크게 띄우면 시끄럽습니다
+ *      full      머리 위 작은 글자 — "안 마셔도 된다"는 좋은 소식입니다
+ *      dead·not-potion   기록 한 줄 — 급하지 않습니다
+ */
+type PotionProblem = 'dead' | 'cooldown' | 'full' | 'none' | 'not-potion';
+
+/**
+ *  같은 이유를 연달아 알리지 않기 위한 간격 (초).
+ *  ★ core/loot.ts 가 못 주운 전리품에 쓰는 것과 같은 방식입니다 — 세계를 키로 잡아
+ *    저장되지 않고, 새로 시작하거나 불러오면 저절로 처음부터입니다.
+ */
+const POTION_TELL_INTERVAL = 3;
+
+const potionToldAt = new WeakMap<World, Map<PotionProblem, number>>();
+
+function tellPotionProblem(world: World, problem: PotionProblem): void {
+  let seen = potionToldAt.get(world);
+  if (!seen) {
+    seen = new Map();
+    potionToldAt.set(world, seen);
+  }
+  const last = seen.get(problem);
+  if (last !== undefined && world.time - last < POTION_TELL_INTERVAL) return;
+  seen.set(problem, world.time);
+
+  const me = world.me;
+  const overhead = { x: me.pos.x, y: me.pos.y - 22 };
+
+  switch (problem) {
+    case 'none':
+      toast(world, '물약이 없습니다', 'bad');
+      log(world, '물약이 없습니다', 'bad');
+      break;
+    case 'cooldown':
+      floater(world, overhead, `아직 ${me.potionCooldown.toFixed(1)}초`, 'miss');
+      break;
+    case 'full':
+      floater(world, overhead, '체력이 가득', 'info');
+      break;
+    case 'dead':
+      log(world, '쓰러진 채로는 마실 수 없습니다', 'bad');
+      break;
+    case 'not-potion':
+      log(world, '마실 수 있는 것이 아닙니다', 'bad');
+      break;
+  }
+}
+
 export function drinkPotion(world: World, uid: number): boolean {
   const me = world.me;
-  if (me.dead || me.potionCooldown > 0) return false;
+  if (me.dead) {
+    tellPotionProblem(world, 'dead');
+    return false;
+  }
+  if (me.potionCooldown > 0) {
+    tellPotionProblem(world, 'cooldown');
+    return false;
+  }
 
   const stack = findStack(me, uid);
-  if (!stack) return false;
+  if (!stack) {
+    tellPotionProblem(world, 'not-potion');
+    return false;
+  }
   const def = itemDef(stack.defId);
-  if (!def.healHp) return false;
+  if (!def.healHp) {
+    tellPotionProblem(world, 'not-potion');
+    return false;
+  }
 
   const stats = derive(me);
-  if (me.hp >= stats.maxHp) return false;
+  if (me.hp >= stats.maxHp) {
+    tellPotionProblem(world, 'full');
+    return false;
+  }
 
   const healed = Math.min(def.healHp, stats.maxHp - me.hp);
   me.hp += healed;
@@ -144,11 +216,21 @@ export function drinkPotion(world: World, uid: number): boolean {
 /** 가진 물약 중 가장 덜 남기는 것을 마십니다 (Q 단축키) */
 export function drinkBestPotion(world: World): boolean {
   const me = world.me;
-  if (me.potionCooldown > 0) return false;
+  if (me.dead) {
+    tellPotionProblem(world, 'dead');
+    return false;
+  }
+  if (me.potionCooldown > 0) {
+    tellPotionProblem(world, 'cooldown');
+    return false;
+  }
 
   const stats = derive(me);
   const missing = stats.maxHp - me.hp;
-  if (missing <= 0) return false;
+  if (missing <= 0) {
+    tellPotionProblem(world, 'full');
+    return false;
+  }
 
   const best = me.backpack
     .filter((s) => itemDef(s.defId).healHp)
@@ -158,7 +240,10 @@ export function drinkBestPotion(world: World): boolean {
         Math.abs((itemDef(b.defId).healHp ?? 0) - missing),
     )[0];
 
-  if (!best) return false;
+  if (!best) {
+    tellPotionProblem(world, 'none');
+    return false;
+  }
   return drinkPotion(world, best.uid);
 }
 
