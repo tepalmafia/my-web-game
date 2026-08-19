@@ -14,7 +14,9 @@ import { startCraft, startMining, tickAction } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
 import { step } from '../../src/rpg/core/engine';
 import { clickWorld } from '../../src/rpg/core/commands';
-import { addItem, buyItem, canCarry, countOf } from '../../src/rpg/core/inventory';
+import { pickUpNearby } from '../../src/rpg/core/loot';
+import { itemDef } from '../../src/rpg/content/items';
+import { addItem, buyItem, canCarry, countOf, freeWeight } from '../../src/rpg/core/inventory';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
 import type { World } from '../../src/rpg/types';
 
@@ -176,5 +178,89 @@ describe('광맥 위에 몬스터가 서 있을 때 무엇을 누른 것인가',
 
     expect(world.me.targetId).toBeNull();
     expect(world.me.moveTarget).toEqual(far);
+  });
+});
+
+/* ===========================================================================
+ *  발밑의 전리품이 조용히 안 주워지던 것
+ * ======================================================================== */
+
+/**
+ *  ★ pickUpNearby 는 무게나 칸이 모자라면 그냥 continue 했습니다.
+ *    전리품이 발밑에 있는데 주워지지 않고, 화면에는 아무 말도 없었습니다.
+ *    "왜 안 주워지지" 를 알 방법이 없는, 이 프로젝트가 계속 잡고 있는 그 조용한 실패입니다.
+ */
+function withGroundItem(defId: string, count = 1): World {
+  const world = inForest();
+  world.log.length = 0;
+  world.ground.push({
+    id: world.nextId++,
+    defId,
+    count,
+    pos: { x: world.me.pos.x, y: world.me.pos.y },
+    life: 120,
+  });
+  return world;
+}
+
+describe('못 주운 것을 알려준다', () => {
+  it('무거워서 못 들면 기록이 남는다', () => {
+    const world = withGroundItem('iron-ore', 1);
+    // 들 수 있는 무게를 0 으로 만들면 무엇도 못 듭니다
+    world.me.str = 1;
+    world.me.backpack.length = 0;
+    while (freeWeight(world.me) >= itemDef('iron-ore').weight) {
+      world.me.backpack.push({ uid: world.nextId++, defId: 'iron-ore', count: 1 });
+    }
+    const before = world.ground.length;
+
+    pickUpNearby(world);
+
+    expect(world.ground.length, '못 드는데 사라졌습니다').toBe(before);
+    expect(world.log.length, '아무 말도 없습니다').toBeGreaterThan(0);
+    expect(world.log.at(-1)!.tone).toBe('bad');
+  });
+
+  it('칸이 없으면 무게 얘기가 아니라 칸 얘기를 한다', () => {
+    const world = withGroundItem('rusty-sword', 1);
+    // 겹치지 않는 물건으로 칸만 가득 채웁니다 (무게는 여유가 있게)
+    world.me.str = 200;
+    world.me.backpack.length = 0;
+    for (let i = 0; i < LOOT.packSlots; i++) {
+      world.me.backpack.push({ uid: world.nextId++, defId: 'rusty-sword', count: 1 });
+    }
+
+    pickUpNearby(world);
+
+    expect(world.ground.length).toBe(1);
+    expect(world.log.at(-1)!.text).toContain('빈 칸');
+  });
+
+  it('같은 말이 연달아 쏟아지지 않는다', () => {
+    const world = withGroundItem('rusty-sword', 1);
+    world.me.str = 200;
+    world.me.backpack.length = 0;
+    for (let i = 0; i < LOOT.packSlots; i++) {
+      world.me.backpack.push({ uid: world.nextId++, defId: 'rusty-sword', count: 1 });
+    }
+
+    // 물건 위에 서 있는 동안 줍기는 매 프레임 돌아갑니다
+    for (let i = 0; i < 60; i++) {
+      world.time += DT;
+      pickUpNearby(world);
+    }
+
+    expect(world.log.length, `${world.log.length} 줄이 쏟아졌습니다`).toBe(1);
+  });
+
+  it('제대로 주우면 경고하지 않는다', () => {
+    const world = withGroundItem('iron-ore', 1);
+    world.me.str = 200;
+    world.me.backpack.length = 0;
+
+    pickUpNearby(world);
+
+    expect(world.ground.length).toBe(0);
+    expect(world.log.filter((line) => line.tone === 'bad')).toEqual([]);
   });
 });

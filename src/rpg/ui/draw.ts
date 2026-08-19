@@ -21,17 +21,21 @@ import { computeView } from './view';
 import { drawMonster, drawPlayer } from './art/actors';
 import {
   drawFloaters,
+  drawForge,
+  drawForgeLabel,
+  drawForgeRing,
   drawGroundItem,
   drawNameplates,
   drawNpc,
   drawPortal,
   drawTargetMark,
-  drawForge,
-  drawForgeLabel,
-  drawForgeRing,
+  drawThreatMarks,
+  drawThreatRings,
   drawVein,
   drawVeinLabels,
+  drawVeinRings,
   drawVfx,
+  setLabelBlockout,
 } from './art/effects';
 import { ZONE_ART, alpha } from './art/palette';
 import {
@@ -89,6 +93,15 @@ function terrainLayer(world: World): HTMLCanvasElement | null {
   return canvas;
 }
 
+/** 작은 지도가 차지하는 자리 (화면 좌표) — 그리는 쪽과 이름표를 접는 쪽이 같은 값을 씁니다 */
+const MINIMAP = { size: 104, margin: 14, pad: 5 };
+
+function minimapScreenBox(width: number) {
+  const x0 = width - MINIMAP.size - MINIMAP.margin - MINIMAP.pad;
+  const y0 = MINIMAP.margin - MINIMAP.pad;
+  return { x0, y0, x1: x0 + MINIMAP.size + MINIMAP.pad * 2, y1: y0 + MINIMAP.size + MINIMAP.pad * 2 };
+}
+
 export function draw(ctx: CanvasRenderingContext2D, world: World, width: number, height: number): void {
   const view = computeView(world, width, height);
   const art = ZONE_ART[world.map.def.theme];
@@ -100,6 +113,15 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
   ctx.translate(width / 2, height / 2);
   ctx.scale(view.zoom, view.zoom);
   ctx.translate(-view.camX, -view.camY);
+
+  // 작은 지도 밑에 깔릴 이름표는 접습니다 (화면 좌표 → 월드 좌표)
+  const screenBox = minimapScreenBox(width);
+  setLabelBlockout({
+    x0: (screenBox.x0 - width / 2) / view.zoom + view.camX,
+    y0: (screenBox.y0 - height / 2) / view.zoom + view.camY,
+    x1: (screenBox.x1 - width / 2) / view.zoom + view.camX,
+    y1: (screenBox.y1 - height / 2) / view.zoom + view.camY,
+  });
 
   const range = visibleTiles(world, view);
 
@@ -120,13 +142,16 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
   const forge = world.map.def.forge;
   if (forge) drawForgeRing(ctx, world, forge.tx, forge.ty);
 
-  // 노리는 대상 표시는 발밑이므로 몸통보다 먼저
+  // 발밑에 깔리는 것들은 몸통보다 먼저
+  drawVeinRings(ctx, world);
+  drawThreatRings(ctx, world);
   const target = world.monsters.find((m) => m.id === world.me.targetId && m.state !== 'dead');
   if (target) drawTargetMark(ctx, world, target);
 
   drawDepthSorted(ctx, world, range);
 
   drawVfx(ctx, world);
+  drawThreatMarks(ctx, world);
   drawVeinLabels(ctx, world);
   drawForgeLabel(ctx, world);
   drawNameplates(ctx, world);
@@ -142,6 +167,8 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
   ctx.fillStyle = art.ambient;
   ctx.fillRect(0, 0, width, height);
   ctx.restore();
+
+  setLabelBlockout(null);
 
   drawVignette(ctx, width, height, art.fog);
   drawMinimap(ctx, world, width);
@@ -235,10 +262,10 @@ function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: numb
 
 function drawMinimap(ctx: CanvasRenderingContext2D, world: World, width: number): void {
   const { def, tiles } = world.map;
-  const size = 104;
+  const size = MINIMAP.size;
   const scale = size / Math.max(def.width, def.height);
-  const originX = width - size - 14;
-  const originY = 14;
+  const originX = width - size - MINIMAP.margin;
+  const originY = MINIMAP.margin;
   const art = ZONE_ART[def.theme];
 
   ctx.save();
