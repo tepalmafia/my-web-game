@@ -17,7 +17,7 @@ import { itemDef } from '../content/items';
 import { recipeDef } from '../content/recipes';
 import { veinDef } from '../content/veins';
 import { floater, log, toast } from './feedback';
-import { addItem, canCarry, consume, countOf } from './inventory';
+import { addItem, consume, countOf } from './inventory';
 import { chance, randInt } from './rng';
 import { hasTool, repairQuote, useTool } from './durability';
 import { trySkillGain } from './skillgain';
@@ -210,12 +210,12 @@ function finishMining(world: World, veinId: number, repeat: boolean): void {
   const ok = chance(world, successChance(me.skills.mining, def.difficulty, GATHER));
   if (ok) {
     const amount = randInt(world, def.amountMin, def.amountMax);
-    if (!canCarry(me, def.yields, amount)) {
+    // ★ 넣어보고 나서 셉니다. 못 넣었는데 광맥만 줄어들면 광석이 허공으로 갑니다.
+    if (!addItem(world, def.yields, amount)) {
       toast(world, '더 들 수 없습니다. 마을로 돌아가세요.', 'bad');
       floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '짐이 가득 참', 'info', 'pack-full');
       return;
     }
-    addItem(world, def.yields, amount);
     me.tally[def.yields] = (me.tally[def.yields] ?? 0) + amount;
     floater(world, vein.pos, `+${amount} ${itemDef(def.yields).name}`, 'info', 'ore');
     vein.remaining -= 1;
@@ -258,9 +258,13 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
   if (!chance(world, successChance(me.skills.blacksmithing, recipe.difficulty, CRAFT))) {
     for (const need of recipe.needs) {
       const back = Math.floor(need.count * (1 - CRAFT.failLoss));
-      if (back > 0) addItem(world, need.defId, back);
+      if (back > 0 && !addItem(world, need.defId, back)) {
+        log(world, `${itemDef(need.defId).name} ${back}개를 돌려받지 못했습니다 — 가방이 찼습니다`, 'bad');
+      }
     }
     log(world, `${recipe.name} 만들기에 실패했습니다`, 'bad');
+    // ★ 기록은 화면 맨 아래라 놓칩니다. 실패는 가운데에도 띄웁니다.
+    toast(world, `${recipe.name} 실패\n재료 절반을 잃었습니다`, 'bad');
     floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '실패', 'miss', 'craft-fail');
     if (repeat) startCraft(world, recipeId, true);
     return;
@@ -270,11 +274,19 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
     ? 'fine'
     : 'normal';
 
-  if (!canCarry(me, recipe.makes, recipe.makesCount)) {
-    toast(world, '만든 물건을 들 수 없습니다.', 'bad');
+  // ★ 여기서 addItem 의 답을 듣지 않던 것이 제일 나쁜 버그였습니다.
+  //   가방 칸이 없으면 물건은 안 들어오는데 재료는 사라지고, 기록에는
+  //   '완성' 이라고 적혔습니다. 못 넣으면 **재료를 전부 돌려줍니다.**
+  if (!addItem(world, recipe.makes, recipe.makesCount, { quality })) {
+    for (const need of recipe.needs) {
+      if (!addItem(world, need.defId, need.count)) {
+        log(world, `${itemDef(need.defId).name} 을(를) 돌려받지 못했습니다`, 'bad');
+      }
+    }
+    toast(world, '가방이 가득 찼습니다.\n만들지 못했습니다.', 'bad');
+    log(world, `${recipe.name} — 가방이 차서 만들지 못했습니다 (재료는 돌려받았습니다)`, 'bad');
     return;
   }
-  addItem(world, recipe.makes, recipe.makesCount, { quality });
   me.tally[recipe.makes] = (me.tally[recipe.makes] ?? 0) + recipe.makesCount;
 
   const madeName = quality === 'fine' ? `우수한 ${itemDef(recipe.makes).name}` : itemDef(recipe.makes).name;

@@ -39,9 +39,23 @@ export function freeWeight(me: Character): Stones {
   return derive(me).carry - totalWeight(me);
 }
 
-/** 이만큼 더 들 수 있는가 */
+/**
+ * 이만큼 더 들 수 있는가.
+ *
+ * ★ 무게만 보면 안 됩니다. 가방 칸(30)이 다 차 있으면 아무리 가벼워도 못 넣습니다.
+ *   이 함수가 무게만 보던 동안, 부르는 쪽마다 "들 수 있다"는 답을 믿고 addItem 을
+ *   불렀다가 조용히 실패했습니다 — 제작은 재료만 사라지고 '완성'이라 적었고,
+ *   상점은 골드만 빠져나갔습니다. 여기가 addItem 과 같은 것을 보게 두어야 합니다.
+ */
 export function canCarry(me: Character, defId: string, count = 1): boolean {
-  return itemDef(defId).weight * count <= freeWeight(me);
+  if (itemDef(defId).weight * count > freeWeight(me)) return false;
+  return hasRoom(me, defId);
+}
+
+/** 넣을 칸이 있는가 (겹치는 물건은 이미 있는 더미에 얹으면 되므로 칸이 필요 없습니다) */
+export function hasRoom(me: Character, defId: string): boolean {
+  if (itemDef(defId).stackable && me.backpack.some((s) => s.defId === defId)) return true;
+  return me.backpack.length < LOOT.packSlots;
 }
 
 /** 새 물건에 붙일 내구도 (닳는 물건이면) */
@@ -179,8 +193,13 @@ export function buyItem(world: World, defId: string, count = 1): void {
     toast(world, '그만큼 들 수 없습니다.', 'bad');
     return;
   }
+  // ★ 돈부터 빼고 물건을 넣다가 실패하면 돈만 사라집니다. 반드시 되돌립니다.
   me.gold -= total;
-  addItem(world, defId, count);
+  if (!addItem(world, defId, count)) {
+    me.gold += total;
+    toast(world, '가방이 가득 찼습니다.', 'bad');
+    return;
+  }
   log(world, `${def.name}${count > 1 ? ` ${count}개` : ''} 구입 — ${total.toLocaleString()} 골드`, 'normal');
 }
 

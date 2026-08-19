@@ -101,9 +101,6 @@ function movePlayer(world: World, dt: number): void {
     return;
   }
 
-  // 무언가 하는 중에 움직이면 그 일은 끊깁니다
-  if (me.action) cancelAction(world, '하던 일을 멈췄습니다');
-
   world.pathTimer = Math.max(0, world.pathTimer - dt);
 
   const straight = Math.hypot(destX - me.pos.x, destY - me.pos.y);
@@ -139,6 +136,14 @@ function movePlayer(world: World, dt: number): void {
   slideMove(world.map, me.pos, (dx / distance) * stepLength, (dy / distance) * stepLength, PLAYER_RADIUS);
 
   const walked = Math.hypot(me.pos.x - beforeX, me.pos.y - beforeY);
+
+  // 무언가 하는 중에 **실제로 발을 옮기면** 그 일은 끊깁니다.
+  // ★ 예전에는 여기가 아니라 함수 맨 위에 있었습니다. 그래서 노리는 몬스터가
+  //   하나라도 있으면 — 그 옆에 가만히 붙어 서 있어도, 길이 막혀 한 발도 못
+  //   떼고 있어도 — 매 프레임 취소가 걸려서 채광·제작·수리를 **아예 시작할 수
+  //   없었습니다.** 목적지에 이미 닿았거나 벽에 막혀 못 움직이면 끊지 않습니다.
+  if (walked > 0 && me.action) cancelAction(world, '하던 일을 멈췄습니다');
+
   world.meAnim += walked * 0.055;
   world.meMoving = walked > stepLength * 0.25;
 
