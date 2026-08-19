@@ -12,13 +12,25 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { GATHER } from '../../src/rpg/balance';
 import { ITEMS } from '../../src/rpg/content/items';
 import { MAPS, mapDef } from '../../src/rpg/content/maps';
+import { monsterDef } from '../../src/rpg/content/monsters';
 import { nearForge } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
-import { drawForge, drawForgeLabel, drawForgeRing } from '../../src/rpg/ui/art/effects';
+import {
+  drawForge,
+  drawForgeLabel,
+  drawForgeRing,
+  drawThreatMarks,
+  drawThreatRings,
+  drawVeinRings,
+  label,
+  setLabelBlockout,
+} from '../../src/rpg/ui/art/effects';
 import { MATERIAL } from '../../src/rpg/ui/art/palette';
+import type { Monster, World } from '../../src/rpg/types';
 
 const WEARABLE = Object.values(ITEMS).filter((def) => def.slot === 'armor' || def.slot === 'helmet');
 
@@ -79,13 +91,17 @@ describe('장비의 재질 색', () => {
 function fakeCtx() {
   const calls: string[] = [];
   const texts: string[] = [];
+  /** stroke() 를 부른 순간의 선 색 — 무엇을 어떤 색으로 그렸는지 보려고 */
+  const strokes: string[] = [];
   const record = (name: string) => (...args: unknown[]) => {
     calls.push(name);
     if (name === 'fillText' || name === 'strokeText') texts.push(String(args[0]));
+    if (name === 'stroke') strokes.push(String(ctx.strokeStyle));
   };
   const ctx = {
     calls,
     texts,
+    strokes,
     canvas: {},
     globalAlpha: 1,
     globalCompositeOperation: 'source-over',
@@ -118,7 +134,7 @@ function fakeCtx() {
     createRadialGradient: () => ({ addColorStop: () => {} }),
     createLinearGradient: () => ({ addColorStop: () => {} }),
   };
-  return ctx as unknown as CanvasRenderingContext2D & { calls: string[]; texts: string[] };
+  return ctx as unknown as CanvasRenderingContext2D & { calls: string[]; texts: string[]; strokes: string[] };
 }
 
 describe('화로', () => {
@@ -179,5 +195,179 @@ describe('화로', () => {
     drawForgeLabel(outside, world);
     expect(outside.texts.join(' ')).toContain('화로');
     expect(outside.texts.join(' ')).not.toContain('여기서 만듭니다');
+  });
+});
+
+/* ===========================================================================
+ *  쫓아오는지 보이는가
+ * ======================================================================== */
+
+/**
+ *  ★ core 에는 상태가 다섯 가지(idle·chase·attack·return·dead) 있는데
+ *    화면은 'dead' 하나만 보고 있었습니다. 늑대가 나를 쫓는지 아닌지 알 길이 없었고,
+ *    도망칠지 싸울지가 이 게임의 유일한 순간 판단인데 그 판단의 근거가 화면에 없었습니다.
+ */
+/** 숲이 실제로 낳은 몬스터 하나를 빌려 자리와 상태만 바꿔 씁니다 (손으로 만들지 않습니다) */
+function monsterAt(world: World, defId: string, x: number, y: number, state: Monster['state']): Monster {
+  const source = SPAWNED.find((m) => m.defId === defId);
+  if (!source) throw new Error(`숲에 ${defId} 가 없습니다`);
+  const monster: Monster = { ...source, id: world.nextId++, pos: { x, y }, home: { x, y }, state };
+  world.monsters.push(monster);
+  return monster;
+}
+
+function forestWorld(): World {
+  const world = createWorld('시험', 'miner');
+  const def = mapDef('forest');
+  enterMap(world, 'forest', def.entryTx, def.entryTy);
+  return world;
+}
+
+/** 숲이 낳은 몬스터들 — 본보기로 씁니다 */
+const SPAWNED = forestWorld().monsters;
+
+function inForest(): World {
+  const world = forestWorld();
+  world.monsters.length = 0;
+  return world;
+}
+
+describe('몬스터가 나를 쫓는지', () => {
+  it('먼저 덤비는 놈과 아닌 놈의 고리 색이 다르다', () => {
+    // 들개는 aggroRange 0(먼저 안 덤빔), 늑대는 240
+    expect(monsterDef('stray-dog').aggroRange).toBe(0);
+    expect(monsterDef('wolf').aggroRange).toBeGreaterThan(0);
+
+    const world = inForest();
+    const { x, y } = world.me.pos;
+    monsterAt(world, 'stray-dog', x + 40, y, 'idle');
+    const dog = fakeCtx();
+    drawThreatRings(dog, world);
+
+    world.monsters.length = 0;
+    monsterAt(world, 'wolf', x + 40, y, 'idle');
+    const wolf = fakeCtx();
+    drawThreatRings(wolf, world);
+
+    expect(dog.strokes.length, '들개에게 고리가 없습니다').toBe(1);
+    expect(wolf.strokes.length, '늑대에게 고리가 없습니다').toBe(1);
+    expect(dog.strokes[0], '사냥감과 위험한 놈의 색이 같습니다').not.toBe(wolf.strokes[0]);
+  });
+
+  it('쫓아오면 고리가 달라진다', () => {
+    const world = inForest();
+    const { x, y } = world.me.pos;
+
+    monsterAt(world, 'wolf', x + 40, y, 'idle');
+    const calm = fakeCtx();
+    drawThreatRings(calm, world);
+
+    world.monsters.length = 0;
+    monsterAt(world, 'wolf', x + 40, y, 'chase');
+    const angry = fakeCtx();
+    drawThreatRings(angry, world);
+
+    expect(calm.strokes[0]).not.toBe(angry.strokes[0]);
+  });
+
+  it('쫓아올 때만 머리 위에 표시와 이름이 뜬다', () => {
+    const world = inForest();
+    const { x, y } = world.me.pos;
+
+    for (const state of ['idle', 'return'] as const) {
+      world.monsters.length = 0;
+      monsterAt(world, 'wolf', x + 40, y, state);
+      const quiet = fakeCtx();
+      drawThreatMarks(quiet, world);
+      expect(quiet.texts, `${state} 인데 표시가 떴습니다`).toEqual([]);
+    }
+
+    for (const state of ['chase', 'attack'] as const) {
+      world.monsters.length = 0;
+      monsterAt(world, 'wolf', x + 40, y, state);
+      const loud = fakeCtx();
+      drawThreatMarks(loud, world);
+      expect(loud.texts.join(' '), `${state} 인데 표시가 없습니다`).toContain('늑대');
+    }
+  });
+
+  it('죽은 것과 멀리 있는 것에는 아무것도 붙지 않는다', () => {
+    const world = inForest();
+    const { x, y } = world.me.pos;
+    monsterAt(world, 'wolf', x + 40, y, 'dead');
+    monsterAt(world, 'wolf', x + 900, y, 'chase');
+
+    const ctx = fakeCtx();
+    drawThreatRings(ctx, world);
+    drawThreatMarks(ctx, world);
+    expect(ctx.strokes).toEqual([]);
+    expect(ctx.texts).toEqual([]);
+  });
+});
+
+describe('광맥의 사거리 원', () => {
+  it('가까운 광맥에는 원이 붙고, 먼 광맥에는 붙지 않는다', () => {
+    const world = inForest();
+    expect(world.veins.length).toBeGreaterThan(0);
+    const vein = world.veins[0]!;
+
+    world.me.pos = { x: vein.pos.x, y: vein.pos.y + 30 };
+    const near = fakeCtx();
+    drawVeinRings(near, world);
+    expect(near.strokes.length).toBeGreaterThan(0);
+
+    world.me.pos = { x: vein.pos.x + 4000, y: vein.pos.y + 4000 };
+    const far = fakeCtx();
+    drawVeinRings(far, world);
+    expect(far.strokes).toEqual([]);
+  });
+
+  it('원 안에 들어가면 색이 달라진다 — core 가 재는 거리와 같은 값이다', () => {
+    const world = inForest();
+    const vein = world.veins[0]!;
+
+    world.veins.length = 1;
+    world.me.pos = { x: vein.pos.x, y: vein.pos.y + GATHER.reach - 2 };
+    const inside = fakeCtx();
+    drawVeinRings(inside, world);
+
+    world.me.pos = { x: vein.pos.x, y: vein.pos.y + GATHER.reach + 2 };
+    const outside = fakeCtx();
+    drawVeinRings(outside, world);
+
+    expect(inside.strokes[0]).not.toBe(outside.strokes[0]);
+  });
+
+  it('바닥난 광맥에는 원이 붙지 않는다', () => {
+    const world = inForest();
+    const vein = world.veins[0]!;
+    world.veins.length = 1; // 옆 광맥의 원이 섞이지 않도록
+    world.me.pos = { x: vein.pos.x, y: vein.pos.y + 20 };
+    vein.remaining = 0;
+
+    const ctx = fakeCtx();
+    drawVeinRings(ctx, world);
+    expect(ctx.strokes).toEqual([]);
+  });
+});
+
+describe('작은 지도에 가리는 이름표', () => {
+  it('가림 상자 안의 이름표는 그리지 않는다', () => {
+    setLabelBlockout(null);
+    const open = fakeCtx();
+    label(open, '늑대', 500, 500, '#fff', 11);
+    expect(open.texts).toContain('늑대');
+
+    setLabelBlockout({ x0: 450, y0: 450, x1: 560, y1: 560 });
+    const hidden = fakeCtx();
+    label(hidden, '늑대', 500, 500, '#fff', 11);
+    expect(hidden.texts, '가려질 이름표가 그대로 그려졌습니다').toEqual([]);
+
+    // 상자 밖은 그대로 그립니다
+    const outside = fakeCtx();
+    label(outside, '늑대', 500, 900, '#fff', 11);
+    expect(outside.texts).toContain('늑대');
+
+    setLabelBlockout(null);
   });
 });

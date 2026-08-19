@@ -10,7 +10,7 @@
  *  숫자에는 검은 테두리를 두르고, 치명타는 크고 노랗게, 내가 맞은 피해는 붉게.
  */
 
-import { CRAFT, TILE } from '../../balance';
+import { CRAFT, GATHER, TILE } from '../../balance';
 import { itemDef } from '../../content/items';
 
 /** 바닥에 떨어진 물건의 색 — 종류만 구분되면 충분합니다 */
@@ -32,6 +32,24 @@ import { drawShadow } from './actors';
 
 /* ------------------------------------------------------------------ 글자 */
 
+/**
+ *  이름표를 그리지 않을 자리 (월드 좌표).
+ *
+ *  ★ 작은 지도는 화면 좌표에, 이름표는 월드 좌표에 그려집니다. 지도가 나중에 그려지므로
+ *    그 밑에 깔린 이름표는 반쯤 지워진 글자로 남았습니다 — 읽을 수도 없고 지저분합니다.
+ *    지도를 반투명하게 하면 지도까지 읽기 어려워지므로, ★ 가려질 이름표를 아예 접습니다.
+ *    한 걸음만 걸으면 다시 나옵니다.
+ *
+ *  draw() 가 매 프레임 한 번 정해 주고, 이 파일의 모든 이름표가 그것을 따릅니다.
+ */
+export interface Box { x0: number; y0: number; x1: number; y1: number }
+
+let blockout: Box | null = null;
+
+export function setLabelBlockout(box: Box | null): void {
+  blockout = box;
+}
+
 export function label(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -41,6 +59,18 @@ export function label(
   size = 11,
   weight = 700,
 ): void {
+  if (blockout) {
+    // 글자는 x 를 가운데로 놓고 그려집니다. 한글은 글자당 폭이 크기와 거의 같습니다.
+    const halfWidth = (text.length * size) / 2;
+    // 글자가 차지하는 네모와 가림 상자가 겹치면 접습니다
+    const overlaps =
+      x + halfWidth > blockout.x0 &&
+      x - halfWidth < blockout.x1 &&
+      y + size * 0.3 > blockout.y0 &&
+      y - size < blockout.y1;
+    if (overlaps) return;
+  }
+
   ctx.save();
   ctx.font = `${weight} ${size}px "Gothic A1", ui-sans-serif, system-ui, sans-serif`;
   ctx.textAlign = 'center';
@@ -50,6 +80,42 @@ export function label(
   ctx.strokeText(text, x, y);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+/* --------------------------------------------------------------- 사거리 원 */
+
+/**
+ *  "여기 안에 서야 된다" 는 거리를 바닥에 그립니다.
+ *
+ *  ★ core/ 가 재는 바로 그 거리를 그대로 받습니다 (화로는 CRAFT.reach, 광맥은 GATHER.reach).
+ *    여기서 따로 계산하지 않습니다 — 계산하는 순간 규칙과 그림이 갈라집니다.
+ *    안에 들어가면 원이 밝아지고 속이 옅게 찹니다.
+ */
+export function reachRing(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  x: number,
+  y: number,
+  radius: number,
+  inside: boolean,
+  color: string,
+): void {
+  ctx.save();
+  ctx.setLineDash([7, 6]);
+  ctx.lineDashOffset = -world.time * 9;
+  ctx.lineWidth = inside ? 2 : 1.2;
+  ctx.strokeStyle = inside ? alpha(lighten(color, 0.3), 0.85) : alpha(color, 0.3);
+  ctx.beginPath();
+  ctx.ellipse(x, y, radius, radius * 0.58, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  if (inside) {
+    ctx.setLineDash([]);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -101,6 +167,115 @@ export function drawNameplates(ctx: CanvasRenderingContext2D, world: World): voi
     me.pos.y - 34,
     me.dead ? '#e88a86' : '#efe6d2',
   );
+}
+
+/* --------------------------------------------------------------- 위협 표시 */
+
+/**
+ *  이 몬스터가 먼저 덤비는 놈인가.
+ *
+ *  ★ 여기서 규칙을 만들지 않습니다. content/monsters.ts 의 aggroRange 를 그대로 읽습니다.
+ *    0 이면 건드리지 않는 한 가만히 있는 놈(들개), 0 보다 크면 나를 보면 달려드는 놈(늑대·거미)입니다.
+ *  ★ 숫자는 화면에 내지 않습니다. 사냥감인지 위험한 놈인지만 알면 됩니다.
+ */
+function hunts(monster: Monster): boolean {
+  return monsterDef(monster.defId).aggroRange > 0;
+}
+
+/** 지금 나를 쫓고 있는가 */
+function chasing(monster: Monster): boolean {
+  return monster.state === 'chase' || monster.state === 'attack';
+}
+
+/** 이 거리 안의 몬스터에만 표시를 붙입니다 — 화면 가득 고리가 뜨면 아무것도 안 보입니다 */
+const THREAT_RANGE = 300;
+
+/**
+ *  몬스터 발밑의 고리.
+ *
+ *  ★ 도망칠지 싸울지가 이 게임의 유일한 순간 판단인데, 그 판단에 필요한 것이 화면에 없었습니다.
+ *    UI 는 다섯 가지 state 중 'dead' 하나만 보고 있었습니다.
+ *
+ *      옅은 청록 고리   — 먼저 덤비지 않습니다. 내가 고르면 사냥감입니다
+ *      어두운 붉은 고리 — 먼저 덤빕니다. 아직 나를 못 봤습니다
+ *      밝은 붉은 고리 + 두근거림 — ★ 지금 나를 쫓고 있습니다
+ *
+ *  몸통보다 먼저(=발밑에) 그립니다.
+ */
+export function drawThreatRings(ctx: CanvasRenderingContext2D, world: World): void {
+  const me = world.me;
+
+  for (const monster of world.monsters) {
+    if (monster.state === 'dead') continue;
+    if (Math.hypot(monster.pos.x - me.pos.x, monster.pos.y - me.pos.y) > THREAT_RANGE) continue;
+
+    const def = monsterDef(monster.defId);
+    const onMe = chasing(monster);
+    const danger = hunts(monster);
+    // 쫓아올 때만 두근거립니다 — 움직이는 것에 눈이 갑니다
+    const pulse = onMe ? 0.5 + 0.5 * Math.sin(world.time * 5.5 + monster.id) : 0;
+    const radius = def.size + 8 + pulse * 3;
+
+    ctx.save();
+    ctx.translate(monster.pos.x, monster.pos.y + def.size * 0.5);
+    ctx.scale(1, 0.45);
+    // ★ 색만으로 가르지 않습니다 — 폰에서 작게 보이고, 색을 못 가리는 사람도 있습니다.
+    //   먼저 덤비는 놈은 끊긴 고리, 사냥감은 이어진 고리입니다.
+    if (danger && !onMe) ctx.setLineDash([9, 7]);
+    ctx.lineWidth = onMe ? 3.4 : 1.8;
+    ctx.strokeStyle =
+      onMe ? `rgba(255,${70 + pulse * 40},60,${0.75 + pulse * 0.25})`
+      : danger ? 'rgba(214,66,56,0.6)'
+      : 'rgba(126,196,178,0.34)';
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    if (onMe) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.1 + pulse * 0.1;
+      ctx.fillStyle = '#ff4a3c';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/**
+ *  쫓고 있는 놈의 머리 위 느낌표와 이름.
+ *
+ *  ★ 폰 세로(0.85배)에서도 보여야 하므로 크게 그립니다 — 작은 표시는 안 보입니다.
+ *  ★ 이름을 같이 띄웁니다. 무엇이 오는지(들개인지 늑대인지) 알아야 도망칠지 정할 수 있습니다.
+ */
+export function drawThreatMarks(ctx: CanvasRenderingContext2D, world: World): void {
+  const me = world.me;
+
+  for (const monster of world.monsters) {
+    if (monster.state === 'dead' || !chasing(monster)) continue;
+    if (Math.hypot(monster.pos.x - me.pos.x, monster.pos.y - me.pos.y) > THREAT_RANGE) continue;
+
+    const def = monsterDef(monster.defId);
+    const bob = Math.abs(Math.sin(world.time * 5.5 + monster.id)) * 3;
+    const x = monster.pos.x;
+    const y = monster.pos.y - def.size - 26 - bob;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(190,32,26,0.95)';
+    ctx.strokeStyle = 'rgba(255,214,160,0.9)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // 느낌표
+    ctx.fillStyle = '#ffeacb';
+    ctx.fillRect(x - 1.4, y - 5, 2.8, 6.2);
+    ctx.beginPath();
+    ctx.arc(x, y + 4, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    label(ctx, def.name, x, y - 15, '#ffb4ac', 12);
+  }
 }
 
 /** 노리고 있는 대상 발밑의 표식 */
@@ -407,26 +582,7 @@ export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: numbe
  *    안에 들어가면 원이 밝아집니다.
  */
 export function drawForgeRing(ctx: CanvasRenderingContext2D, world: World, tx: number, ty: number): void {
-  const x = tileCenter(tx);
-  const y = tileCenter(ty);
-  const inside = nearForge(world);
-
-  ctx.save();
-  ctx.setLineDash([7, 6]);
-  ctx.lineDashOffset = -world.time * 9;
-  ctx.lineWidth = inside ? 2 : 1.2;
-  ctx.strokeStyle = inside ? 'rgba(255,176,92,0.85)' : 'rgba(255,150,70,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(x, y, CRAFT.reach, CRAFT.reach * 0.58, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  if (inside) {
-    ctx.setLineDash([]);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.1;
-    ctx.fillStyle = '#ff9a45';
-    ctx.fill();
-  }
-  ctx.restore();
+  reachRing(ctx, world, tileCenter(tx), tileCenter(ty), CRAFT.reach, nearForge(world), '#ff9a45');
 }
 
 /** 가까이 가면 이름표가 붙습니다. 원 안에 들어오면 문구가 바뀝니다. */
@@ -522,6 +678,25 @@ export function drawVein(ctx: CanvasRenderingContext2D, world: World, vein: Vein
     ctx.fill();
   }
   ctx.restore();
+}
+
+/**
+ *  광맥의 사거리 원 — 화로와 같은 코드(reachRing)를 씁니다.
+ *
+ *  ★ core/action.ts 가 재는 GATHER.reach 를 그대로 받습니다.
+ *    "눌렀는데 왜 안 캐지지" 의 답이 이 원입니다 — 원 안에 들어가야 곡괭이가 나갑니다.
+ *    이름표가 붙는 거리 안에 있는 광맥에만 그립니다. 다 그리면 화면이 지저분해집니다.
+ */
+export function drawVeinRings(ctx: CanvasRenderingContext2D, world: World): void {
+  const me = world.me;
+  const mining = me.action?.kind === 'mine' ? Number(me.action.targetId) : null;
+
+  for (const vein of world.veins) {
+    if (vein.remaining <= 0) continue;
+    const distance = Math.hypot(vein.pos.x - me.pos.x, vein.pos.y - me.pos.y);
+    if (distance > VEIN_LABEL_RANGE && mining !== vein.id) continue;
+    reachRing(ctx, world, vein.pos.x, vein.pos.y, GATHER.reach, distance <= GATHER.reach, veinDef(vein.defId).color);
+  }
 }
 
 /**
