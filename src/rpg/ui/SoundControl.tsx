@@ -27,7 +27,7 @@ export function SoundControl({ className = '' }: { className?: string }) {
   const percent = Math.round(settings.volume * 100);
 
   return (
-    <div className={`flex items-center gap-1 ${className}`}>
+    <div className={`flex items-center gap-1.5 ${className}`}>
       <button
         type="button"
         onClick={() => mute(!settings.muted)}
@@ -35,7 +35,7 @@ export function SoundControl({ className = '' }: { className?: string }) {
         aria-label={settings.muted ? '소리 켜기' : '소리 끄기'}
         aria-pressed={settings.muted}
         title={settings.muted ? '소리 켜기' : '소리 끄기'}
-        className="btn rounded-sm px-2 py-1 text-[11px] text-parch-300"
+        className="btn flex h-11 w-11 items-center justify-center rounded-sm text-base text-parch-300"
       >
         {settings.muted ? '🔇' : '🔊'}
       </button>
@@ -44,7 +44,7 @@ export function SoundControl({ className = '' }: { className?: string }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="소리 크기"
-        className="btn rounded-sm px-1.5 py-1 text-[10px] tabular text-parch-400"
+        className="btn tabular flex h-11 min-w-11 items-center justify-center rounded-sm px-2 text-[11px] text-parch-400"
       >
         {settings.muted ? '꺼짐' : `${percent}%`}
       </button>
@@ -58,7 +58,7 @@ export function SoundControl({ className = '' }: { className?: string }) {
           value={percent}
           aria-label="소리 크기"
           onChange={(event) => volume(Number(event.target.value) / 100)}
-          className="h-1 w-24 accent-[#c9a227]"
+          className="h-11 w-24 accent-[#c9a227]"
         />
       )}
     </div>

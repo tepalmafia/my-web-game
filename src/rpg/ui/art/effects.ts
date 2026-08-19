@@ -10,7 +10,7 @@
  *  숫자에는 검은 테두리를 두르고, 치명타는 크고 노랗게, 내가 맞은 피해는 붉게.
  */
 
-import { TILE } from '../../balance';
+import { CRAFT, TILE } from '../../balance';
 import { itemDef } from '../../content/items';
 
 /** 바닥에 떨어진 물건의 색 — 종류만 구분되면 충분합니다 */
@@ -24,6 +24,7 @@ const ITEM_TINT: Record<string, string> = {
 };
 import { monsterDef } from '../../content/monsters';
 import { veinDef } from '../../content/veins';
+import { nearForge } from '../../core/action';
 import { tileCenter } from '../../core/world';
 import type { GroundItem, Monster, Npc, Vein, World } from '../../types';
 import { LIGHT, alpha, darken, lighten } from './palette';
@@ -282,6 +283,164 @@ export function drawPortal(
   label(ctx, text, x, y - TILE * 0.85, '#cdeaff', 11);
 }
 
+
+/* --------------------------------------------------------------- 화로 */
+
+/** 이 거리 안에 들어오면 이름표가 뜹니다 (광맥과 같은 규칙) */
+const FORGE_LABEL_RANGE = 220;
+
+/**
+ *  화로.
+ *
+ *  ★ 광맥과 똑같은 문제가 여기에도 있었습니다 — 거리 판정(core/action.ts 의 nearForge)만
+ *    있고 그리는 코드가 없어서, "화로 앞에 서야 만들 수 있습니다" 라는 안내를 읽어도
+ *    어디로 가야 하는지 화면에 없었습니다.
+ *
+ *  숯불을 품은 돌 화덕으로 그립니다. 불빛은 화로 자신이 내므로, 다른 것들과 달리
+ *  왼쪽 위가 아니라 ★ 아궁이 쪽이 가장 밝습니다.
+ */
+export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: number, ty: number): void {
+  const x = tileCenter(tx);
+  const y = tileCenter(ty);
+  // 숯불은 일정하게 타지 않습니다 — 느린 흔들림 두 개를 겹쳐 불규칙하게 보이게 합니다
+  const glow = 0.55 + 0.28 * Math.sin(world.time * 2.7) + 0.17 * Math.sin(world.time * 6.1 + 1.3);
+
+  drawShadow(ctx, x, y + 9, 17);
+
+  const stone = '#584f47';
+
+  ctx.save();
+
+  // 굴뚝 — 화덕보다 뒤에 있으므로 먼저
+  ctx.fillStyle = darken(stone, 0.35);
+  ctx.fillRect(x + 5, y - 34, 9, 18);
+  ctx.fillStyle = darken(stone, 0.55);
+  ctx.fillRect(x + 5, y - 36, 9, 3);
+
+  // 화덕 몸통
+  ctx.fillStyle = darken(stone, 0.2);
+  ctx.beginPath();
+  ctx.moveTo(x - 16, y + 9);
+  ctx.lineTo(x - 14, y - 16);
+  ctx.lineTo(x + 14, y - 16);
+  ctx.lineTo(x + 16, y + 9);
+  ctx.closePath();
+  ctx.fill();
+  // 빛 받는 윗면
+  ctx.fillStyle = lighten(stone, 0.16);
+  ctx.beginPath();
+  ctx.ellipse(x, y - 16, 14, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 돌 이음매 — 몇 줄이면 벽돌로 읽힙니다
+  ctx.strokeStyle = alpha('#1b1613', 0.5);
+  ctx.lineWidth = 1;
+  for (const dy of [-8, 0]) {
+    ctx.beginPath();
+    ctx.moveTo(x - 15, y + dy);
+    ctx.lineTo(x + 15, y + dy);
+    ctx.stroke();
+  }
+
+  // 아궁이 — 안쪽이 뚫린 아치
+  ctx.fillStyle = '#140d09';
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y + 7);
+  ctx.lineTo(x - 8, y - 5);
+  ctx.arc(x, y - 5, 8, Math.PI, 0);
+  ctx.lineTo(x + 8, y + 7);
+  ctx.closePath();
+  ctx.fill();
+
+  // 숯불
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.55 + glow * 0.4;
+  ctx.fillStyle = '#ff7a2a';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 1, 6.5, 4.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 0.5 + glow * 0.5;
+  ctx.fillStyle = '#ffd487';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 1.5, 3.4, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 아궁이가 바깥으로 흘리는 빛
+  ctx.globalAlpha = 0.18 + glow * 0.22;
+  const spill = ctx.createRadialGradient(x, y, 2, x, y, 34);
+  spill.addColorStop(0, 'rgba(255,150,60,0.85)');
+  spill.addColorStop(1, 'rgba(255,120,40,0)');
+  ctx.fillStyle = spill;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 2, 34, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 굴뚝에서 오르는 불티 — 움직이는 것이 있어야 눈에 걸립니다
+  for (let i = 0; i < 4; i++) {
+    const phase = (world.time * 0.55 + i * 0.25) % 1;
+    ctx.globalAlpha = (1 - phase) * 0.6;
+    ctx.fillStyle = i % 2 === 0 ? '#ffb35c' : '#ff8a3d';
+    ctx.fillRect(x + 8 + Math.sin(i * 2.3 + world.time * 1.7) * 3, y - 36 - phase * 22, 2, 2);
+  }
+  ctx.restore();
+
+  // 모루 — 화로 옆에 하나. "여기가 물건을 만드는 자리"라는 표시입니다
+  ctx.save();
+  ctx.fillStyle = '#3b3b40';
+  ctx.fillRect(x - 30, y + 2, 11, 5);
+  ctx.beginPath();
+  ctx.moveTo(x - 33, y - 3);
+  ctx.lineTo(x - 16, y - 3);
+  ctx.lineTo(x - 20, y + 2);
+  ctx.lineTo(x - 30, y + 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#5a5a62';
+  ctx.fillRect(x - 33, y - 4.5, 17, 1.8);
+  ctx.restore();
+}
+
+/**
+ *  화로 둘레의 원.
+ *
+ *  ★ 이 원 안에 서야 만들 수 있습니다 — core/action.ts 의 nearForge 가 재는 바로 그 거리입니다.
+ *    보이지 않는 규칙을 눈에 보이게 만드는 것이 이 원의 전부입니다.
+ *    안에 들어가면 원이 밝아집니다.
+ */
+export function drawForgeRing(ctx: CanvasRenderingContext2D, world: World, tx: number, ty: number): void {
+  const x = tileCenter(tx);
+  const y = tileCenter(ty);
+  const inside = nearForge(world);
+
+  ctx.save();
+  ctx.setLineDash([7, 6]);
+  ctx.lineDashOffset = -world.time * 9;
+  ctx.lineWidth = inside ? 2 : 1.2;
+  ctx.strokeStyle = inside ? 'rgba(255,176,92,0.85)' : 'rgba(255,150,70,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, CRAFT.reach, CRAFT.reach * 0.58, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  if (inside) {
+    ctx.setLineDash([]);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = '#ff9a45';
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** 가까이 가면 이름표가 붙습니다. 원 안에 들어오면 문구가 바뀝니다. */
+export function drawForgeLabel(ctx: CanvasRenderingContext2D, world: World): void {
+  const forge = world.map.def.forge;
+  if (!forge) return;
+
+  const x = tileCenter(forge.tx);
+  const y = tileCenter(forge.ty);
+  if (Math.hypot(x - world.me.pos.x, y - world.me.pos.y) > FORGE_LABEL_RANGE) return;
+
+  const inside = nearForge(world);
+  label(ctx, inside ? '화로 — 여기서 만듭니다' : '화로', x, y - 44, inside ? '#ffd9a0' : '#e0a86a', 10);
+}
 
 /* --------------------------------------------------------------- 광맥 */
 
