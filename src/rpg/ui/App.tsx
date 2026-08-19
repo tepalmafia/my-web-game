@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { createWorld } from '../core/create';
-import { clearSave, hasSave, loadWorld, saveWorld } from '../core/save';
-import type { ClassId, World } from '../types';
+import { clearSave, hasSave, loadWorld, newSlot, saveWorld } from '../core/save';
+import type { World } from '../types';
 import { GameScreen } from './GameScreen';
 import { TitleScreen } from './TitleScreen';
 
@@ -20,9 +20,10 @@ export function App() {
           if (loaded) setWorld(loaded);
           else setSaveExists(false);
         }}
-        onStart={(name: string, classId: ClassId) => {
+        onStart={(name: string, templateId: string) => {
           clearSave();
-          const fresh = createWorld(name, classId);
+          newSlot();
+          const fresh = createWorld(name, templateId);
           saveWorld(fresh);
           setSaveExists(true);
           setWorld(fresh);

@@ -1,108 +1,136 @@
 /**
- *  새 인물 만들기.
+ *  새 사람 만들기.
  *
- *  시작 장비는 직업에 맞는 1레벨 무기 한 자루와 천 갑옷,
- *  그리고 물약 열 병 · 귀환 주문서 두 장입니다.
- *  많이 주지 않는 이유는, 첫 30분이 이 게임에서 제일 위험하기 때문입니다.
+ *  ★ 직업이 없습니다. 시작 템플릿은 "처음 스킬을 어디에 조금 얹어줄까"만 정하고,
+ *    그 뒤로는 무엇을 하든 자유입니다. 대장장이로 시작해 검사가 되어도 됩니다.
  */
 
-import { AUTO } from '../balance';
-import { CLASSES } from '../content/classes';
-import { QUESTS } from '../content/quests';
+import { STATS } from '../balance';
 import { mapDef } from '../content/maps';
-import { addItem } from './inventory';
+import { addItem, equip } from './inventory';
 import { log } from './feedback';
 import { derive } from './stats';
 import { buildMap, populate, tileCenter } from './world';
-import type { ClassId, ItemStack, Player, World } from '../types';
+import type { Character, ItemStack, SkillId, World } from '../types';
 
-const STARTING_WEAPON: Record<ClassId, string> = {
-  knight: 'sword-dagger',
-  elf: 'bow-short',
-  wizard: 'staff-wood',
-};
+/** 시작 템플릿 — 스킬 몇 점과 첫 장비만 다릅니다 */
+export interface StartTemplate {
+  id: string;
+  name: string;
+  tagline: string;
+  desc: string;
+  color: string;
+  skills: Partial<Record<SkillId, number>>;
+  items: string[];
+  equip: string[];
+}
 
-export function createWorld(name: string, classId: ClassId): World {
+export const TEMPLATES: StartTemplate[] = [
+  {
+    id: 'miner',
+    name: '광부',
+    tagline: '땅부터 판다',
+    desc: '곡괭이질을 조금 배웠습니다. 광석을 캐 팔거나, 직접 녹여 첫 검을 만들 수 있습니다.',
+    color: '#c9a227',
+    skills: { mining: 25, blacksmithing: 8 },
+    items: ['pickaxe', 'hammer', 'potion-heal'],
+    equip: ['rusty-sword'],
+  },
+  {
+    id: 'smith',
+    name: '견습 대장장이',
+    tagline: '만드는 손이 먼저다',
+    desc: '망치를 잡아봤습니다. 광석만 구해오면 남들보다 좋은 물건을 만듭니다.',
+    color: '#e0764a',
+    skills: { blacksmithing: 24, mining: 12 },
+    items: ['pickaxe', 'hammer', 'potion-heal'],
+    equip: ['rusty-sword'],
+  },
+  {
+    id: 'guard',
+    name: '떠돌이 경비병',
+    tagline: '먼저 싸워봤다',
+    desc: '검을 쥐어봤습니다. 사냥은 쉽지만, 검이 닳으면 결국 대장간을 찾게 됩니다.',
+    color: '#c3cbd6',
+    skills: { swordsmanship: 25, defense: 15, blacksmithing: 5 },
+    items: ['pickaxe', 'hammer', 'potion-heal'],
+    equip: ['rusty-sword', 'leather-vest'],
+  },
+];
+
+export function createWorld(name: string, templateId: string): World {
+  const template = TEMPLATES.find((t) => t.id === templateId) ?? TEMPLATES[0]!;
   const town = mapDef('town');
 
-  const player: Player = {
-    name: name.trim() || '이름 없는 모험가',
-    classId,
-    level: 1,
-    exp: 0,
+  const me: Character = {
+    name: name.trim() || '이름 없는 사람',
+    str: STATS.start,
+    dex: STATS.start,
+    int: STATS.start,
+    statTouched: { str: 0, dex: 0, int: 0 },
     hp: 1,
-    mp: 1,
-    gold: 600,
+    skills: {
+      mining: template.skills.mining ?? 0,
+      blacksmithing: template.skills.blacksmithing ?? 0,
+      swordsmanship: template.skills.swordsmanship ?? 0,
+      defense: template.skills.defense ?? 0,
+    },
     pos: { x: tileCenter(town.entryTx), y: tileCenter(town.entryTy) },
     facing: -Math.PI / 2,
     moveTarget: null,
     targetId: null,
+    action: null,
     attackCooldown: 0,
-    skillCooldowns: {},
-    buffs: [],
-    equipped: { weapon: null, armor: null, helmet: null, ring: null },
-    inventory: [],
+    potionCooldown: 0,
+    equipped: { weapon: null, armor: null, helmet: null },
+    backpack: [],
+    gold: 150,
     dead: false,
     deadFor: 0,
-    lostExp: 0,
-    auto: false,
-    autoPotionAt: AUTO.defaultPotionAt,
-    potionCooldown: 0,
-    kills: {},
-    questIndex: 0,
-    questKills: 0,
     discovered: ['town'],
     playSeconds: 0,
     deaths: 0,
-    bossKills: 0,
+    tally: {},
   };
 
   const world: World = {
-    player,
+    me,
     mapId: 'town',
     map: buildMap(town),
     monsters: [],
+    veins: [],
     ground: [],
     floaters: [],
     vfx: [],
     log: [],
     time: 0,
     nextId: 1,
-    camera: { x: player.pos.x, y: player.pos.y },
+    camera: { x: me.pos.x, y: me.pos.y },
+    shake: 0,
     path: [],
     pathTimer: 0,
-    shake: 0,
-    playerAnim: 0,
-    playerMoving: false,
-    playerSwing: 0,
-    bossRespawnAt: {},
     panel: null,
     pendingNpc: null,
     toast: null,
-    enhanceUid: null,
-    enhanceResult: null,
     seed: (Date.now() ^ 0x9e3779b9) | 0,
+    meAnim: 0,
+    meMoving: false,
+    meSwing: 0,
   };
 
-  // 시작 장비
-  world.player.equipped.weapon = makeStack(world, STARTING_WEAPON[classId]);
-  world.player.equipped.armor = makeStack(world, 'armor-cloth');
-  addItem(world, 'pot-hp-s', 10);
-  addItem(world, 'scroll-return', 2);
+  for (const defId of template.items) addItem(world, defId, defId === 'potion-heal' ? 3 : 1);
+  for (const defId of template.equip) {
+    addItem(world, defId, 1);
+    const stack = world.me.backpack.find((s: ItemStack) => s.defId === defId);
+    if (stack) equip(world, stack.uid);
+  }
 
-  const stats = derive(player);
-  player.hp = stats.maxHp;
-  player.mp = stats.maxMp;
-
+  me.hp = derive(me).maxHp;
   populate(world);
 
-  log(world, `${CLASSES[classId].name} ${player.name}, 실버우드 마을에 도착했습니다`, 'good');
-  log(world, `첫 의뢰 — ${QUESTS[0]!.name}: ${QUESTS[0]!.desc}`, 'normal');
-  log(world, '마을 남쪽 문으로 나가면 초원입니다. 땅을 눌러 걷고, 몬스터를 눌러 싸웁니다.', 'normal');
+  log(world, `${me.name}, 실버우드 마을에 도착했습니다`, 'good');
+  log(world, '남쪽 문으로 나가면 숲입니다. 바위에 비치는 철광맥을 눌러 캐보세요.', 'normal');
+  log(world, '레벨은 없습니다. 무엇이든 해본 만큼만 늡니다.', 'normal');
 
   return world;
-}
-
-function makeStack(world: World, defId: string): ItemStack {
-  return { uid: world.nextId++, defId, plus: 0, count: 1 };
 }

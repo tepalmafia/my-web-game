@@ -12,11 +12,13 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { MAX_STEP } from '../balance';
-import { clickWorld, drinkBestPotion, moveTo, toggleAuto, useSkill } from '../core/commands';
+import { clickWorld, drinkBestPotion, moveTo, stopAction } from '../core/commands';
+import { startMining, veinAt } from '../core/action';
+import { GATHER } from '../balance';
 import { step } from '../core/engine';
 import { saveWorld } from '../core/save';
 import type { World } from '../types';
-import { ActionBar, BossTimer, BuffRow, DeathOverlay, QuestTracker, StatusBlock, Toast } from './Hud';
+import { ActionBar, DeathOverlay, SkillStrip, StatusBlock, Toast } from './Hud';
 import { LogPanel } from './LogPanel';
 import { SidePanel } from './Panels';
 import { draw, computeView, screenToWorld } from './draw';
@@ -25,6 +27,8 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  /** 눌러둔 광맥 — 걸어가서 닿으면 캐기 시작합니다 */
+  const pendingVein = useRef<number | null>(null);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const refresh = useCallback(() => bump(), []);
 
@@ -66,6 +70,19 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
         }
       }
 
+      // 광맥을 눌러 걸어간 뒤 도착하면 알아서 캐기 시작합니다
+      const pending = pendingVein.current;
+      if (pending !== null) {
+        const vein = veinAt(world, pending);
+        if (!vein || world.me.dead) pendingVein.current = null;
+        else if (Math.hypot(vein.pos.x - world.me.pos.x, vein.pos.y - world.me.pos.y) <= GATHER.reach) {
+          startMining(world, pending, true);
+          pendingVein.current = null;
+        } else if (!world.me.moveTarget && !world.me.action) {
+          pendingVein.current = null;
+        }
+      }
+
       uiTimer += dt;
       if (uiTimer > 0.08) {
         uiTimer = 0;
@@ -90,15 +107,11 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     const onKey = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement) return;
       switch (event.key) {
-        case '1': useSkill(world, 0); break;
-        case '2': useSkill(world, 1); break;
-        case '3': useSkill(world, 2); break;
-        case 'q': case 'Q': case 'ㅂ': drinkBestPotion(world, 'hp'); break;
-        case 'w': case 'W': case 'ㅈ': drinkBestPotion(world, 'mp'); break;
-        case 'i': case 'I': case 'ㅑ': world.panel = 'inventory'; break;
-        case 'c': case 'C': case 'ㅊ': world.panel = 'character'; break;
-        case ' ': event.preventDefault(); toggleAuto(world); break;
-        case 'Escape': world.panel = null; break;
+        case 'q': case 'Q': case 'ㅂ': drinkBestPotion(world); break;
+        case 'i': case 'I': case 'ㅑ': world.panel = 'pack'; break;
+        case 's': case 'S': case 'ㄴ': world.panel = 'skills'; break;
+        case 'c': case 'C': case 'ㅊ': world.panel = 'craft'; break;
+        case 'Escape': stopAction(world); world.panel = null; break;
         default: return;
       }
       bump();
@@ -119,6 +132,10 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     event.currentTarget.setPointerCapture(event.pointerId);
     dragging.current = true;
     const point = pointFromEvent(event);
+    const vein = world.veins.find(
+      (v) => Math.hypot(v.pos.x - point.x, v.pos.y - point.y) <= 22,
+    );
+    pendingVein.current = vein ? vein.id : null;
     clickWorld(world, point.x, point.y);
     bump();
   };
@@ -127,7 +144,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     if (!dragging.current) return;
     // 누른 채로 끌면 계속 따라옵니다 (몬스터를 다시 고르지는 않습니다)
     const point = pointFromEvent(event);
-    if (world.player.targetId === null) moveTo(world, point.x, point.y);
+    if (world.me.targetId === null) moveTo(world, point.x, point.y);
   };
 
   const onPointerUp = () => {
@@ -148,12 +165,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
 
         <div className="pointer-events-none absolute left-2 top-2 z-10">
           <StatusBlock world={world} />
-          <BuffRow world={world} />
-          <div className="mt-1"><QuestTracker world={world} /></div>
-        </div>
-
-        <div className="pointer-events-none absolute right-2 top-[136px] z-10 flex flex-col items-end gap-1">
-          <BossTimer world={world} />
+          <SkillStrip world={world} />
         </div>
 
         {/*

@@ -15,13 +15,11 @@
  */
 
 import { TILE } from '../balance';
-import { monsterDef } from '../content/monsters';
 import { FLOOR, LIQUID, PROP, tileCenter } from '../core/world';
 import type { World } from '../types';
 import { computeView } from './view';
 import { drawMonster, drawPlayer } from './art/actors';
 import {
-  drawCastMark,
   drawFloaters,
   drawGroundItem,
   drawNameplates,
@@ -29,7 +27,6 @@ import {
   drawPortal,
   drawTargetMark,
   drawVfx,
-  drawWarnings,
 } from './art/effects';
 import { ZONE_ART, alpha } from './art/palette';
 import {
@@ -109,13 +106,11 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
   drawLights(ctx, world, range, art);
 
   for (const portal of world.map.def.portals) {
-    drawPortal(ctx, world, portal.tx, portal.ty, `${portal.label} · Lv.${portal.recommendLevel}+`);
+    drawPortal(ctx, world, portal.tx, portal.ty, portal.label);
   }
 
-  drawWarnings(ctx, world);
-
   // 노리는 대상 표시는 발밑이므로 몸통보다 먼저
-  const target = world.monsters.find((m) => m.id === world.player.targetId && m.state !== 'dead');
+  const target = world.monsters.find((m) => m.id === world.me.targetId && m.state !== 'dead');
   if (target) drawTargetMark(ctx, world, target);
 
   drawDepthSorted(ctx, world, range);
@@ -166,7 +161,7 @@ function drawDepthSorted(ctx: CanvasRenderingContext2D, world: World, range: Til
     if (monster.state === 'dead') continue;
     layers.push({ y: monster.pos.y, kind: 'monster', index: i });
   }
-  layers.push({ y: world.player.pos.y, kind: 'player' });
+  layers.push({ y: world.me.pos.y, kind: 'player' });
 
   layers.sort((a, b) => a.y - b.y);
 
@@ -184,7 +179,6 @@ function drawDepthSorted(ctx: CanvasRenderingContext2D, world: World, range: Til
       case 'monster': {
         const monster = world.monsters[layer.index]!;
         drawMonster(ctx, world, monster);
-        if (monster.castTimer > 0) drawCastMark(ctx, world, monster);
         break;
       }
       case 'player':
@@ -245,9 +239,8 @@ function drawMinimap(ctx: CanvasRenderingContext2D, world: World, width: number)
 
   for (const monster of world.monsters) {
     if (monster.state === 'dead') continue;
-    const def2 = monsterDef(monster.defId);
-    ctx.fillStyle = def2.boss ? '#f2c14e' : '#e0453f';
-    const s = def2.boss ? 5 : 2.5;
+    ctx.fillStyle = '#e0453f';
+    const s = 2.5;
     ctx.fillRect(
       originX + (monster.pos.x / TILE) * scale - s / 2,
       originY + (monster.pos.y / TILE) * scale - s / 2,
@@ -266,8 +259,8 @@ function drawMinimap(ctx: CanvasRenderingContext2D, world: World, width: number)
   }
 
   // 나
-  const px = originX + (world.player.pos.x / TILE) * scale;
-  const py = originY + (world.player.pos.y / TILE) * scale;
+  const px = originX + (world.me.pos.x / TILE) * scale;
+  const py = originY + (world.me.pos.y / TILE) * scale;
   ctx.fillStyle = '#f5efe0';
   ctx.beginPath();
   ctx.arc(px, py, 3, 0, Math.PI * 2);

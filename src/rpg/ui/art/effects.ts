@@ -11,13 +11,22 @@
  */
 
 import { TILE } from '../../balance';
-import { GRADE_COLOR, itemDef } from '../../content/items';
+import { itemDef } from '../../content/items';
+
+/** 바닥에 떨어진 물건의 색 — 종류만 구분되면 충분합니다 */
+const ITEM_TINT: Record<string, string> = {
+  weapon: '#c3cbd6',
+  armor: '#9aa6b4',
+  helmet: '#9aa6b4',
+  tool: '#c9a227',
+  resource: '#a08a6a',
+  potion: '#c2352f',
+};
 import { monsterDef } from '../../content/monsters';
 import { tileCenter } from '../../core/world';
 import type { GroundItem, Monster, Npc, World } from '../../types';
 import { alpha, darken, lighten } from './palette';
 import { drawShadow } from './actors';
-import { flame } from './terrain';
 
 /* ------------------------------------------------------------------ 글자 */
 
@@ -70,32 +79,25 @@ export function drawNameplates(ctx: CanvasRenderingContext2D, world: World): voi
   for (const monster of world.monsters) {
     if (monster.state === 'dead') continue;
     const def = monsterDef(monster.defId);
-    const targeted = world.player.targetId === monster.id;
+    const targeted = world.me.targetId === monster.id;
     const hurt = monster.hp < monster.maxHp;
-    if (!hurt && !targeted && !def.boss) continue;
+    if (!hurt && !targeted) continue;
 
-    const top = monster.pos.y - def.size - (def.boss ? 16 : 11);
-    bar(ctx, monster.pos.x, top, def.boss ? 74 : 34, monster.hp / monster.maxHp, def.boss ? '#e03d4a' : '#c2352f');
+    const top = monster.pos.y - def.size - 11;
+    bar(ctx, monster.pos.x, top, 34, monster.hp / monster.maxHp, '#c2352f');
 
-    if (targeted || def.boss) {
-      label(
-        ctx,
-        `${def.name} Lv.${def.level}`,
-        monster.pos.x,
-        top - 6,
-        def.boss ? '#f2c14e' : '#f5d9d0',
-        def.boss ? 13 : 11,
-      );
+    if (targeted) {
+      label(ctx, def.name, monster.pos.x, top - 6, '#f5d9d0', 11);
     }
   }
 
-  const player = world.player;
+  const me = world.me;
   label(
     ctx,
-    player.dead ? `${player.name} — 쓰러짐` : `${player.name} Lv.${player.level}`,
-    player.pos.x,
-    player.pos.y - 34,
-    player.dead ? '#e88a86' : '#efe6d2',
+    me.dead ? `${me.name} — 쓰러짐` : me.name,
+    me.pos.x,
+    me.pos.y - 34,
+    me.dead ? '#e88a86' : '#efe6d2',
   );
 }
 
@@ -123,7 +125,7 @@ export function drawTargetMark(ctx: CanvasRenderingContext2D, world: World, mons
 
 export function drawGroundItem(ctx: CanvasRenderingContext2D, world: World, item: GroundItem): void {
   const def = itemDef(item.defId);
-  const color = GRADE_COLOR[def.grade] ?? '#cbd5e1';
+  const color = ITEM_TINT[def.kind] ?? '#cbd5e1';
   const bob = Math.sin(world.time * 3.5 + item.id) * 2.2;
   const fading = item.life < 6 ? 0.35 + 0.45 * Math.abs(Math.sin(world.time * 7)) : 1;
 
@@ -131,7 +133,7 @@ export function drawGroundItem(ctx: CanvasRenderingContext2D, world: World, item
   ctx.globalAlpha = fading;
   drawShadow(ctx, item.pos.x, item.pos.y + 5, 7, 0.3);
 
-  if (def.grade !== 'common') {
+  if (def.kind === 'weapon' || def.kind === 'armor' || def.kind === 'potion') {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = fading * (0.2 + 0.12 * Math.sin(world.time * 4 + item.id));
@@ -281,39 +283,6 @@ export function drawPortal(
   label(ctx, text, x, y - TILE * 0.85, '#cdeaff', 11);
 }
 
-/* --------------------------------------------------------------- 광역기 예고 */
-
-export function drawWarnings(ctx: CanvasRenderingContext2D, world: World): void {
-  for (const effect of world.vfx) {
-    if (effect.kind !== 'warn') continue;
-    const progress = 1 - effect.life / effect.maxLife;
-    const radius = effect.radius ?? 100;
-
-    ctx.save();
-    ctx.globalAlpha = 0.16 + progress * 0.12;
-    ctx.fillStyle = '#c2352f';
-    ctx.beginPath();
-    ctx.arc(effect.pos.x, effect.pos.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = '#ff6b5e';
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([8, 6]);
-    ctx.lineDashOffset = -world.time * 20;
-    ctx.beginPath();
-    ctx.arc(effect.pos.x, effect.pos.y, radius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 안쪽에서 차오르는 원 — 이게 가장자리에 닿으면 터집니다
-    ctx.globalAlpha = 0.55;
-    ctx.beginPath();
-    ctx.arc(effect.pos.x, effect.pos.y, radius * progress, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
 
 /* --------------------------------------------------------------- 효과 */
 
@@ -387,28 +356,6 @@ export function drawVfx(ctx: CanvasRenderingContext2D, world: World): void {
         }
         break;
       }
-      case 'aoe': {
-        const radius = (effect.radius ?? 100) * (0.55 + progress * 0.45);
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = (1 - progress) * 0.4;
-        const gradient = ctx.createRadialGradient(effect.pos.x, effect.pos.y, 0, effect.pos.x, effect.pos.y, radius);
-        gradient.addColorStop(0, alpha(effect.color, 0.9));
-        gradient.addColorStop(0.7, alpha(effect.color, 0.25));
-        gradient.addColorStop(1, alpha(effect.color, 0));
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(effect.pos.x, effect.pos.y, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1 - progress;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.5 * (1 - progress);
-        ctx.beginPath();
-        ctx.arc(effect.pos.x, effect.pos.y, radius, 0, Math.PI * 2);
-        ctx.stroke();
-        break;
-      }
       case 'ring':
       case 'levelup': {
         ctx.globalAlpha = 1 - progress;
@@ -438,8 +385,6 @@ export function drawVfx(ctx: CanvasRenderingContext2D, world: World): void {
         }
         break;
       }
-      case 'warn':
-        break; // 바닥에 미리 그렸습니다
     }
     ctx.restore();
   }
@@ -464,7 +409,7 @@ export function drawFloaters(ctx: CanvasRenderingContext2D, world: World): void 
       size = 15;
     } else if (floater.kind === 'heal') {
       color = '#7ee08a';
-    } else if (floater.kind === 'exp') {
+    } else if (floater.kind === 'gain') {
       color = '#9db4ff';
       size = 12;
       weight = 700;
@@ -490,8 +435,3 @@ export function drawFloaters(ctx: CanvasRenderingContext2D, world: World): void 
   }
 }
 
-/** 시전 중인 몬스터 머리 위의 불꽃 */
-export function drawCastMark(ctx: CanvasRenderingContext2D, world: World, monster: Monster): void {
-  const def = monsterDef(monster.defId);
-  flame(ctx, world.time * 12, monster.pos.x, monster.pos.y - def.size - 12, 9, '#c2352f', '#ffb04a');
-}

@@ -89,8 +89,8 @@ export const ZONE_ART: Record<MapTheme, ZoneArt> = {
     roadEdge: '#54402a',
   },
 
-  /* --------------------------------------------------------------- 초원 */
-  field: {
+  /* --------------------------------------------------------------- 숲 */
+  forest: {
     ground: ['#33512f', '#3c5c36', '#2a4528'],
     detail: '#23401e',
     wall: '#3a3025',
@@ -110,26 +110,6 @@ export const ZONE_ART: Record<MapTheme, ZoneArt> = {
     roadEdge: '#443522',
   },
 
-  /* --------------------------------------------------------------- 협곡 */
-  canyon: {
-    ground: ['#6a4a31', '#79573b', '#523724'],
-    detail: '#3e2a1a',
-    wall: '#4a3020',
-    wallTop: '#7c5535',
-    wallEdge: '#26160d',
-    propLight: '#a98a66',
-    prop: '#87694a',
-    propDark: '#553f2c',
-    liquid: '#4a3820',
-    liquidLight: '#6f5533',
-    liquidGlow: '#c9a227',
-    ambient: '#ffb870',
-    ambientAlpha: 0.05,
-    fog: 'rgba(24,14,7,0.38)',
-    motes: { kind: 'dust', color: '#e8c89a', count: 30 },
-    road: '#7a5b3a',
-    roadEdge: '#5c4229',
-  },
 
   /* --------------------------------------------------------------- 광산 */
   cave: {
@@ -153,49 +133,7 @@ export const ZONE_ART: Record<MapTheme, ZoneArt> = {
     roadEdge: '#221d2a',
   },
 
-  /* --------------------------------------------------------------- 요새 */
-  fortress: {
-    ground: ['#49412f', '#554a39', '#393124'],
-    detail: '#292318',
-    wall: '#4a3722',
-    wallTop: '#6d5131',
-    wallEdge: '#211709',
-    propLight: '#8a6a45',
-    prop: '#6a4e30',
-    propDark: '#3d2c1a',
-    liquid: '#2f3a1f',
-    liquidLight: '#556b30',
-    liquidGlow: '#a3e635',
-    ambient: '#ffcf8a',
-    ambientAlpha: 0.045,
-    fog: 'rgba(16,11,6,0.44)',
-    motes: { kind: 'ember', color: '#ffb04a', count: 20 },
-    beacon: { kind: 'campfire', color: '#ff9a3c', radius: 132, share: 0.1 },
-    road: '#6b5436',
-    roadEdge: '#4c3b25',
-  },
 
-  /* --------------------------------------------------------------- 둥지 */
-  volcano: {
-    ground: ['#2e211f', '#382725', '#231a18'],
-    detail: '#1a1211',
-    wall: '#1e1412',
-    wallTop: '#4d2c24',
-    wallEdge: '#0d0908',
-    propLight: '#5c3b31',
-    prop: '#3a2622',
-    propDark: '#1e1310',
-    liquid: '#b8331a',
-    liquidLight: '#ff8c2a',
-    liquidGlow: '#ff5a1a',
-    ambient: '#ff7a3c',
-    ambientAlpha: 0.07,
-    fog: 'rgba(18,5,3,0.46)',
-    motes: { kind: 'ash', color: '#d8c2b8', count: 34 },
-    beacon: { kind: 'vent', color: '#ff6a2a', radius: 126, share: 0.12 },
-    road: '#3a2622',
-    roadEdge: '#1e1310',
-  },
 };
 
 /* ===========================================================================
@@ -252,24 +190,7 @@ export function mix(hexA: string, hexB: string, t: number): string {
   return `rgb(${clamp255(r1 + (r2 - r1) * t)},${clamp255(g1 + (g2 - g1) * t)},${clamp255(b1 + (b2 - b1) * t)})`;
 }
 
-/* ===========================================================================
- *  장비 등급 색 — 캐릭터에 그대로 칠해집니다
- * ======================================================================== */
 
-export const GEAR_TINT: Record<string, string> = {
-  common: '#8c8f96',
-  rare: '#4f86d6',
-  epic: '#a06fd6',
-  legend: '#d8a12a',
-};
-
-/** 전설 장비만 은은하게 빛납니다 */
-export const GEAR_GLOW: Record<string, number> = {
-  common: 0,
-  rare: 0.15,
-  epic: 0.3,
-  legend: 0.6,
-};
 
 /* ===========================================================================
  *  장비의 재질
@@ -292,9 +213,3 @@ export const MATERIAL: Record<string, string> = {
   'helm-mithril': '#b9c6d4',
 };
 
-/** 무기 날의 재질 */
-export const BLADE: Record<string, string> = {
-  sword: '#c3cbd6',
-  bow: '#8a6a45',
-  staff: '#6b5334',
-};

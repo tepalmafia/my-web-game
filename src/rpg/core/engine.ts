@@ -2,26 +2,21 @@
  *  세계가 한 칸 흐릅니다.
  *
  *  화면이 한 장 그려질 때마다 step() 이 한 번 불립니다.
- *  순서는 이렇습니다.
- *      시계 → 자동 사냥 판단 → 내 이동 → 내 공격 → 몬스터 → 줍기 → 회복 → 문/사람 → 정리
+ *      시계 → 내 이동 → 하던 일 → 내 공격 → 몬스터 → 줍기 → 회복 → 문·사람 → 정리
  *
- *  ※ 여기서는 화면을 전혀 모릅니다. 그리는 일은 ui/draw.ts 가 따로 합니다.
+ *  ★ 자동 사냥은 여기 없습니다.
+ *    판단하는 두뇌는 tools/autopilot.ts 로 옮겼습니다 — 봇이 밸런스를 재는 데는 그대로 쓰고,
+ *    게임 빌드에는 넣지 않습니다. 사람은 직접 누릅니다.
  */
 
-import { AI, AUTO, MAX_STEP, PLAYER_RADIUS, REST_AFTER, REST_REGEN_MULTIPLIER, TILE, TOWN_REGEN_MULTIPLIER, VIEW } from '../balance';
-import { CLASSES } from '../content/classes';
-import { monsterDef } from '../content/monsters';
 import {
-  currentTarget,
-  distanceTo,
-  monsterAoeLand,
-  monsterProjectile,
-  monsterStrike,
-  nearestMonster,
-  strikeMonster,
-  tickRespawn,
-} from './combat';
-import { autoUseSkills, drinkBestPotion } from './commands';
+  AI, LOOT, MAX_STEP, PLAYER_RADIUS, REGEN, TILE, VIEW,
+} from '../balance';
+import { monsterDef } from '../content/monsters';
+import { veinDef } from '../content/veins';
+import { currentTarget, distanceTo, monsterStrike, swingAtMonster, tickRespawn } from './combat';
+import { cancelAction, tickAction } from './action';
+import { die } from './death';
 import { log, toast, vfx } from './feedback';
 import { pickUpNearby } from './loot';
 import { nextRandom, randRange } from './rng';
@@ -31,31 +26,33 @@ import type { Monster, World } from '../types';
 
 export function step(world: World, rawDt: number): void {
   const dt = Math.min(rawDt, MAX_STEP);
-  const player = world.player;
+  const me = world.me;
 
   world.time += dt;
-  player.playSeconds += dt;
+  me.playSeconds += dt;
 
   tickTimers(world, dt);
 
-  if (player.dead) {
-    player.deadFor += dt;
+  if (me.dead) {
+    me.deadFor += dt;
     decay(world, dt);
     followCamera(world, dt);
     return;
   }
 
-  if (player.auto) runAuto(world);
-
   movePlayer(world, dt);
-  playerAttack(world, dt);
+  tickAction(world, dt);
+  playerAttack(world);
   updateMonsters(world, dt);
+  updateVeins(world, dt);
   pickUpNearby(world);
   regenerate(world, dt);
   checkPortals(world);
   checkNpc(world);
   decay(world, dt);
   followCamera(world, dt);
+
+  if (me.hp <= 0 && !me.dead) die(world);
 }
 
 /* ===========================================================================
@@ -63,80 +60,26 @@ export function step(world: World, rawDt: number): void {
  * ======================================================================== */
 
 function tickTimers(world: World, dt: number): void {
-  const player = world.player;
-
-  player.attackCooldown = Math.max(0, player.attackCooldown - dt);
-  player.potionCooldown = Math.max(0, player.potionCooldown - dt);
-  world.playerSwing = Math.max(0, world.playerSwing - dt);
-
-  for (const id of Object.keys(player.skillCooldowns)) {
-    const left = player.skillCooldowns[id]! - dt;
-    if (left <= 0) delete player.skillCooldowns[id];
-    else player.skillCooldowns[id] = left;
-  }
-
-  player.buffs = player.buffs.filter((buff) => {
-    if (buff.until > world.time) return true;
-    log(world, `${buff.name} 효과가 끝났습니다`, 'normal');
-    return false;
-  });
+  const me = world.me;
+  me.attackCooldown = Math.max(0, me.attackCooldown - dt);
+  me.potionCooldown = Math.max(0, me.potionCooldown - dt);
+  world.meSwing = Math.max(0, world.meSwing - dt);
 
   if (world.toast) {
     world.toast.life -= dt;
     if (world.toast.life <= 0) world.toast = null;
   }
-  if (world.enhanceResult) {
-    world.enhanceResult.life -= dt;
-    if (world.enhanceResult.life <= 0) world.enhanceResult = null;
-  }
   world.shake = Math.max(0, world.shake - dt);
 }
 
 /* ===========================================================================
- *  자동 사냥
- * ======================================================================== */
-
-function runAuto(world: World): void {
-  const player = world.player;
-  const stats = derive(player);
-
-  if (player.hp / stats.maxHp < player.autoPotionAt) drinkBestPotion(world, 'hp');
-  if (player.mp / stats.maxMp < AUTO.manaPotionAt) drinkBestPotion(world, 'mp');
-
-  const target = currentTarget(world);
-  if (!target) {
-    // 바닥에 떨어진 게 가까이 있으면 먼저 줍고
-    const loot = world.ground.find(
-      (item) => Math.hypot(item.pos.x - player.pos.x, item.pos.y - player.pos.y) < 220,
-    );
-    // 보스는 자동으로 건드리지 않습니다 — 준비 없이 달려들면 그대로 죽습니다
-    const next = nearestMonster(world, AUTO.searchRange, true);
-    if (next) {
-      player.targetId = next.id;
-      return;
-    }
-    if (loot) {
-      player.moveTarget = { x: loot.pos.x, y: loot.pos.y };
-      return;
-    }
-    // 근처가 텅 비었으면 사냥터 안쪽으로 걸어갑니다 (제자리에 멈춰 서지 않도록)
-    const far = nearestMonster(world, Infinity, true);
-    if (far) player.moveTarget = { x: far.pos.x, y: far.pos.y };
-    return;
-  }
-  autoUseSkills(world);
-}
-
-/* ===========================================================================
- *  내 이동과 공격
+ *  내 이동
  * ======================================================================== */
 
 function movePlayer(world: World, dt: number): void {
-  const player = world.player;
-  const stats = derive(player);
+  const me = world.me;
+  const stats = derive(me);
   const target = currentTarget(world);
-
-  world.pathTimer = Math.max(0, world.pathTimer - dt);
 
   let destX: number | null = null;
   let destY: number | null = null;
@@ -146,43 +89,44 @@ function movePlayer(world: World, dt: number): void {
     const def = monsterDef(target.defId);
     destX = target.pos.x;
     destY = target.pos.y;
-    // 사거리 안에 들어오면 더 다가가지 않습니다
     stopAt = stats.attackRange + def.size * 0.6 - 6;
-  } else if (player.moveTarget) {
-    destX = player.moveTarget.x;
-    destY = player.moveTarget.y;
+  } else if (me.moveTarget) {
+    destX = me.moveTarget.x;
+    destY = me.moveTarget.y;
   }
 
   if (destX === null || destY === null) {
     world.path = [];
-    world.playerMoving = false;
+    world.meMoving = false;
     return;
   }
 
-  const straight = Math.hypot(destX - player.pos.x, destY - player.pos.y);
+  // 무언가 하는 중에 움직이면 그 일은 끊깁니다
+  if (me.action) cancelAction(world, '하던 일을 멈췄습니다');
+
+  world.pathTimer = Math.max(0, world.pathTimer - dt);
+
+  const straight = Math.hypot(destX - me.pos.x, destY - me.pos.y);
   if (straight <= stopAt) {
-    if (!target) player.moveTarget = null;
+    if (!target) me.moveTarget = null;
     world.path = [];
-    world.playerMoving = false;
-    player.facing = Math.atan2(destY - player.pos.y, destX - player.pos.x);
+    world.meMoving = false;
+    me.facing = Math.atan2(destY - me.pos.y, destX - me.pos.x);
     return;
   }
 
-  // 목적지가 바뀌었거나(몬스터가 움직였거나) 길이 끊겼으면 다시 구합니다.
-  // 매 프레임 구하는 건 낭비라 0.35초에 한 번으로 제한합니다.
   const end = world.path[world.path.length - 1];
   const stale = !end || Math.hypot(end.x - destX, end.y - destY) > TILE * 1.2;
   if ((stale || world.path.length === 0) && world.pathTimer <= 0) {
     world.pathTimer = 0.35;
-    world.path = findPath(world.map, player.pos, { x: destX, y: destY }, PLAYER_RADIUS) ?? [];
+    world.path = findPath(world.map, me.pos, { x: destX, y: destY }, PLAYER_RADIUS) ?? [];
   }
 
-  // 다음 꺾이는 지점을 향해 한 걸음
   const waypoint = world.path[0] ?? { x: destX, y: destY };
-  const dx = waypoint.x - player.pos.x;
-  const dy = waypoint.y - player.pos.y;
+  const dx = waypoint.x - me.pos.x;
+  const dy = waypoint.y - me.pos.y;
   const distance = Math.hypot(dx, dy);
-  player.facing = Math.atan2(destY - player.pos.y, destX - player.pos.x);
+  me.facing = Math.atan2(destY - me.pos.y, destX - me.pos.x);
 
   if (distance < 6) {
     world.path.shift();
@@ -190,135 +134,88 @@ function movePlayer(world: World, dt: number): void {
   }
 
   const stepLength = Math.min(stats.moveSpeed * dt, distance);
-  const beforeX = player.pos.x;
-  const beforeY = player.pos.y;
+  const beforeX = me.pos.x;
+  const beforeY = me.pos.y;
+  slideMove(world.map, me.pos, (dx / distance) * stepLength, (dy / distance) * stepLength, PLAYER_RADIUS);
 
-  slideMove(world.map, player.pos, (dx / distance) * stepLength, (dy / distance) * stepLength, PLAYER_RADIUS);
+  const walked = Math.hypot(me.pos.x - beforeX, me.pos.y - beforeY);
+  world.meAnim += walked * 0.055;
+  world.meMoving = walked > stepLength * 0.25;
 
-  // 실제로 움직인 만큼 걸음이 나갑니다 (제자리걸음을 하지 않도록)
-  const walked = Math.hypot(player.pos.x - beforeX, player.pos.y - beforeY);
-  world.playerAnim += walked * 0.055;
-  world.playerMoving = walked > stepLength * 0.25;
-
-  // 그래도 한 발도 못 갔다면 길이 낡은 것이므로 다음 기회에 다시 구합니다
   if (walked < stepLength * 0.2) {
     world.path = [];
     world.pathTimer = 0;
   }
 }
 
-function playerAttack(world: World, _dt: number): void {
-  const player = world.player;
+/* ===========================================================================
+ *  내 공격 — 대상을 고르면 사거리 안에서 알아서 계속 때립니다
+ * ======================================================================== */
+
+function playerAttack(world: World): void {
+  const me = world.me;
   const target = currentTarget(world);
-  if (!target) return;
+  if (!target || me.action) return;
 
-  const stats = derive(player);
+  const stats = derive(me);
   const def = monsterDef(target.defId);
-  const reach = stats.attackRange + def.size * 0.6;
+  if (distanceTo(world, target) > stats.attackRange + def.size * 0.6) return;
+  if (me.attackCooldown > 0) return;
 
-  if (distanceTo(world, target) > reach) return;
-  if (player.attackCooldown > 0) return;
-
-  player.attackCooldown = stats.attackInterval;
-  player.facing = Math.atan2(target.pos.y - player.pos.y, target.pos.x - player.pos.x);
-
-  world.playerSwing = 0.28;
-
-  const cls = CLASSES[player.classId];
-  if (cls.projectile === 'none') {
-    vfx(world, 'slash', player.pos, { to: target.pos, life: 0.16, color: cls.color });
-  } else {
-    vfx(world, 'projectile', player.pos, {
-      to: target.pos,
-      life: 0.14,
-      color: cls.projectile === 'arrow' ? '#bbf7d0' : '#c4b5fd',
-    });
-  }
-  strikeMonster(world, target, 1);
+  me.attackCooldown = stats.swing;
+  world.meSwing = 0.28;
+  me.facing = Math.atan2(target.pos.y - me.pos.y, target.pos.x - me.pos.x);
+  vfx(world, 'slash', me.pos, { to: target.pos, life: 0.16, color: '#d8d2c4' });
+  swingAtMonster(world, target);
 }
 
 /* ===========================================================================
- *  몬스터
+ *  몬스터 — 길을 찾아 따라옵니다 (지형이 무적 방패가 되지 않도록)
  * ======================================================================== */
 
 function updateMonsters(world: World, dt: number): void {
-  const player = world.player;
+  const me = world.me;
 
   for (const monster of world.monsters) {
     if (monster.state === 'dead') {
-      tickRespawn(world, monster, dt);
+      tickRespawn(monster, dt);
       continue;
     }
     const def = monsterDef(monster.defId);
     monster.hitFlash = Math.max(0, monster.hitFlash - dt);
     monster.attackCooldown = Math.max(0, monster.attackCooldown - dt);
     monster.swing = Math.max(0, monster.swing - dt);
+    monster.pathTimer = Math.max(0, monster.pathTimer - dt);
     monster.moving = false;
-    monster.aoeCooldown = Math.max(0, monster.aoeCooldown - dt);
 
     const distance = distanceTo(world, monster);
-
-    // 광역기 시전 중에는 그 자리에 멈춰 섭니다
-    if (monster.castTimer > 0) {
-      monster.castTimer -= dt;
-      if (monster.castTimer <= 0) monsterAoeLand(world, monster);
-      continue;
-    }
-
-    if (def.aggroRange > 0 && distance <= def.aggroRange) {
+    if (def.aggroRange > 0 && distance <= def.aggroRange && !me.dead) {
       monster.aggroUntil = world.time + AI.aggroDuration;
     }
 
     const homeDistance = Math.hypot(monster.pos.x - monster.home.x, monster.pos.y - monster.home.y);
     if (homeDistance > AI.leashRange) monster.state = 'return';
 
-    const chasing = monster.aggroUntil > world.time && monster.state !== 'return';
-
     if (monster.state === 'return') {
-      const dx = monster.home.x - monster.pos.x;
-      const dy = monster.home.y - monster.pos.y;
-      const d = Math.hypot(dx, dy);
-      if (d < 8) {
-        monster.state = 'idle';
-        monster.hp = Math.min(def.hp, monster.hp + def.hp * 0.3 * dt);
-      } else {
-        const stepLength = def.moveSpeed * AI.returnSpeedMul * dt;
-        monster.facing = Math.atan2(dy, dx);
-        moveMonster(world, monster, (dx / d) * stepLength, (dy / d) * stepLength);
-        // 자리로 돌아가는 동안은 체력을 회복합니다
-        monster.hp = Math.min(def.hp, monster.hp + def.hp * 0.25 * dt);
-      }
+      returnHome(world, monster, dt);
       continue;
     }
 
-    if (chasing) {
+    if (monster.aggroUntil > world.time && !me.dead) {
       monster.state = distance <= def.attackRange ? 'attack' : 'chase';
-
-      // 광역기 준비
-      if (def.aoe && monster.aoeCooldown <= 0 && distance < def.aoe.radius * 1.15) {
-        monster.castTimer = def.aoe.castTime;
-        monster.aoeCooldown = def.aoe.cooldown;
-        vfx(world, 'warn', monster.pos, { life: def.aoe.castTime, color: def.color, radius: def.aoe.radius });
-        continue;
-      }
-
-      monster.facing = Math.atan2(player.pos.y - monster.pos.y, player.pos.x - monster.pos.x);
+      monster.facing = Math.atan2(me.pos.y - monster.pos.y, me.pos.x - monster.pos.x);
 
       if (distance > def.attackRange * 0.85) {
-        const dx = player.pos.x - monster.pos.x;
-        const dy = player.pos.y - monster.pos.y;
-        const stepLength = def.moveSpeed * dt;
-        moveMonster(world, monster, (dx / distance) * stepLength, (dy / distance) * stepLength);
+        chasePlayer(world, monster, dt);
       } else if (monster.attackCooldown <= 0) {
         monster.attackCooldown = def.attackInterval;
         monster.swing = 0.3;
-        if (def.ranged) monsterProjectile(world, monster);
-        else vfx(world, 'slash', monster.pos, { to: player.pos, life: 0.14, color: def.color });
+        vfx(world, 'slash', monster.pos, { to: me.pos, life: 0.14, color: def.color });
         monsterStrike(world, monster);
+        if (me.action) cancelAction(world, '공격을 받아 하던 일이 끊겼습니다');
       }
     } else {
       wander(world, monster, dt);
-      // 싸움이 끝났으면 체력을 회복합니다 (조금씩 깎아놓고 도망가는 수법을 막습니다)
       if (monster.hp < def.hp) {
         monster.hp = Math.min(def.hp, monster.hp + def.hp * AI.outOfCombatRegen * dt);
       }
@@ -328,7 +225,57 @@ function updateMonsters(world: World, dt: number): void {
   }
 }
 
-/** 할 일 없는 몬스터는 제자리 근처를 서성입니다 */
+/**
+ * 쫓아오기 — 플레이어와 같은 길찾기를 씁니다.
+ * 이게 없으면 바위 뒤에 서 있는 것만으로 안전해져서, 오픈월드에 위험이 사라집니다.
+ */
+function chasePlayer(world: World, monster: Monster, dt: number): void {
+  const def = monsterDef(monster.defId);
+  const me = world.me;
+  const radius = def.size * 0.7;
+
+  const straight = Math.hypot(me.pos.x - monster.pos.x, me.pos.y - monster.pos.y);
+  const end = monster.path[monster.path.length - 1];
+  const stale = !end || Math.hypot(end.x - me.pos.x, end.y - me.pos.y) > TILE * 1.5;
+
+  if ((stale || monster.path.length === 0) && monster.pathTimer <= 0) {
+    monster.pathTimer = AI.repathSeconds;
+    monster.path = findPath(world.map, monster.pos, me.pos, radius) ?? [];
+  }
+
+  const waypoint = monster.path[0] ?? me.pos;
+  const dx = waypoint.x - monster.pos.x;
+  const dy = waypoint.y - monster.pos.y;
+  const distance = Math.hypot(dx, dy) || 1;
+
+  if (distance < 8 && monster.path.length > 0) {
+    monster.path.shift();
+    return;
+  }
+
+  const stepLength = def.moveSpeed * dt;
+  moveMonster(world, monster, (dx / distance) * stepLength, (dy / distance) * stepLength);
+  void straight;
+}
+
+function returnHome(world: World, monster: Monster, dt: number): void {
+  const def = monsterDef(monster.defId);
+  const dx = monster.home.x - monster.pos.x;
+  const dy = monster.home.y - monster.pos.y;
+  const d = Math.hypot(dx, dy);
+
+  if (d < 8) {
+    monster.state = 'idle';
+    monster.path = [];
+    monster.hp = Math.min(def.hp, monster.hp + def.hp * 0.3 * dt);
+    return;
+  }
+  monster.facing = Math.atan2(dy, dx);
+  const stepLength = def.moveSpeed * AI.returnSpeedMul * dt;
+  moveMonster(world, monster, (dx / d) * stepLength, (dy / d) * stepLength);
+  monster.hp = Math.min(def.hp, monster.hp + def.hp * 0.25 * dt);
+}
+
 function wander(world: World, monster: Monster, dt: number): void {
   const def = monsterDef(monster.defId);
   monster.state = 'idle';
@@ -350,25 +297,23 @@ function wander(world: World, monster: Monster, dt: number): void {
     monster.wanderTarget = null;
     return;
   }
-  const stepLength = def.moveSpeed * 0.45 * dt;
   monster.facing = Math.atan2(dy, dx);
+  const stepLength = def.moveSpeed * 0.45 * dt;
   moveMonster(world, monster, (dx / d) * stepLength, (dy / d) * stepLength);
 }
 
-/** 몬스터를 옮기면서, 실제로 움직인 만큼 걸음 위상을 돌립니다 */
 function moveMonster(world: World, monster: Monster, dx: number, dy: number): void {
   const def = monsterDef(monster.defId);
   const beforeX = monster.pos.x;
   const beforeY = monster.pos.y;
-
   slideMove(world.map, monster.pos, dx, dy, def.size * 0.7);
 
   const walked = Math.hypot(monster.pos.x - beforeX, monster.pos.y - beforeY);
   monster.anim += walked * 0.06;
   monster.moving = walked > 0.05;
+  if (walked < 0.05) monster.path = [];
 }
 
-/** 몬스터끼리 완전히 겹쳐 서지 않게 살짝 밀어냅니다 */
 function separate(world: World, monster: Monster): void {
   for (const other of world.monsters) {
     if (other === monster || other.state === 'dead') continue;
@@ -388,60 +333,62 @@ function separate(world: World, monster: Monster): void {
 }
 
 /* ===========================================================================
+ *  광맥 회복
+ * ======================================================================== */
+
+function updateVeins(world: World, dt: number): void {
+  for (const vein of world.veins) {
+    if (vein.remaining > 0) continue;
+    vein.respawnIn -= dt;
+    if (vein.respawnIn <= 0) vein.remaining = veinDef(vein.defId).capacity;
+  }
+}
+
+/* ===========================================================================
  *  회복 · 문 · 사람 · 정리
  * ======================================================================== */
 
 function regenerate(world: World, dt: number): void {
-  const player = world.player;
-  const stats = derive(player);
+  const me = world.me;
+  // 쓰러진 사람은 저절로 일어나지 않습니다
+  if (me.hp <= 0) return;
+  const stats = derive(me);
 
   const fighting = world.monsters.some(
-    (m) => m.state !== 'dead' && m.aggroUntil > world.time - REST_AFTER,
+    (m) => m.state !== 'dead' && m.aggroUntil > world.time - REGEN.restAfter,
   );
-  const multiplier = world.map.def.safe
-    ? TOWN_REGEN_MULTIPLIER
-    : fighting
-      ? 1
-      : REST_REGEN_MULTIPLIER;
-
-  player.hp = Math.min(stats.maxHp, player.hp + stats.hpRegen * multiplier * dt);
-  player.mp = Math.min(stats.maxMp, player.mp + stats.mpRegen * multiplier * dt);
+  const multiplier = world.map.def.safe ? REGEN.town : fighting ? 1 : REGEN.resting;
+  me.hp = Math.min(stats.maxHp, me.hp + stats.regen * multiplier * dt);
 }
 
 function checkPortals(world: World): void {
-  const player = world.player;
-
+  const me = world.me;
   for (const portal of world.map.def.portals) {
     const px = tileCenter(portal.tx);
     const py = tileCenter(portal.ty);
-    if (Math.hypot(px - player.pos.x, py - player.pos.y) > TILE * 0.7) continue;
+    if (Math.hypot(px - me.pos.x, py - me.pos.y) > TILE * 0.7) continue;
 
-    const under = player.level < portal.recommendLevel - 2;
     enterMap(world, portal.to, portal.toTx, portal.toTy);
     log(world, `${world.map.def.name} 진입`, 'normal');
-    toast(world, world.map.def.name, under ? 'bad' : 'good');
-    if (under) {
-      log(world, `이곳의 권장 레벨은 ${portal.recommendLevel} 입니다. 조심하세요.`, 'bad');
-    }
+    toast(world, world.map.def.name, 'good');
     return;
   }
 }
 
 function checkNpc(world: World): void {
   if (!world.pendingNpc) return;
-  const player = world.player;
+  const me = world.me;
 
   const npc = world.map.def.npcs.find((n) => n.kind === world.pendingNpc);
   if (!npc) {
     world.pendingNpc = null;
     return;
   }
-  const distance = Math.hypot(tileCenter(npc.tx) - player.pos.x, tileCenter(npc.ty) - player.pos.y);
+  const distance = Math.hypot(tileCenter(npc.tx) - me.pos.x, tileCenter(npc.ty) - me.pos.y);
   if (distance > TILE * 1.6) return;
 
-  player.moveTarget = null;
-  world.panel =
-    npc.kind === 'shop' ? 'shop' : npc.kind === 'enhance' ? 'enhance' : npc.kind === 'teleport' ? 'teleport' : 'quest';
+  me.moveTarget = null;
+  world.panel = npc.kind === 'shop' ? 'shop' : 'craft';
   world.pendingNpc = null;
 }
 
@@ -463,13 +410,14 @@ function decay(world: World, dt: number): void {
     if (item.life <= 0) world.ground.splice(i, 1);
   }
   if (world.floaters.length > 80) world.floaters.splice(0, world.floaters.length - 80);
+  void LOOT;
 }
 
 function followCamera(world: World, dt: number): void {
-  const player = world.player;
+  const me = world.me;
   const lerp = Math.min(1, dt * 8);
-  world.camera.x += (player.pos.x - world.camera.x) * lerp;
-  world.camera.y += (player.pos.y - world.camera.y) * lerp;
+  world.camera.x += (me.pos.x - world.camera.x) * lerp;
+  world.camera.y += (me.pos.y - world.camera.y) * lerp;
 
   if (world.shake > 0) {
     world.camera.x += randRange(world, -1, 1) * VIEW.shakeAmount * world.shake;

@@ -55,11 +55,8 @@ export type PropKind =
 
 const PROP_SETS: Record<MapTheme, PropKind[]> = {
   town: ['tree', 'bush', 'rock', 'tree'],
-  field: ['tree', 'pine', 'bush', 'tree', 'rock'],
-  canyon: ['boulder', 'spire', 'deadbush', 'boulder'],
+  forest: ['tree', 'pine', 'bush', 'tree', 'rock'],
   cave: ['spire', 'beam', 'spire', 'rock'],
-  fortress: ['stake', 'totem', 'bones', 'stake'],
-  volcano: ['shard', 'boulder', 'shard'],
 };
 
 /** 이 칸에 무엇이 서 있는가 */
@@ -170,7 +167,7 @@ export function drawGround(ctx: CanvasRenderingContext2D, world: World, range: T
   ctx.restore();
 
   /* 3) 잔결 — 풀포기와 자갈. 네모난 점을 찍으면 격자가 다시 보이므로 기울인 타원과 선으로 */
-  const grassy = def.theme === 'town' || def.theme === 'field';
+  const grassy = def.theme === 'town' || def.theme === 'forest';
   ctx.save();
   for (let ty = range.y0; ty <= range.y1; ty++) {
     for (let tx = range.x0; tx <= range.x1; tx++) {
@@ -664,7 +661,7 @@ export function drawLights(
   range: TileRange,
   art: ZoneArt,
 ): void {
-  if (!art.beacon && world.map.def.theme !== 'volcano') return;
+  if (!art.beacon) return;
   const { def, tiles } = world.map;
 
   ctx.save();
@@ -685,9 +682,6 @@ export function drawLights(
           color = art.beacon.color;
           radius = art.beacon.radius;
         }
-      } else if (tile === LIQUID && def.theme === 'volcano') {
-        color = '#ff5a1a';
-        radius = 74;
       }
       if (!color) continue;
 

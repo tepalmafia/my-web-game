@@ -2,178 +2,168 @@
  *  능력치 계산.
  *
  *  ★ 규칙: 계산해서 알 수 있는 값은 저장하지 않습니다.
- *    최대 체력, 공격력, 방어력은 언제나 여기서 다시 구합니다.
- *    저장해두면 장비를 바꿨을 때 실제 값과 어긋나는 버그가 반드시 생깁니다.
+ *    최대 체력·공격력·방어력·소지 상한은 언제나 여기서 다시 구합니다.
+ *
+ *  레벨이 없으므로 모든 것이 두 곳에서만 나옵니다 — 능력치와 입고 있는 물건.
  */
 
-import { COMBAT, ENHANCE_BONUS } from '../balance';
-import { CLASSES } from '../content/classes';
+import { BARE_HANDS, COMBAT, CRAFT, REGEN, WEIGHT, carryCapacity, maxHpOf } from '../balance';
 import { itemDef } from '../content/items';
-import type { EquipSlot, ItemDef, ItemStack, Player, Ratio } from '../types';
+import type { Character, EquipSlot, ItemStack, Ratio, Stones } from '../types';
 
-/** 지금 이 순간의 실제 능력치 */
 export interface Stats {
   maxHp: number;
-  maxMp: number;
+  /** 무기와 힘에서 나오는 피해 */
   minDamage: number;
   maxDamage: number;
-  /** AC — 낮을수록 좋습니다 (화면에 그대로 보여줍니다) */
-  ac: number;
-  /** AC 를 피해 감소로 바꾼 값 */
-  defense: number;
-  hit: number;
-  crit: Ratio;
-  lifesteal: Ratio;
-  attackInterval: number;
+  /** 한 번 휘두르는 데 걸리는 시간 */
+  swing: number;
   attackRange: number;
+  /** 입고 있는 것의 방어값 합 (높을수록 좋음) */
+  defense: number;
+  /** 짐 때문에 깎인 뒤의 이동 속도 */
   moveSpeed: number;
-  hpRegen: number;
-  mpRegen: number;
+  /** 소지 상한 */
+  carry: Stones;
+  /** 지금 지고 있는 무게 */
+  load: Stones;
+  /** 초당 체력 회복 */
+  regen: number;
 }
 
-const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'armor', 'helmet', 'ring'];
+const SLOTS: EquipSlot[] = ['weapon', 'armor', 'helmet'];
 
-/** 강화 수치가 붙은 무기의 실제 피해 폭 */
-export function weaponDamage(def: ItemDef, plus: number): { min: number; max: number } {
-  const mul = 1 + ENHANCE_BONUS.weaponDamageMul * plus;
-  const flat = ENHANCE_BONUS.weaponFlat * plus;
-  return {
-    min: ((def.minDamage ?? 0) + flat) * mul,
-    max: ((def.maxDamage ?? 0) + flat) * mul,
-  };
+/** 기본 이동 속도 (짐이 없을 때) */
+const BASE_MOVE = 120;
+
+/** 우수품은 성능이 조금 낫습니다 */
+function qualityMul(stack: ItemStack): number {
+  return stack.quality === 'fine' ? 1 + CRAFT.fineBonus : 1;
 }
 
-/** 강화 수치가 붙은 방어구의 실제 AC */
-export function armorAc(def: ItemDef, plus: number): number {
-  return (def.ac ?? 0) - ENHANCE_BONUS.armorAc * plus;
+/** 물건 하나(겹친 개수 포함)의 무게 */
+export function stackWeight(stack: ItemStack): Stones {
+  return itemDef(stack.defId).weight * stack.count;
 }
 
-/** 강화 수치가 붙은 지팡이의 실제 마력 */
-export function weaponMagic(def: ItemDef, plus: number): number {
-  if (!def.magicPower) return 0;
-  return def.magicPower * (1 + ENHANCE_BONUS.weaponDamageMul * plus);
+/** 지금 지고 있는 총 무게 — 입은 것도 무게에 들어갑니다 */
+export function totalWeight(me: Character): Stones {
+  let sum = 0;
+  for (const stack of me.backpack) sum += stackWeight(stack);
+  for (const slot of SLOTS) {
+    const worn = me.equipped[slot];
+    if (worn) sum += stackWeight(worn);
+  }
+  return Math.round(sum * 10) / 10;
 }
 
-export function derive(player: Player): Stats {
-  const cls = CLASSES[player.classId];
-  const lv = player.level - 1;
+/** 짐이 무거울수록 느려집니다 (상한을 넘기 전에도 이미 무겁습니다) */
+export function loadPenalty(load: Stones, carry: Stones): Ratio {
+  const ratio = carry > 0 ? load / carry : 0;
+  if (ratio <= WEIGHT.slowFrom) return 0;
+  const over = (ratio - WEIGHT.slowFrom) / (1 - WEIGHT.slowFrom);
+  return Math.min(WEIGHT.maxSlow, over * WEIGHT.maxSlow);
+}
 
-  let maxHp = cls.baseHp + cls.hpPerLevel * lv;
-  let maxMp = cls.baseMp + cls.mpPerLevel * lv;
-  let minDamage = cls.baseMinDamage + cls.damagePerLevel * lv;
-  let maxDamage = cls.baseMaxDamage + cls.damagePerLevel * lv;
-  let ac = 0;
-  let hit = cls.hit + player.level * 0.35;
-  let crit = cls.crit;
-  let lifesteal = 0;
-  let magicPower = 0;
+export function derive(me: Character): Stats {
+  const weapon = me.equipped.weapon;
+  const weaponDef = weapon ? itemDef(weapon.defId) : null;
 
-  for (const slot of EQUIP_SLOTS) {
-    const stack = player.equipped[slot];
-    if (!stack) continue;
-    const def = itemDef(stack.defId);
+  let minDamage = BARE_HANDS.min;
+  let maxDamage = BARE_HANDS.max;
+  let swing = BARE_HANDS.swing;
 
-    if (slot === 'weapon') {
-      const dmg = weaponDamage(def, stack.plus);
-      minDamage += dmg.min;
-      maxDamage += dmg.max;
-      magicPower += weaponMagic(def, stack.plus);
-    } else if (def.ac) {
-      ac += armorAc(def, stack.plus);
-    }
-
-    maxHp += def.bonusHp ?? 0;
-    maxMp += def.bonusMp ?? 0;
-    minDamage += def.bonusDamage ?? 0;
-    maxDamage += def.bonusDamage ?? 0;
-    crit += def.bonusCrit ?? 0;
-    lifesteal += def.lifesteal ?? 0;
+  if (weaponDef && weaponDef.minDamage !== undefined) {
+    const mul = qualityMul(weapon!);
+    minDamage = weaponDef.minDamage * mul;
+    maxDamage = (weaponDef.maxDamage ?? weaponDef.minDamage) * mul;
+    swing = weaponDef.swing ?? BARE_HANDS.swing;
   }
 
-  // 마법사는 지팡이의 마력이 곧 화력입니다
-  if (cls.usesMagic) {
-    minDamage += magicPower * 0.55;
-    maxDamage += magicPower * 0.85;
+  // 힘이 셀수록 같은 무기로도 더 아프게 때립니다
+  const strBonus = 1 + me.str * COMBAT.strDamage;
+  minDamage *= strBonus;
+  maxDamage *= strBonus;
+
+  // 민첩이 높을수록 빨리 휘두릅니다
+  swing *= Math.max(0.45, 1 - me.dex * COMBAT.dexSpeed);
+
+  let defense = 0;
+  for (const slot of SLOTS) {
+    const worn = me.equipped[slot];
+    if (!worn) continue;
+    const def = itemDef(worn.defId);
+    if (def.defense) defense += def.defense * qualityMul(worn);
   }
 
-  let attackInterval = cls.attackInterval;
-  let moveSpeed = cls.moveSpeed;
-  let damageMul = 1;
-
-  for (const buff of player.buffs) {
-    const e = buff.effects;
-    if (e.attackSpeedMul) attackInterval /= e.attackSpeedMul;
-    if (e.moveSpeedMul) moveSpeed *= e.moveSpeedMul;
-    if (e.damageMul) damageMul *= e.damageMul;
-    if (e.acBonus) ac -= e.acBonus;
-  }
-
-  minDamage *= damageMul;
-  maxDamage *= damageMul;
-
-  const defense = Math.max(0, -ac);
+  const carry = carryCapacity(me.str);
+  const load = totalWeight(me);
+  const moveSpeed = BASE_MOVE * (1 - loadPenalty(load, carry));
 
   return {
-    maxHp: Math.round(maxHp),
-    maxMp: Math.round(maxMp),
+    maxHp: maxHpOf(me.str),
     minDamage,
     maxDamage,
-    ac: Math.round(ac),
-    defense,
-    hit,
-    crit,
-    lifesteal,
-    attackInterval,
-    attackRange: cls.attackRange,
+    swing,
+    attackRange: 40,
+    defense: Math.round(defense * 10) / 10,
     moveSpeed,
-    hpRegen: cls.hpRegen + player.level * 0.22,
-    mpRegen: cls.mpRegen + player.level * 0.12,
+    carry,
+    load,
+    regen: REGEN.base + me.str * REGEN.perStr,
   };
 }
 
-/** 방어력이 피해를 얼마나 깎아주는가 (0 = 그대로, 0.5 = 절반) */
+/** 방어값이 피해를 깎는 정도 (0 = 그대로, 0.7 = 상한) */
 export function mitigation(defense: number): Ratio {
   return Math.min(COMBAT.maxMitigation, defense / (defense + COMBAT.defenseSoftness));
 }
 
-/** 이 장비를 지금 낄 수 있는가. 못 낀다면 이유를 돌려줍니다 */
-export function equipProblem(player: Player, def: ItemDef): string | null {
-  if (!def.slot) return '착용할 수 있는 장비가 아닙니다.';
-  if ((def.reqLevel ?? 1) > player.level) return `레벨 ${def.reqLevel} 부터 착용할 수 있습니다.`;
-  if (def.family) {
-    const cls = CLASSES[player.classId];
-    if (def.family !== cls.weaponFamily) {
-      return `${cls.name}는 이 무기를 들 수 없습니다.`;
-    }
-  }
-  return null;
+/* ===========================================================================
+ *  물건 표기
+ * ======================================================================== */
+
+/** 품질이 이름 앞에 붙습니다 — "우수한 철검" */
+export function itemName(stack: ItemStack): string {
+  const def = itemDef(stack.defId);
+  return stack.quality === 'fine' ? `우수한 ${def.name}` : def.name;
 }
 
-/** 장비 한 점이 실제로 주는 능력치를 한 줄로 (화면 표시용) */
+/** 남은 내구도 비율 (닳지 않는 물건이면 null) */
+export function wearRatio(stack: ItemStack): Ratio | null {
+  if (stack.durability === undefined || !stack.maxDurability) return null;
+  return Math.max(0, stack.durability / stack.maxDurability);
+}
+
+/** 화면에 한 줄로 보여줄 성능 요약 */
 export function itemSummary(stack: ItemStack): string {
   const def = itemDef(stack.defId);
+  const mul = qualityMul(stack);
   const parts: string[] = [];
 
-  if (def.slot === 'weapon') {
-    const dmg = weaponDamage(def, stack.plus);
-    parts.push(`공격 ${Math.round(dmg.min)}~${Math.round(dmg.max)}`);
-    if (def.magicPower) parts.push(`마력 ${Math.round(weaponMagic(def, stack.plus))}`);
-  } else if (def.ac) {
-    parts.push(`AC ${armorAc(def, stack.plus)}`);
+  if (def.minDamage !== undefined) {
+    parts.push(`공격 ${Math.round(def.minDamage * mul)}~${Math.round((def.maxDamage ?? 0) * mul)}`);
+    if (def.swing) parts.push(`${def.swing.toFixed(2)}초`);
   }
-  if (def.bonusHp) parts.push(`체력 +${def.bonusHp}`);
-  if (def.bonusMp) parts.push(`마나 +${def.bonusMp}`);
-  if (def.bonusDamage) parts.push(`공격 +${def.bonusDamage}`);
-  if (def.bonusCrit) parts.push(`치명타 +${Math.round(def.bonusCrit * 100)}%`);
-  if (def.lifesteal) parts.push(`흡혈 ${Math.round(def.lifesteal * 100)}%`);
+  if (def.defense) parts.push(`방어 ${Math.round(def.defense * mul)}`);
   if (def.healHp) parts.push(`체력 ${def.healHp} 회복`);
-  if (def.healMp) parts.push(`마나 ${def.healMp} 회복`);
+  if (def.tool) parts.push(def.tool === 'pickaxe' ? '채광 연장' : '제작 연장');
 
+  if (stack.durability !== undefined && stack.maxDurability) {
+    parts.push(`내구 ${Math.ceil(stack.durability)}/${Math.round(stack.maxDurability)}`);
+  }
+  parts.push(`${def.weight * stack.count} 스톤`);
   return parts.join(' · ');
 }
 
-/** 강화 수치까지 붙인 이름 (+7 롱소드) */
-export function itemName(stack: ItemStack): string {
+/**
+ * 이 물건을 지금 낄 수 있는가.
+ * ★ 레벨 제한도 직업 제한도 없습니다 — 들 수만 있으면 됩니다.
+ */
+export function equipProblem(me: Character, stack: ItemStack): string | null {
   const def = itemDef(stack.defId);
-  return stack.plus > 0 ? `+${stack.plus} ${def.name}` : def.name;
+  if (!def.slot) return '착용할 수 있는 물건이 아닙니다.';
+  if (stack.durability !== undefined && stack.durability <= 0) return '망가져서 쓸 수 없습니다.';
+  void me;
+  return null;
 }

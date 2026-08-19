@@ -1,223 +1,162 @@
 /**
- *  전투 계산.
+ *  전투.
  *
- *  한 번의 공격은 두 단계입니다.
- *      1) 맞았는가   — 레벨 차이와 명중치로 확률을 구합니다 (35%~95% 사이)
- *      2) 얼마나 아픈가 — 피해 폭에서 뽑고, 방어력만큼 깎습니다
+ *  ★ 레벨이 없으므로 명중은 오직 실력 대 실력입니다.
  *
- *  방어력은 아무리 높아도 피해를 72%까지만 줄여줍니다.
- *  그래서 상위 사냥터에서는 장비가 좋아도 결국 맞아 죽습니다.
+ *      명중률 = (내 실력 + 25) / ((상대 실력 + 25) × 2)
+ *
+ *    같으면 50%, 내가 두 배면 83% 근처. 아무리 벌어져도 10~95% 를 넘지 않습니다.
+ *    몬스터의 '실력'은 난이도(difficulty) 값이고, 내 실력은 검술(때릴 때)과 방어(맞을 때)입니다.
+ *
+ *  그래서 센 몬스터를 상대하면 자주 빗나가지만, 그만큼 검술이 빨리 늡니다.
  */
 
-import { COMBAT, expPenalty } from '../balance';
+import { COMBAT, DURABILITY } from '../balance';
 import { monsterDef } from '../content/monsters';
-import { floater, log, shake, vfx } from './feedback';
+import { floater, shake, vfx } from './feedback';
 import { dropLoot } from './loot';
-import { die, gainExp } from './progression';
-import { recordKill } from './quests';
 import { chance, randRange } from './rng';
+import { trySkillGain } from './skillgain';
 import { derive, mitigation } from './stats';
+import { wear } from './durability';
 import type { Monster, World } from '../types';
 
-/** 공격이 맞을 확률 */
-function hitChance(
-  world: World,
-  attackerLevel: number,
-  attackerHit: number,
-  defenderLevel: number,
-  defenderHit: number,
-): number {
-  const raw =
-    COMBAT.baseHitChance +
-    (attackerLevel - defenderLevel) * COMBAT.hitPerLevel +
-    (attackerHit - defenderHit * 0.5) * COMBAT.hitPerPoint;
-  const clamped = Math.max(COMBAT.minHitChance, Math.min(COMBAT.maxHitChance, raw));
-  return chance(world, clamped) ? 1 : 0;
+/** 실력 대 실력의 명중 확률 */
+export function hitChance(attacker: number, defender: number): number {
+  const raw = (attacker + COMBAT.hitBias) / ((defender + COMBAT.hitBias) * 2);
+  return Math.max(COMBAT.minHit, Math.min(COMBAT.maxHit, raw));
 }
 
-/** 피해 폭에서 하나 뽑고 방어력만큼 깎습니다 */
-function resolveDamage(world: World, min: number, max: number, defense: number, mul: number): number {
+function rollDamage(world: World, min: number, max: number, defense: number, mul: number): number {
   const jitter = 1 + randRange(world, -COMBAT.damageJitter, COMBAT.damageJitter);
   const raw = randRange(world, min, max) * mul * jitter;
-  const after = raw * (1 - mitigation(defense));
-  return Math.max(COMBAT.minDamage, Math.round(after));
+  return Math.max(COMBAT.minDamage, Math.round(raw * (1 - mitigation(defense))));
 }
 
 /* ===========================================================================
- *  플레이어 → 몬스터
+ *  나 → 몬스터
  * ======================================================================== */
 
-/**
- * 몬스터 한 마리를 때립니다.
- * powerMul 이 1 이면 평타, 2.5 면 평타의 2.5배짜리 스킬입니다.
- */
-export function strikeMonster(
-  world: World,
-  monster: Monster,
-  powerMul: number,
-  color?: string,
-): void {
+export function swingAtMonster(world: World, monster: Monster): void {
   if (monster.state === 'dead') return;
 
-  const player = world.player;
-  const stats = derive(player);
+  const me = world.me;
+  const stats = derive(me);
   const def = monsterDef(monster.defId);
 
-  // 맞은 쪽은 반드시 반격합니다 — 뒤에서 때리고 도망가는 건 안 됩니다
+  // 맞은 쪽은 반드시 돌아섭니다
   monster.aggroUntil = world.time + 8;
   if (monster.state === 'idle' || monster.state === 'return') monster.state = 'chase';
 
-  if (!hitChance(world, player.level, stats.hit, def.level, def.hit)) {
+  // 휘두르면 검이 닳습니다 (빗나가도 닳습니다)
+  const weapon = me.equipped.weapon;
+  if (weapon) wear(world, weapon, 1 / DURABILITY.hitsPerLoss, 'weapon');
+
+  // 성공하든 실패하든 배웁니다
+  trySkillGain(world, 'swordsmanship', def.difficulty);
+
+  if (!chance(world, hitChance(me.skills.swordsmanship, def.difficulty))) {
     floater(world, monster.pos, '빗나감', 'miss');
     return;
   }
 
-  const isCrit = chance(world, stats.crit);
-  const critMul = isCrit ? COMBAT.critMultiplier : 1;
-  const defense = Math.max(0, -def.ac);
-  const damage = resolveDamage(world, stats.minDamage, stats.maxDamage, defense, powerMul * critMul);
+  const crit = chance(world, COMBAT.critChance);
+  const damage = rollDamage(
+    world,
+    stats.minDamage,
+    stats.maxDamage,
+    def.defense,
+    crit ? COMBAT.critMultiplier : 1,
+  );
 
   monster.hp -= damage;
   monster.hitFlash = 0.12;
-
-  floater(world, { x: monster.pos.x, y: monster.pos.y - def.size }, String(damage), isCrit ? 'crit' : 'damage');
-  vfx(world, 'impact', monster.pos, { life: 0.18, color: color ?? (isCrit ? '#fde047' : '#ffffff'), radius: def.size });
-
-  if (stats.lifesteal > 0) {
-    const healed = Math.max(1, Math.round(damage * stats.lifesteal));
-    player.hp = Math.min(stats.maxHp, player.hp + healed);
-  }
+  floater(world, { x: monster.pos.x, y: monster.pos.y - def.size }, String(damage), crit ? 'crit' : 'damage');
+  vfx(world, 'impact', monster.pos, { life: 0.18, color: crit ? '#ffd23f' : '#ffffff', radius: def.size });
 
   if (monster.hp <= 0) killMonster(world, monster);
 }
 
-/** 나를 중심으로 반경 안의 모든 적을 때립니다 */
-export function strikeArea(world: World, radius: number, powerMul: number, color: string): number {
-  const player = world.player;
-  let hits = 0;
-
-  vfx(world, 'aoe', player.pos, { life: 0.45, color, radius });
-  shake(world, 0.16);
-
-  for (const monster of [...world.monsters]) {
-    if (monster.state === 'dead') continue;
-    const distance = Math.hypot(monster.pos.x - player.pos.x, monster.pos.y - player.pos.y);
-    if (distance > radius) continue;
-    strikeMonster(world, monster, powerMul, color);
-    hits += 1;
-  }
-  return hits;
-}
-
 function killMonster(world: World, monster: Monster): void {
   const def = monsterDef(monster.defId);
-  const player = world.player;
+  const me = world.me;
 
   monster.state = 'dead';
   monster.hp = 0;
   monster.respawnIn = def.respawn;
-  monster.castTimer = 0;
+  monster.path = [];
+  if (me.targetId === monster.id) me.targetId = null;
 
-  if (player.targetId === monster.id) player.targetId = null;
-
-  const exp = Math.max(1, Math.round(def.exp * expPenalty(player.level, def.level)));
-  floater(world, { x: monster.pos.x, y: monster.pos.y - def.size - 14 }, `+${exp.toLocaleString()} EXP`, 'exp');
-
-  if (def.boss) {
-    world.bossRespawnAt[monster.defId] = world.time + def.respawn;
-    log(world, `${def.name} 처치!`, 'epic');
-    shake(world, 0.5);
-    vfx(world, 'ring', monster.pos, { life: 1.4, color: '#fbbf24', radius: def.size * 2.4 });
-    if (monster.defId === 'carnas') {
-      player.bossKills += 1;
-    }
-  }
-
+  me.tally[def.id] = (me.tally[def.id] ?? 0) + 1;
   dropLoot(world, monster);
-  gainExp(world, exp);
-  recordKill(world, monster.defId);
 }
 
 /* ===========================================================================
- *  몬스터 → 플레이어
+ *  몬스터 → 나
  * ======================================================================== */
 
-export function monsterStrike(world: World, monster: Monster, powerMul = 1): void {
-  const player = world.player;
-  if (player.dead) return;
+export function monsterStrike(world: World, monster: Monster): void {
+  const me = world.me;
+  if (me.dead) return;
 
-  const stats = derive(player);
   const def = monsterDef(monster.defId);
+  const stats = derive(me);
 
-  if (!hitChance(world, def.level, def.hit, player.level, stats.hit)) {
-    floater(world, { x: player.pos.x, y: player.pos.y - 20 }, '회피', 'miss');
+  // 맞아봐야 피할 줄 알게 됩니다 — 빗나가도 방어가 늡니다
+  trySkillGain(world, 'defense', def.difficulty);
+
+  if (!chance(world, hitChance(def.difficulty, me.skills.defense))) {
+    floater(world, { x: me.pos.x, y: me.pos.y - 22 }, '회피', 'miss');
     return;
   }
 
-  const damage = resolveDamage(world, def.minDamage, def.maxDamage, stats.defense, powerMul);
+  const damage = rollDamage(world, def.minDamage, def.maxDamage, stats.defense, 1);
+
+  // 맞으면 입은 것이 닳습니다
+  const armor = me.equipped.armor ?? me.equipped.helmet;
+  if (armor) {
+    const slot = me.equipped.armor ? 'armor' : 'helmet';
+    wear(world, armor, 1 / DURABILITY.takenPerLoss, slot);
+  }
+
   damagePlayer(world, damage);
 }
 
 export function damagePlayer(world: World, damage: number): void {
-  const player = world.player;
-  if (player.dead) return;
+  const me = world.me;
+  if (me.dead) return;
 
-  player.hp -= damage;
-  floater(world, { x: player.pos.x, y: player.pos.y - 22 }, String(damage), 'taken');
+  me.hp -= damage;
+  floater(world, { x: me.pos.x, y: me.pos.y - 22 }, String(damage), 'taken');
 
-  const stats = derive(player);
+  const stats = derive(me);
   if (damage > stats.maxHp * 0.18) shake(world, 0.22);
 
-  if (player.hp <= 0) die(world);
+  // ★ 여기서 hp 를 0 으로 붙잡아 두면 안 됩니다.
+  //   붙잡아 두면 다음 회복이 곧바로 1 이상으로 끌어올려서, 죽음 판정(engine.ts 끝)이
+  //   영영 걸리지 않습니다. 실제로 늑대에게 한 시간을 맞으면서도 죽지 않았습니다.
+  //   죽음 처리는 death.ts 가 합니다 (여기서 부르면 서로를 물고 들어갑니다).
 }
 
-/** 원거리 몬스터가 쏜 것이 날아가는 그림 */
-export function monsterProjectile(world: World, monster: Monster): void {
-  const def = monsterDef(monster.defId);
-  vfx(world, 'projectile', monster.pos, {
-    to: { x: world.player.pos.x, y: world.player.pos.y },
-    life: 0.22,
-    color: def.color,
-  });
-}
+/* ===========================================================================
+ *  대상 고르기와 부활
+ * ======================================================================== */
 
-/** 몬스터의 광역기 — 바닥에 원이 그려지고, 시간이 끝나면 그 안에 있는 사람이 맞습니다 */
-export function monsterAoeLand(world: World, monster: Monster): void {
-  const def = monsterDef(monster.defId);
-  if (!def.aoe) return;
-
-  vfx(world, 'aoe', monster.pos, { life: 0.5, color: def.color, radius: def.aoe.radius });
-  shake(world, 0.3);
-
-  const distance = Math.hypot(world.player.pos.x - monster.pos.x, world.player.pos.y - monster.pos.y);
-  if (distance <= def.aoe.radius) {
-    monsterStrike(world, monster, def.aoe.damageMul);
-  } else {
-    floater(world, { x: world.player.pos.x, y: world.player.pos.y - 22 }, '피함', 'miss');
-  }
-}
-
-/** 목표까지의 거리 */
 export function distanceTo(world: World, monster: Monster): number {
-  return Math.hypot(monster.pos.x - world.player.pos.x, monster.pos.y - world.player.pos.y);
+  return Math.hypot(monster.pos.x - world.me.pos.x, monster.pos.y - world.me.pos.y);
 }
 
-/** 지금 노리고 있는 몬스터 */
 export function currentTarget(world: World): Monster | null {
-  if (world.player.targetId === null) return null;
-  const monster = world.monsters.find((m) => m.id === world.player.targetId);
-  if (!monster || monster.state === 'dead') return null;
-  return monster;
+  if (world.me.targetId === null) return null;
+  const monster = world.monsters.find((m) => m.id === world.me.targetId);
+  return monster && monster.state !== 'dead' ? monster : null;
 }
 
-/** 가장 가까운 살아 있는 몬스터 (자동 사냥이 씁니다) */
-export function nearestMonster(world: World, range: number, skipBoss = false): Monster | null {
+export function nearestMonster(world: World, range: number): Monster | null {
   let best: Monster | null = null;
   let bestDistance = range;
-
   for (const monster of world.monsters) {
     if (monster.state === 'dead') continue;
-    if (skipBoss && monsterDef(monster.defId).boss) continue;
     const distance = distanceTo(world, monster);
     if (distance < bestDistance) {
       best = monster;
@@ -227,8 +166,7 @@ export function nearestMonster(world: World, range: number, skipBoss = false): M
   return best;
 }
 
-/** 몬스터가 죽어 있는 동안 흐르는 부활 시계 — 시간이 다 되면 자기 자리에서 다시 일어납니다 */
-export function tickRespawn(world: World, monster: Monster, dt: number): void {
+export function tickRespawn(monster: Monster, dt: number): void {
   const def = monsterDef(monster.defId);
   monster.respawnIn -= dt;
   if (monster.respawnIn > 0) return;
@@ -237,13 +175,6 @@ export function tickRespawn(world: World, monster: Monster, dt: number): void {
   monster.hp = def.hp;
   monster.pos = { x: monster.home.x, y: monster.home.y };
   monster.attackCooldown = 0;
-  monster.castTimer = 0;
-  monster.aoeCooldown = def.aoe ? def.aoe.cooldown * 0.5 : 0;
   monster.aggroUntil = 0;
-
-  if (def.boss) {
-    delete world.bossRespawnAt[monster.defId];
-    log(world, `${def.name}이(가) 다시 나타났습니다`, 'bad');
-    vfx(world, 'ring', monster.pos, { life: 1.2, color: def.color, radius: def.size * 2 });
-  }
+  monster.path = [];
 }
