@@ -248,7 +248,7 @@ export interface Monster {
  * ======================================================================== */
 
 export type MapId = string;
-export type MapTheme = 'town' | 'forest' | 'cave';
+export type MapTheme = 'town' | 'forest' | 'cave' | 'river';
 
 export interface Portal {
   tx: number;
@@ -302,6 +302,22 @@ export interface MapDef {
   npcs: Npc[];
   /** 화로와 모루가 있는 자리 (제작은 여기서만) */
   forge?: { tx: number; ty: number };
+  /**
+   *  지도를 세로로 가르는 물길.
+   *
+   *  ★ 물은 못 지나갑니다(FLOOR 가 아닌 칸은 전부 막힘). 그래서 건너는 자리를
+   *    ★ 데이터로 못 박습니다 — 길찾기가 알아서 뚫어주기를 기다리지 않습니다.
+   */
+  river?: {
+    /** 물길이 지나는 세로선 (타일) */
+    x: number;
+    /** 좌우로 굽이치는 폭 */
+    wobble: number;
+    /** 물길의 두께 (타일) */
+    width: number;
+    /** 걸어서 건너는 여울의 y 좌표 */
+    fordY: number;
+  };
   entryTx: number;
   entryTy: number;
 }

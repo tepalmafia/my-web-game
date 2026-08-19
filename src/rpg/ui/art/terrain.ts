@@ -57,6 +57,8 @@ const PROP_SETS: Record<MapTheme, PropKind[]> = {
   town: ['tree', 'bush', 'rock', 'tree'],
   forest: ['tree', 'pine', 'bush', 'tree', 'rock'],
   cave: ['spire', 'beam', 'spire', 'rock'],
+  // 갈대와 마른 덤불 — 숲의 나무와 실루엣이 갈립니다
+  river: ['bush', 'deadbush', 'bush', 'rock'],
 };
 
 /** 이 칸에 무엇이 서 있는가 */
