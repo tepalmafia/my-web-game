@@ -27,6 +27,16 @@ import { attachImpact, frozen, kick, tickImpact } from './impact';
 import { SoundControl } from './SoundControl';
 import { attachAudio } from '../audio';
 
+/** 시험용 명령을 열어도 되는가 — 개발 서버이거나, 주소에 ?dev=1 이 붙어 있을 때 */
+function devWanted(): boolean {
+  if (import.meta.env.DEV) return true;
+  try {
+    return new URLSearchParams(globalThis.location?.search ?? '').has('dev');
+  } catch {
+    return false;
+  }
+}
+
 export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -53,6 +63,26 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     lastPanel.current = world.panel;
     setSheetOpen(world.panel !== null);
   });
+
+  /* ---------------------------------------------------------- 시험용 명령 */
+  /**
+   *  ★ 주소에 ?dev=1 을 손으로 붙였을 때(또는 npm run dev)만 열립니다.
+   *    실수로 켜질 일이 없고, 그 전까지는 dev/console.ts 를 내려받지도 않습니다
+   *    (동적 import 라 따로 떨어진 덩어리입니다).
+   */
+  useEffect(() => {
+    if (!devWanted()) return;
+    let detach: (() => void) | null = null;
+    let dropped = false;
+    void import('../dev/console').then((mod) => {
+      if (dropped) return;
+      detach = mod.attach(world, refresh);
+    });
+    return () => {
+      dropped = true;
+      detach?.();
+    };
+  }, [world, refresh]);
 
   /* ---------------------------------------------------------- 소리와 타격감 */
   // 판단은 전부 audio/ 와 ui/impact.ts 가 합니다. 여기서는 잇기만 합니다.
