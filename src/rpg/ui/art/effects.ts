@@ -23,9 +23,10 @@ const ITEM_TINT: Record<string, string> = {
   potion: '#c2352f',
 };
 import { monsterDef } from '../../content/monsters';
+import { veinDef } from '../../content/veins';
 import { tileCenter } from '../../core/world';
-import type { GroundItem, Monster, Npc, World } from '../../types';
-import { alpha, darken, lighten } from './palette';
+import type { GroundItem, Monster, Npc, Vein, World } from '../../types';
+import { LIGHT, alpha, darken, lighten } from './palette';
 import { drawShadow } from './actors';
 
 /* ------------------------------------------------------------------ 글자 */
@@ -175,9 +176,7 @@ export function drawGroundItem(ctx: CanvasRenderingContext2D, world: World, item
 
 const NPC_ROLE: Record<string, string> = {
   shop: '상점',
-  enhance: '대장간',
-  teleport: '순간이동',
-  guide: '의뢰',
+  smith: '대장간',
 };
 
 export function drawNpc(ctx: CanvasRenderingContext2D, world: World, npc: Npc): void {
@@ -283,6 +282,118 @@ export function drawPortal(
   label(ctx, text, x, y - TILE * 0.85, '#cdeaff', 11);
 }
 
+
+/* --------------------------------------------------------------- 광맥 */
+
+/** 이 거리 안에 들어오면 이름표가 뜹니다 — "저건 눌러도 되는 것"이라는 신호 */
+const VEIN_LABEL_RANGE = 190;
+
+/**
+ *  광맥.
+ *
+ *  ★ 이걸 그리지 않던 동안 광맥은 화면에 아예 없었습니다. 클릭 판정만 있었고,
+ *    처음 하는 사람은 무엇을 눌러야 하는지 알 길이 없었습니다.
+ *
+ *  바위에서 광석이 비어져 나온 모양으로 그립니다. 빛은 다른 것들과 마찬가지로
+ *  왼쪽 위에서 오고, 광석 알갱이만 반짝여서 배경 바위와 구별되게 했습니다.
+ */
+export function drawVein(ctx: CanvasRenderingContext2D, world: World, vein: Vein): void {
+  const def = veinDef(vein.defId);
+  const x = vein.pos.x;
+  const y = vein.pos.y;
+  const empty = vein.remaining <= 0;
+
+  drawShadow(ctx, x, y + 7, 13);
+
+  ctx.save();
+  if (empty) ctx.globalAlpha = 0.45;
+
+  // 바위 덩이 — 광석이 박혀 있는 바탕. 광석이 도드라지도록 어둡게 깔았습니다
+  const rock = '#463f38';
+  ctx.fillStyle = darken(rock, 0.25);
+  ctx.beginPath();
+  ctx.ellipse(x, y, 15, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = rock;
+  ctx.beginPath();
+  ctx.moveTo(x - 14, y + 5);
+  ctx.lineTo(x - 9, y - 8);
+  ctx.lineTo(x + 2, y - 11);
+  ctx.lineTo(x + 12, y - 4);
+  ctx.lineTo(x + 14, y + 5);
+  ctx.closePath();
+  ctx.fill();
+  // 빛은 언제나 왼쪽 위에서
+  ctx.fillStyle = lighten(rock, 0.3);
+  ctx.beginPath();
+  ctx.moveTo(x - 9, y - 8);
+  ctx.lineTo(x + 2, y - 11);
+  ctx.lineTo(x + 1, y - 4);
+  ctx.lineTo(x - 7, y - 1);
+  ctx.closePath();
+  ctx.fill();
+
+  // 박혀 있는 광석 — 이 색이 광맥의 종류입니다
+  const seeds: Array<[number, number, number]> = [
+    [-6, -4, 3.2],
+    [1, -7, 2.6],
+    [6, -2, 3],
+    [-2, 1, 2.4],
+    [9, 2, 2],
+  ];
+  for (const [dx, dy, r] of seeds) {
+    ctx.fillStyle = lighten(def.color, 0.22);
+    ctx.beginPath();
+    ctx.ellipse(x + dx, y + dy, r, r * 0.82, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = alpha(lighten(def.color, 0.75), 0.95);
+    ctx.beginPath();
+    ctx.ellipse(x + dx + LIGHT.x * r * 0.4, y + dy + LIGHT.y * r * 0.4, r * 0.4, r * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 한 알만 천천히 반짝입니다 — 움직이는 것에 눈이 갑니다
+  if (!empty) {
+    const twinkle = 0.5 + 0.5 * Math.sin(world.time * 2 + vein.id);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.25 + twinkle * 0.45;
+    ctx.fillStyle = lighten(def.color, 0.7);
+    ctx.beginPath();
+    ctx.ellipse(x + 1, y - 7, 3.4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * 가까이 간 광맥에 이름과 남은 양을 붙입니다.
+ * 캐는 중인 광맥에는 진행 막대가 함께 뜹니다 — 눌렸는지 알 수 있도록.
+ */
+export function drawVeinLabels(ctx: CanvasRenderingContext2D, world: World): void {
+  const me = world.me;
+  const mining = me.action?.kind === 'mine' ? Number(me.action.targetId) : null;
+
+  for (const vein of world.veins) {
+    const near = Math.hypot(vein.pos.x - me.pos.x, vein.pos.y - me.pos.y) <= VEIN_LABEL_RANGE;
+    const working = mining === vein.id;
+    if (!near && !working) continue;
+
+    const def = veinDef(vein.defId);
+    const top = vein.pos.y - 20;
+
+    if (vein.remaining <= 0) {
+      label(ctx, `${def.name} (바닥남)`, vein.pos.x, top, '#8b8377', 10);
+      continue;
+    }
+
+    if (working && me.action) {
+      bar(ctx, vein.pos.x, top - 4, 34, 1 - me.action.remaining / me.action.total, def.color);
+      label(ctx, '캐는 중', vein.pos.x, top - 10, '#f0e3c8', 10);
+    } else {
+      label(ctx, def.name, vein.pos.x, top, lighten(def.color, 0.45), 10);
+    }
+  }
+}
 
 /* --------------------------------------------------------------- 효과 */
 
