@@ -26,6 +26,9 @@ import {
   drawNpc,
   drawPortal,
   drawTargetMark,
+  drawForge,
+  drawForgeLabel,
+  drawForgeRing,
   drawVein,
   drawVeinLabels,
   drawVfx,
@@ -49,6 +52,7 @@ export type { View } from './view';
 type Layer =
   | { y: number; kind: 'prop'; tx: number; ty: number }
   | { y: number; kind: 'vein'; index: number }
+  | { y: number; kind: 'forge' }
   | { y: number; kind: 'npc'; index: number }
   | { y: number; kind: 'item'; index: number }
   | { y: number; kind: 'monster'; index: number }
@@ -112,6 +116,10 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
     drawPortal(ctx, world, portal.tx, portal.ty, portal.label);
   }
 
+  // 만들 수 있는 자리를 바닥에 그립니다 — 발밑이므로 몸통보다 먼저
+  const forge = world.map.def.forge;
+  if (forge) drawForgeRing(ctx, world, forge.tx, forge.ty);
+
   // 노리는 대상 표시는 발밑이므로 몸통보다 먼저
   const target = world.monsters.find((m) => m.id === world.me.targetId && m.state !== 'dead');
   if (target) drawTargetMark(ctx, world, target);
@@ -120,6 +128,7 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
 
   drawVfx(ctx, world);
   drawVeinLabels(ctx, world);
+  drawForgeLabel(ctx, world);
   drawNameplates(ctx, world);
   drawFloaters(ctx, world);
   drawMotes(ctx, world, view, art);
@@ -154,6 +163,9 @@ function drawDepthSorted(ctx: CanvasRenderingContext2D, world: World, range: Til
       layers.push({ y: ty * TILE + TILE * 0.72, kind: 'prop', tx, ty });
     }
   }
+  const forge = def.forge;
+  // 화로도 뒤로 걸어 들어가면 가려집니다 — 화덕 아랫부분이 기준입니다
+  if (forge) layers.push({ y: tileCenter(forge.ty) + 9, kind: 'forge' });
   for (let i = 0; i < world.veins.length; i++) {
     layers.push({ y: world.veins[i]!.pos.y, kind: 'vein', index: i });
   }
@@ -176,6 +188,9 @@ function drawDepthSorted(ctx: CanvasRenderingContext2D, world: World, range: Til
     switch (layer.kind) {
       case 'prop':
         drawProp(ctx, world, ZONE_ART[def.theme], layer.tx, layer.ty);
+        break;
+      case 'forge':
+        if (forge) drawForge(ctx, world, forge.tx, forge.ty);
         break;
       case 'vein':
         drawVein(ctx, world, world.veins[layer.index]!);

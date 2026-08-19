@@ -15,7 +15,10 @@ export interface View {
 }
 
 export function computeView(world: World, width: number, height: number): View {
-  const zoom = Math.max(0.85, Math.min(1.55, Math.min(width / 780, height / 560)));
+  // ★ 상한 2.0. 예전 1.55 로는 큰 모니터에서 보이는 범위가 계속 넓어져,
+  //   마을(960×768)이 화면보다 좁아지는 순간 카메라가 한가운데에 못 박히고
+  //   캐릭터만 화면 구석으로 밀려났습니다. 2.0 이면 마을도 화면보다 넓습니다.
+  const zoom = Math.max(0.85, Math.min(2.0, Math.min(width / 780, height / 560)));
   const mapW = world.map.def.width * TILE;
   const mapH = world.map.def.height * TILE;
   const halfW = width / (2 * zoom);

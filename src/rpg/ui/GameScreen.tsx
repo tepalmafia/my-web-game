@@ -18,7 +18,7 @@ import { GATHER } from '../balance';
 import { step } from '../core/engine';
 import { saveWorld } from '../core/save';
 import type { World } from '../types';
-import { ActionBar, DeathOverlay, SkillStrip, StatusBlock, Toast } from './Hud';
+import { ActionBar, DeathOverlay, SkillPop, StatusBlock, Toast } from './Hud';
 import { LogPanel } from './LogPanel';
 import { SidePanel } from './Panels';
 import { draw, computeView, screenToWorld } from './draw';
@@ -169,7 +169,8 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   return (
     <div className="flex h-dvh w-full flex-col bg-ink-900 text-parch-100 lg:flex-row">
       {/* ----------------------------------------------------- 화면 */}
-      <div ref={wrapRef} className="relative h-[56dvh] shrink-0 overflow-hidden lg:h-full lg:min-h-0 lg:flex-1">
+      {/* ★ 폰 세로에서 게임 화면이 가장 넓어야 합니다 — 56dvh 에서 64dvh 로 올렸습니다 */}
+      <div ref={wrapRef} className="relative h-[64dvh] shrink-0 overflow-hidden lg:h-full lg:min-h-0 lg:flex-1">
         <canvas ref={canvasRef}
           className="absolute inset-0 h-full w-full touch-none select-none"
           onPointerDown={onPointerDown}
@@ -180,7 +181,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
 
         <div className="pointer-events-none absolute left-2 top-2 z-10">
           <StatusBlock world={world} />
-          <SkillStrip world={world} />
+          <SkillPop world={world} />
         </div>
 
         {/*
@@ -188,15 +189,19 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
           캔버스 클릭을 가로채, 화면 아래쪽을 눌러도 캐릭터가 움직이지 않습니다.
           그래서 껍데기는 클릭을 통과시키고(pointer-events-none) 단추만 받습니다.
         */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center px-2">
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-end px-2">
           <ActionBar world={world} refresh={refresh} />
         </div>
 
-        <div className="absolute bottom-16 left-2 z-10 flex items-center gap-1 lg:bottom-2">
+        {/*
+          ★ 화면 가운데를 비워 둡니다. 나가기·소리는 왼쪽 아래 구석, 물약·멈춤은 오른쪽 아래 구석.
+            예전에는 이 묶음이 화면 중턱(bottom-16)에 떠 있어서, 걸어가려고 누른 자리를 가로챘습니다.
+        */}
+        <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5">
           <button
             type="button"
             onClick={onQuit}
-            className="btn rounded-sm px-2.5 py-1 text-[11px] text-parch-300"
+            className="btn flex h-11 min-w-11 items-center justify-center rounded-sm px-3 text-[11px] text-parch-300"
           >
             나가기
           </button>
