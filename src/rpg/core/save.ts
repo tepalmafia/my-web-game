@@ -10,9 +10,10 @@
  */
 
 import { mapDef } from '../content/maps';
-import { emptyTown, stageOf } from '../content/town';
+import { TOWN_STAGES, emptyTown, stageOf } from '../content/town';
+import { log } from './feedback';
 import { buildMap, populate, tileCenter } from './world';
-import type { Character, MapId, World } from '../types';
+import type { Character, MapId, TownState, World } from '../types';
 
 const VERSION = 2;
 const ACTIVE_KEY = 'aden:v2:active';
@@ -123,6 +124,7 @@ function rebuild(data: SaveData): World | null {
   me.statTouched = me.statTouched ?? { str: 0, dex: 0, int: 0 };
   // 마을을 넣기 전의 기록에는 이 값이 없습니다 — 처음부터 자라기 시작합니다
   me.town = me.town ?? emptyTown();
+  const carried = migrateTown(me.town);
 
   const world: World = {
     me,
@@ -149,7 +151,44 @@ function rebuild(data: SaveData): World | null {
     meSwing: 0,
   };
   populate(world);
+  //  ★ 옮겨온 것이 있으면 말해줍니다. 말없이 셈이 바뀌면 그것도 조용한 실패입니다.
+  if (carried > 0) {
+    log(
+      world,
+      `두린이 그동안 받아둔 구릿돌 ${carried}덩이를 녹여 두었습니다 — 구리 주괴로 셈합니다`,
+      'good',
+    );
+  }
   return world;
+}
+
+/**
+ *  옛 기록을 지금 사다리에 맞춥니다.
+ *
+ *  ★ spent 가 없는 기록은 이 값이 생기기 전의 것입니다. 이미 지나간 단계가
+ *    먹은 몫을 여기서 되돌려 적어줍니다 — 안 그러면 예전에 판 것이
+ *    다음 단계를 미리 채워둔 채로 시작합니다.
+ *
+ *  ★ 2단계 조건이 구리광석에서 구리 주괴로 바뀌었습니다. 그 전에 구릿돌을
+ *    판 사람의 진행이 소리 없이 0 으로 돌아가면 안 됩니다. 판 만큼 얹어줍니다.
+ *    ★ sold 는 건드리지 않습니다 — 그것은 판 것의 기록이지 셈 장부가 아닙니다.
+ *      얹어주는 몫은 spent 에 음수로 적습니다.
+ *
+ *  돌려주는 값: 구릿돌에서 옮겨온 개수 (없으면 0)
+ */
+function migrateTown(town: TownState): number {
+  if (town.spent) return 0;
+  town.spent = {};
+
+  for (let i = 0; i < town.chosen.length; i++) {
+    for (const need of TOWN_STAGES[i]?.needs ?? []) {
+      town.spent[need.defId] = (town.spent[need.defId] ?? 0) + need.count;
+    }
+  }
+
+  const ore = town.sold['copper-ore'] ?? 0;
+  if (ore > 0) town.spent['copper-ingot'] = (town.spent['copper-ingot'] ?? 0) - ore;
+  return ore;
 }
 
 export function loadWorld(): World | null {

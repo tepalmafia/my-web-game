@@ -198,8 +198,17 @@ export interface RecipeDef {
  *  ★ 고른 것은 못 바꿉니다. 고르지 않은 쪽은 이 인물에서 영영 안 열립니다.
  */
 export interface TownState {
-  /** 지금까지 판 것의 누계 (아이템 id → 개수) */
+  /**
+   *  지금까지 판 것의 누계 (아이템 id → 개수).
+   *  ★ 절대 깎지 않습니다. 이 인물이 판 것의 기록이고, 나중에 여기에 기록 축이 앉습니다.
+   */
   sold: Record<string, number>;
+  /**
+   *  이미 지나간 단계가 먹은 몫 (아이템 id → 개수).
+   *  ★ 지금 단계의 진행은 sold - spent 입니다. 이게 없으면 예전에 판 것이
+   *    다음 단계를 미리 채워두고, 플레이어는 그게 차오르는 것을 못 봅니다.
+   */
+  spent: Record<string, number>;
   /** 단계마다 고른 갈래 id. ★ 길이가 곧 지금 단계입니다 */
   chosen: string[];
 }

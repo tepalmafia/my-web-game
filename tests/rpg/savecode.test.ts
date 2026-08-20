@@ -13,6 +13,7 @@ import { createWorld } from '../../src/rpg/core/create';
 import { exportSave, importSave, readSaveCode } from '../../src/rpg/core/save';
 import { enterMap } from '../../src/rpg/core/world';
 import { mapDef } from '../../src/rpg/content/maps';
+import { stageReady } from '../../src/rpg/content/town';
 
 /** localStorage 가 없는 곳에서도 돌아야 합니다 (vitest 는 node 환경입니다) */
 class MemoryStorage {
@@ -143,5 +144,70 @@ describe('잘못된 글자는 이유를 말한다', () => {
       problemOf(utf8Base64(JSON.stringify({ version: 2, me: { gold: 1 } }))),
     ];
     expect(new Set(reasons).size, `겹치는 이유: ${reasons.join(' / ')}`).toBe(reasons.length);
+  });
+});
+
+/* ===========================================================================
+ *  마을 사다리가 바뀐 뒤 옛 기록을 읽을 때
+ *  ---------------------------------------------------------------------------
+ *  ★ 2단계 조건이 구리광석에서 구리 주괴로 바뀌었습니다.
+ *    그 전에 구릿돌을 판 사람의 진행이 말없이 0 이 되면 그것도 조용한 실패입니다.
+ * ======================================================================== */
+
+describe('옛 기록 맞추기', () => {
+  /** spent 가 생기기 전의 기록 — sold 와 chosen 만 있습니다 */
+  function oldSave(town: { sold: Record<string, number>; chosen: string[] }): string {
+    const world = played();
+    const packed = JSON.parse(utf8Base64Decode(exportSave(world))) as {
+      me: { town: unknown };
+    };
+    packed.me.town = town;
+    return utf8Base64(JSON.stringify(packed));
+  }
+
+  function utf8Base64Decode(code: string): string {
+    const binary = atob(code.trim());
+    return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
+  }
+
+  it('spent 가 없던 기록도 읽힌다', () => {
+    const result = readSaveCode(oldSave({ sold: {}, chosen: [] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.me.town.spent).toEqual({});
+  });
+
+  it('이미 지나간 단계가 먹은 몫이 되돌려 적힌다 — 아니면 다음 단계가 미리 찬다', () => {
+    const result = readSaveCode(oldSave({ sold: { 'iron-ingot': 40 }, chosen: ['forge-blade'] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const town = result.world.me.town;
+    expect(town.sold['iron-ingot'], '판 기록이 깎였습니다').toBe(40);
+    expect(town.spent['iron-ingot'], '1단계가 먹은 몫이 안 적혔습니다').toBe(40);
+  });
+
+  it('이미 구릿돌을 판 사람의 진행이 0 으로 돌아가지 않는다', () => {
+    // 옛 규칙에서 2단계는 구리광석 25 였습니다. 30 을 판 사람은 조건을 채운 상태였습니다.
+    const result = readSaveCode(
+      oldSave({ sold: { 'iron-ingot': 40, 'copper-ore': 30 }, chosen: ['forge-blade'] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const town = result.world.me.town;
+
+    // 판 기록은 구릿돌 그대로입니다 — 없는 주괴를 팔았다고 적지 않습니다
+    expect(town.sold['copper-ore']).toBe(30);
+    expect(town.sold['copper-ingot']).toBeUndefined();
+    // 대신 셈 장부에 얹어줍니다
+    expect(stageReady(town), '구릿돌을 30개나 팔았는데 진행이 사라졌습니다').toBe(true);
+  });
+
+  it('무엇이 옮겨졌는지 화면에 남는다 — 말없이 셈이 바뀌면 안 된다', () => {
+    const result = readSaveCode(
+      oldSave({ sold: { 'iron-ingot': 40, 'copper-ore': 30 }, chosen: ['forge-blade'] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.log.some((line) => line.text.includes('구릿돌'))).toBe(true);
   });
 });

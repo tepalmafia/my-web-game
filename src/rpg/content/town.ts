@@ -7,7 +7,10 @@
  *  ★ 단계가 오를 때 ★둘 중 하나를 고릅니다. 고르지 않은 쪽은 이 인물에서 영영 안 열립니다.
  *    새 제작법을 더하기만 하면 "안 하던 것이 늘어난 것" 이지 선택이 아닙니다.
  *    그래서 지금 처음부터 만들 수 있던 것들을 여기로 옮겼습니다 —
- *    철 장검 · 철 사슬갑옷 · 구리검 · 구리 사슬갑옷 · 구리 제련 · 고급 물약.
+ *    철 장검 · 철 사슬갑옷 · 구리검 · 구리 사슬갑옷 · 고급 물약.
+ *
+ *  ★ 구리 제련은 여기 없습니다. 잠갔더니 구리광석이 "녹일 수 없는 돌" 이 되어
+ *    파는 것 말고 할 게 없어졌습니다. 할 게 하나뿐인 것은 선택이 아닙니다.
  *
  *  ★ 다음에 무엇이 열리는지는 미리 보여주지 않습니다. hint 만 흘립니다.
  *    미리 알면 선택이 아니라 그냥 목표치입니다 (기획안 5.4).
@@ -64,10 +67,15 @@ export const TOWN_STAGES: TownStage[] = [
   },
   {
     name: '구리 대장간',
-    // ★ 주괴가 아니라 광석입니다. 주괴로 하면 "구리 제련을 열려면 구리 주괴가 필요한" 순환이 됩니다.
-    needs: [{ defId: 'copper-ore', count: 25 }],
-    hint: '구릿빛 돌을 더 들여오게. 다뤄본 적은 없네만, 손이 근질거리는군.',
-    opens: { recipes: ['smelt-copper'], stock: [] },
+    //  ★ 광석이 아니라 주괴입니다.
+    //    광석으로 걸었더니 이렇게 됐습니다 — 구리 제련이 이 단계에 잠겨 있어서
+    //    구리광석은 "녹일 수 없는 돌" 이 되고, 그러면 파는 것 말고 할 게 없습니다.
+    //    할 게 하나뿐인 것은 선택이 아닙니다. 그래서 제련을 처음부터 열어두고,
+    //    조건을 주괴로 옮겼습니다. 이제 판 주괴는 구리검·구리 사슬갑옷의 재료이기도 합니다 —
+    //    팔면 문이 열리고, 쥐면 열리자마자 벼릴 수 있습니다.
+    needs: [{ defId: 'copper-ingot', count: 25 }],
+    hint: '구릿빛 쇠를 더 들여오게. 다뤄본 적은 없네만, 손이 근질거리는군.',
+    opens: { recipes: [], stock: [] },
     choices: [
       {
         id: 'copper-blade',
@@ -90,7 +98,12 @@ export const TOWN_STAGES: TownStage[] = [
  * ======================================================================== */
 
 export function emptyTown(): TownState {
-  return { sold: {}, chosen: [] };
+  return { sold: {}, spent: {}, chosen: [] };
+}
+
+/** 지금 단계가 세는 몫 — 판 누계에서 지나간 단계가 먹은 것을 뺍니다 */
+function toward(town: TownState, defId: string): number {
+  return Math.max(0, (town.sold[defId] ?? 0) - (town.spent[defId] ?? 0));
 }
 
 /** 지금 몇 단계인가 (고른 횟수가 곧 단계입니다) */
@@ -109,7 +122,7 @@ export function progressOf(town: TownState): Array<{ defId: string; have: number
   if (!stage) return [];
   return stage.needs.map((n) => ({
     defId: n.defId,
-    have: Math.min(n.count, town.sold[n.defId] ?? 0),
+    have: Math.min(n.count, toward(town, n.defId)),
     need: n.count,
   }));
 }
@@ -118,7 +131,7 @@ export function progressOf(town: TownState): Array<{ defId: string; have: number
 export function stageReady(town: TownState): boolean {
   const stage = nextStage(town);
   if (!stage) return false;
-  return stage.needs.every((n) => (town.sold[n.defId] ?? 0) >= n.count);
+  return stage.needs.every((n) => toward(town, n.defId) >= n.count);
 }
 
 export function choiceById(id: string): TownChoice | null {
