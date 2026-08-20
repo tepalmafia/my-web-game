@@ -15,12 +15,13 @@
 import { GATHER } from '../src/rpg/balance';
 import { itemDef } from '../src/rpg/content/items';
 import { MAP_ORDER, mapDef } from '../src/rpg/content/maps';
+import { nextStage, openRecipes, stageReady } from '../src/rpg/content/town';
 import { monsterDef } from '../src/rpg/content/monsters';
 import { RECIPE_ORDER, recipeDef } from '../src/rpg/content/recipes';
 import { veinDef } from '../src/rpg/content/veins';
 import { craftChance, nearForge, startCraft, startMining, startRepair } from '../src/rpg/core/action';
 import { gainChance } from '../src/rpg/balance';
-import { drinkBestPotion, respawnInTown } from '../src/rpg/core/commands';
+import { chooseTownPath, drinkBestPotion, respawnInTown } from '../src/rpg/core/commands';
 import { repairQuote } from '../src/rpg/core/durability';
 import { buyItem, countOf, equip, sellItem } from '../src/rpg/core/inventory';
 import { derive, wearRatio } from '../src/rpg/core/stats';
@@ -122,8 +123,25 @@ function travel(world: World, to: MapId, pilot: Pilot): boolean {
 
 /* --------------------------------------------------------------- 판단 */
 
+/**
+ *  마을이 자랄 때가 되면 고릅니다.
+ *
+ *  ★ 난수를 쓰지 않습니다 — 같은 씨앗이면 같은 결과라야 실측이 값을 합니다.
+ *    싸움에 무게를 두면 칼을, 아니면 갑옷을 고릅니다(오래 버티는 쪽).
+ */
+function chooseIfCalled(world: World, pilot: Pilot): void {
+  if (!stageReady(world.me.town)) return;
+  const stage = nextStage(world.me.town);
+  if (!stage) return;
+  const wantBlade = pilot.focus === 'fight';
+  const pick = stage.choices[wantBlade ? 0 : 1];
+  chooseTownPath(world, pick.id);
+}
+
 export function autopilot(world: World, pilot: Pilot): void {
   const me = world.me;
+
+  chooseIfCalled(world, pilot);
 
   if (me.dead) {
     respawnInTown(world);
@@ -267,7 +285,9 @@ function canFixWeapon(world: World): boolean {
 /** 지금 만들 수 있는 무기 제작법 (가장 좋은 것) */
 function buildableWeapon(world: World): string | null {
   const me = world.me;
+  const open = openRecipes(me.town);
   const list = RECIPE_ORDER.filter((id) => {
+    if (!open.has(id)) return false;
     const recipe = recipeDef(id);
     if (itemDef(recipe.makes).slot !== 'weapon') return false;
     if (craftChance(world, id) < 0.25) return false;
@@ -294,9 +314,14 @@ function sellableGold(world: World): number {
 /**
  * 팔 것 — 쓰지 않는 무기·갑옷과, 쟁여둔 주괴 일부.
  * ★ 광석은 팔지 않습니다. 광석을 팔아 돈을 버는 순간 대장간에 갈 이유가 사라집니다.
+ *   ── 다만 ★녹일 줄 모르는 광석은 예외입니다. 제련법이 아직 안 열렸으면 그 돌은
+ *      지금 아무 쓸모가 없고, 파는 것이 마을을 키우는 유일한 길입니다.
  */
 function junkStacks(world: World) {
   const me = world.me;
+  const open = openRecipes(me.town);
+  const canSmelt = (defId: string) =>
+    RECIPE_ORDER.some((id) => open.has(id) && recipeDef(id).needs.some((n) => n.defId === defId));
   // 무기는 쓸 만한 여벌 한 자루만 남깁니다 (그 한 자루가 맨손을 막습니다)
   const keep = usableSpare(me);
   const wornScore = (slot: 'weapon' | 'armor' | 'helmet') => {
@@ -305,12 +330,39 @@ function junkStacks(world: World) {
   };
   return me.backpack.filter((s) => {
     const def = itemDef(s.defId);
+    if (def.kind === 'resource' && !canSmelt(s.defId)) return true;
     if (!def.slot) return false;
     if (keep && s.uid === keep.uid) return false;
     if ((s.durability ?? 1) <= 0) return true;
     // 입은 것과 값이 같으면(=여벌) 팝니다. 만든 단검을 열두 자루씩 지고 다니지 않도록.
     return stackScore(s) <= wornScore(def.slot as 'weapon' | 'armor' | 'helmet');
   });
+}
+
+/**
+ *  마을을 키우려고 남는 주괴를 판다.
+ *
+ *  ★ 이것이 이 게임이 새로 묻는 선택입니다 — "팔아서 세계를 키울까, 써서 나를 키울까".
+ *    봇은 ★지금 노리는 제작법에 쓸 몫과 여벌을 남기고, 그 위로 남는 것만 팝니다.
+ *    다 팔면 만들 것이 없어지고, 아무것도 안 팔면 마을이 영영 안 자랍니다.
+ *
+ *  ★ 마을이 다 자랐으면 팔지 않습니다. 팔 이유가 없어졌으니까요.
+ */
+function sellForTheTown(world: World): void {
+  const me = world.me;
+  if (!nextStage(me.town)) return;
+
+  const target = targetRecipe(world);
+  for (const stack of [...me.backpack]) {
+    if (itemDef(stack.defId).kind !== 'resource') continue;
+    if (!stack.defId.endsWith('-ingot')) continue;
+
+    const needed = target
+      ? (recipeDef(target).needs.find((n) => n.defId === stack.defId)?.count ?? 0)
+      : 0;
+    const spare = stack.count - needed - INGOT_RESERVE;
+    if (spare > 0) sellItem(world, stack.uid, spare);
+  }
 }
 
 function gearScore(defId: string): number {
@@ -516,6 +568,7 @@ function doWork(world: World, pilot: Pilot): void {
   // 5) 더 좋은 장비를 입고, 밀려난 것은 판다
   equipBest(world);
   for (const junk of junkStacks(world)) sellItem(world, junk.uid, junk.count);
+  sellForTheTown(world);
 
   // 6) 물약과 연장을 채운다
   if (!hasPickaxe(me)) {
@@ -578,7 +631,9 @@ function doWork(world: World, pilot: Pilot): void {
 /** 지금 실력으로 두드려볼 만한 것 중 가장 좋은 것 — 여기에 쇠를 모읍니다 */
 function targetRecipe(world: World): string | null {
   const me = world.me;
+  const open = openRecipes(me.town);
   const list = RECIPE_ORDER.filter((id) => {
+    if (!open.has(id)) return false;
     const recipe = recipeDef(id);
     if (recipe.id.startsWith('smelt')) return false;
     if (gainChance(me.skills.blacksmithing, recipe.difficulty) <= 0) return false;

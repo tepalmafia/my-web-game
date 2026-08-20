@@ -7,6 +7,7 @@
 
 import { STATS } from '../balance';
 import { mapDef } from '../content/maps';
+import { emptyTown, stageOf } from '../content/town';
 import { addItem, equip } from './inventory';
 import { log } from './feedback';
 import { derive } from './stats';
@@ -91,12 +92,13 @@ export function createWorld(name: string, templateId: string): World {
     playSeconds: 0,
     deaths: 0,
     tally: {},
+    town: emptyTown(),
   };
 
   const world: World = {
     me,
     mapId: 'town',
-    map: buildMap(town),
+    map: buildMap(town, stageOf(me.town)),
     monsters: [],
     veins: [],
     ground: [],

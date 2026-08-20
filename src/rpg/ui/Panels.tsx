@@ -8,12 +8,13 @@
 import { useState } from 'react';
 
 import { LOOT, MAX_SKILL, STATS, gainChance } from '../balance';
-import { ITEMS, SHOP_STOCK, itemDef } from '../content/items';
+import { ITEMS, itemDef } from '../content/items';
 import { RECIPE_ORDER, recipeDef } from '../content/recipes';
+import { forsaken, nextStage, openRecipes, openStock, progressOf, stageReady } from '../content/town';
 import { SKILLS, SKILL_ORDER } from '../content/skills';
 import { VEINS } from '../content/veins';
 import { craftChance, craftFineChance, nearForge } from '../core/action';
-import { SLOT_LABEL, craft, repair, useItem } from '../core/commands';
+import { SLOT_LABEL, chooseTownPath, craft, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
@@ -387,7 +388,141 @@ function durinSays(world: World): string {
   if (iron <= 0) {
     return '남쪽 문으로 나가면 초록 숲일세. 반짝이는 광맥을 찾아 눌러만 두게 — 걸어가서 알아서 캘 테니. 그걸 여기 화로로 가져오게.';
   }
+  if (stageReady(me.town)) {
+    return '자네, 마침 잘 왔네. 보여줄 것이 있어 — 아래를 보게.';
+  }
+  const stage = nextStage(me.town);
+  if (stage && countOf(me, 'iron-ingot') > 0) {
+    // ★ 무엇이 열리는지는 말하지 않습니다. 미리 알면 선택이 아니라 목표치입니다 (기획안 5.4)
+    return `쇠를 가져왔군. 화로 앞에서 녹이고 두드려 보게. ${stage.hint}`;
+  }
   return '쇠를 가져왔군. 화로 앞에 서서 녹이고, 주괴가 모이면 두드려 보게. 몇 번은 망칠 걸세 — 그러면서 느는 거야.';
+}
+
+/* ---------------------------------------------------------------- 마을이 자란다 */
+
+/**
+ *  다음 단계까지 얼마나 왔는가.
+ *
+ *  ★ 얼마 남았는지는 보여줍니다 — 모르면 목표가 될 수 없습니다.
+ *  ★ 무엇이 열리는지는 보여주지 않습니다 — 알면 선택이 아니라 목표치입니다.
+ */
+function TownProgress({ world }: { world: World }) {
+  const town = world.me.town;
+  const stage = nextStage(town);
+  if (!stage || stageReady(town)) return null;
+
+  return (
+    <section className="rounded-sm border border-ink-600 bg-ink-700/40 p-2">
+      <h3 className="eyebrow mb-1">두린에게 판 것</h3>
+      {progressOf(town).map((row) => (
+        <div key={row.defId} className="mb-1">
+          <div className="flex items-baseline justify-between text-[11px]">
+            <span className="text-parch-300">{itemDef(row.defId).name}</span>
+            <span className="tabular text-parch-100">
+              {row.have} <span className="text-parch-400">/ {row.need}</span>
+            </span>
+          </div>
+          <div className="socket mt-0.5 h-1.5 rounded-[2px]">
+            <div className="fill fill-exp" style={{ width: `${(row.have / row.need) * 100}%` }} />
+          </div>
+        </div>
+      ))}
+      <p className="mt-1 text-[11px] leading-snug text-parch-400/80">
+        팔면 마을이 자랍니다. 무엇이 열릴지는 두린만 압니다.
+      </p>
+    </section>
+  );
+}
+
+/**
+ *  갈림길.
+ *
+ *  ★ 고르는 순간이 되돌릴 수 없다는 것이 분명해야 합니다. 그래서 두 걸음입니다 —
+ *    고를 것을 누르면 무엇을 버리는지 이름을 대고 다시 묻습니다.
+ */
+function TownChoicePanel({ world, refresh }: { world: World; refresh: () => void }) {
+  const [asking, setAsking] = useState<string | null>(null);
+  const town = world.me.town;
+  const stage = nextStage(town);
+  if (!stage || !stageReady(town)) return null;
+
+  const picked = asking ? stage.choices.find((c) => c.id === asking) : null;
+  const dropped = asking ? stage.choices.find((c) => c.id !== asking) : null;
+
+  return (
+    <section className="rounded-sm border border-brass-400/70 bg-[#241c0e]/60 p-2.5">
+      <h3 className="display text-[13px] font-bold text-brass-300">{stage.name}</h3>
+
+      {picked && dropped ? (
+        <div className="mt-2 rounded-sm border border-[#e88a86]/60 bg-[#3a1512]/50 p-2.5">
+          <p className="text-[13px] font-bold text-[#e88a86]">되돌릴 수 없습니다.</p>
+          <p className="mt-1.5 text-[12px] leading-snug text-parch-200">
+            <b className="text-brass-300">{picked.name}</b> 을(를) 고릅니다.
+          </p>
+          <p className="mt-1 text-[12px] leading-snug text-[#e88a86]">
+            <b>{dropped.name}</b> 은(는) 이 인물에서 <b>영영 열리지 않습니다.</b>
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            <button type="button" onClick={() => setAsking(null)} className="btn h-11 flex-1 rounded-sm text-[13px] text-parch-300">
+              그만두기
+            </button>
+            <button
+              type="button"
+              onClick={() => { chooseTownPath(world, picked.id); setAsking(null); refresh(); }}
+              className="btn h-11 flex-1 rounded-sm text-[13px] font-bold"
+              style={{ borderColor: 'rgba(194,53,47,0.7)', color: '#e88a86' }}
+            >
+              고른다
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="mt-1 text-[11px] leading-snug text-parch-400">
+            두린이 둘을 내놓았습니다. <b className="text-[#e88a86]">하나만 고를 수 있습니다.</b>
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {stage.choices.map((choice) => (
+              <button
+                key={choice.id}
+                type="button"
+                onClick={() => setAsking(choice.id)}
+                className="btn w-full rounded-sm px-2.5 py-2 text-left"
+              >
+                <span className="block text-[13px] font-bold text-brass-300">{choice.name}</span>
+                <span className="mt-0.5 block text-[11px] leading-snug text-parch-300">{choice.desc}</span>
+                <span className="mt-1 block text-[11px] text-parch-400">
+                  {choice.recipes.map((id) => recipeDef(id).name).join(' · ')} 을(를) 만들 수 있게 됩니다
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 고르지 않아 버린 것 — 무엇을 놓쳤는지는 알아야 합니다 */
+function ForsakenList({ world }: { world: World }) {
+  const gone = forsaken(world.me.town);
+  if (gone.length === 0) return null;
+  return (
+    <section>
+      <h3 className="eyebrow mb-1">고르지 않은 길</h3>
+      <div className="space-y-1">
+        {gone.map((choice) => (
+          <div key={choice.id} className="rounded-sm border border-ink-600 bg-ink-800/60 px-2 py-1.5">
+            <span className="text-[12px] text-parch-400/70 line-through">{choice.name}</span>
+            <span className="ml-1.5 text-[11px] text-parch-400/50">
+              {choice.recipes.map((id) => recipeDef(id).name).join(' · ')}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
@@ -411,10 +546,14 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
         </p>
       )}
 
+      <TownChoicePanel world={world} refresh={refresh} />
+      <TownProgress world={world} />
+
       <section>
         <h3 className="eyebrow mb-1.5">만들기</h3>
         <div className="space-y-1.5">
-          {RECIPE_ORDER.map((id) => {
+          {/* ★ 잠긴 제작법은 목록에 없습니다. 미리 보이면 선택이 아니라 목표치입니다 */}
+          {RECIPE_ORDER.filter((id) => openRecipes(me.town).has(id)).map((id) => {
             const recipe = recipeDef(id);
             const chance = craftChance(world, id);
             const fine = craftFineChance(world, id);
@@ -459,6 +598,8 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
           })}
         </div>
       </section>
+
+      <ForsakenList world={world} />
 
       {damaged.length > 0 && (
         <section>
@@ -518,7 +659,7 @@ function ShopPanel({ world, refresh }: { world: World; refresh: () => void }) {
             상인은 연장과 물약만 팝니다. <b className="text-parch-200">좋은 무기와 갑옷은 직접 만들어야 합니다.</b>
           </p>
           <div className="space-y-1">
-            {SHOP_STOCK.map((defId) => {
+            {openStock(me.town).map((defId) => {
               const def = ITEMS[defId]!;
               const owned = countOf(me, defId);
               return (

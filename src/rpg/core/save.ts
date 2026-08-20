@@ -10,6 +10,7 @@
  */
 
 import { mapDef } from '../content/maps';
+import { emptyTown, stageOf } from '../content/town';
 import { buildMap, populate, tileCenter } from './world';
 import type { Character, MapId, World } from '../types';
 
@@ -120,11 +121,13 @@ function rebuild(data: SaveData): World | null {
   me.action = null;
   me.tally = me.tally ?? {};
   me.statTouched = me.statTouched ?? { str: 0, dex: 0, int: 0 };
+  // 마을을 넣기 전의 기록에는 이 값이 없습니다 — 처음부터 자라기 시작합니다
+  me.town = me.town ?? emptyTown();
 
   const world: World = {
     me,
     mapId: startMap.id,
-    map: buildMap(startMap),
+    map: buildMap(startMap, stageOf(me.town)),
     monsters: [],
     veins: [],
     ground: [],
