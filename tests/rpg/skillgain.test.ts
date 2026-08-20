@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { GAIN, MAX_SKILL, SKILL_TOTAL_MAX, STATS, gainChance } from '../../src/rpg/balance';
+import { SKILLS, SKILL_ORDER } from '../../src/rpg/content/skills';
 import { createWorld } from '../../src/rpg/core/create';
 import { axisSpent, budgetBlocks, budgetLeft, learnBlock, lessonsFor, skillTotal, trySkillGain } from '../../src/rpg/core/skillgain';
 import type { World } from '../../src/rpg/types';
@@ -127,13 +128,24 @@ describe('능력치', () => {
  *    방어는 몬스터가 때릴 때 오릅니다. 그래서 예산 밖입니다.
  * ======================================================================== */
 
-/** 예산을 다 쓴 캐릭터 — 채광 100 · 대장 100 = 200 */
+/** 지금 총합에 들어가는 스킬 */
+const COUNTED = SKILL_ORDER.filter((id) => SKILLS[id].counts);
+
+/**
+ *  예산을 다 쓴 캐릭터.
+ *
+ *  ★ 값을 손으로 박지 않고 상한에서 끌어옵니다. 상한이 바뀌어도 이 시험들이
+ *    뜻을 잃지 않아야 합니다.
+ *  ★ 상한이 (세는 스킬 수 × 100) 보다 높으면 100 을 넘는 값이 들어갑니다.
+ *    그것은 '이미 넘긴 저장' 과 같은 자리이고, 규칙이 다루기로 한 자리입니다.
+ */
 function spent(seed: number): World {
   const world = fresh(seed);
-  world.me.skills.mining = 100;
-  world.me.skills.blacksmithing = 100;
-  world.me.skills.swordsmanship = 0;
+  for (const id of COUNTED) world.me.skills[id] = 0;
   world.me.skills.defense = 0;
+  // 검술은 0 으로 남겨 둡니다 — 예산만 없고 배울 것은 남은 자리를 보려는 것입니다
+  world.me.skills.mining = SKILL_TOTAL_MAX / 2;
+  world.me.skills.blacksmithing = SKILL_TOTAL_MAX / 2;
   return world;
 }
 
@@ -163,8 +175,8 @@ describe('스킬 총합 상한', () => {
     // 검술을 놀려 채광을 올릴 수 있어 길 선택이 되돌려집니다.
     for (let i = 0; i < 4000; i++) trySkillGain(world, 'swordsmanship', 5);
 
-    expect(world.me.skills.mining).toBe(100);
-    expect(world.me.skills.blacksmithing).toBe(100);
+    expect(world.me.skills.mining).toBe(SKILL_TOTAL_MAX / 2);
+    expect(world.me.skills.blacksmithing).toBe(SKILL_TOTAL_MAX / 2);
   });
 
   it('방어는 예산 밖이라 상한 뒤에도 오른다 — 맞아본 만큼은 는다', () => {
@@ -177,13 +189,15 @@ describe('스킬 총합 상한', () => {
 
   it('이미 넘긴 저장은 줄지 않는다 — 넘어서 안 오를 뿐이다', () => {
     const world = fresh(3);
-    world.me.skills.mining = 100;
-    world.me.skills.blacksmithing = 100;
-    world.me.skills.swordsmanship = 100; // 상한을 넘긴 옛 저장 (총합 300)
+    // 상한을 반쯤 넘긴 옛 저장
+    const over = SKILL_TOTAL_MAX * 1.5;
+    world.me.skills.mining = over / 3;
+    world.me.skills.blacksmithing = over / 3;
+    world.me.skills.swordsmanship = over / 3;
 
     for (let i = 0; i < 2000; i++) trySkillGain(world, 'mining', 100);
 
-    expect(skillTotal(world.me)).toBe(300);
+    expect(skillTotal(world.me)).toBe(over);
     expect(budgetLeft(world.me)).toBe(0);
   });
 
@@ -201,15 +215,19 @@ describe('스킬 총합 상한', () => {
   });
 
   it('마지막 한 걸음에서 다 찼다고 말한다', () => {
+    //  ★ GAIN.step 이 0.18 이라 0.1 만 남았을 때 그냥 걸으면 상한을 넘습니다.
+    //    남은 만큼만 걸어야 총합이 상한에 정확히 앉습니다.
     const world = fresh(99);
-    world.me.skills.mining = 100;
-    world.me.skills.blacksmithing = 99.9; // 한 걸음 남았습니다
+    world.me.skills.mining = SKILL_TOTAL_MAX / 2;
+    world.me.skills.blacksmithing = SKILL_TOTAL_MAX / 2 - 0.1;
+    world.me.skills.swordsmanship = 0; // 한 걸음(0.1)이 남았습니다
     world.log.length = 0;
 
-    for (let i = 0; i < 4000 && world.me.skills.blacksmithing < 100; i++) {
-      trySkillGain(world, 'blacksmithing', 100);
+    for (let i = 0; i < 4000 && budgetLeft(world.me) > 0; i++) {
+      trySkillGain(world, 'swordsmanship', 5);
     }
 
+    expect(world.me.skills.swordsmanship).toBe(0.1);
     expect(skillTotal(world.me)).toBe(SKILL_TOTAL_MAX);
     expect(world.log.some((line) => line.text.includes('더 배울 자리가 없습니다'))).toBe(true);
   });
@@ -220,10 +238,21 @@ describe('스킬 총합 상한', () => {
     world.me.skills.blacksmithing = 50;
 
     expect(budgetBlocks(world.me, 'mining')).toBe(false);
-    expect(budgetLeft(world.me)).toBe(100);
+    expect(budgetLeft(world.me)).toBe(SKILL_TOTAL_MAX - 100);
 
     for (let i = 0; i < 500; i++) trySkillGain(world, 'mining', 55);
     expect(world.me.skills.mining).toBeGreaterThan(50);
+  });
+
+  it('★ 오늘 세는 스킬로는 상한에 못 닿는다 — 축이 늘어야 살아난다', () => {
+    //  갈래가 셋인데 세는 스킬은 아직 셋(채광·대장기술·검술)뿐입니다.
+    //  전부 100 이어도 300 이라 400 은 오늘 콘텐츠로는 물리지 않습니다.
+    //  E 에서 벌목·낚시가 들어오면 이 시험이 먼저 깨지고, 그때 상한이 살아납니다.
+    const reachable = COUNTED.length * MAX_SKILL;
+    expect(
+      reachable,
+      `세는 스킬 ${COUNTED.length}개로 ${reachable} 까지 갈 수 있습니다 — 상한 ${SKILL_TOTAL_MAX} 이 이제 물립니다. 값을 다시 재십시오`,
+    ).toBeLessThan(SKILL_TOTAL_MAX);
   });
 });
 
