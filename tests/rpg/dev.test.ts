@@ -9,16 +9,19 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { MAX_SKILL } from '../../src/rpg/balance';
+import { LOOT, MAX_SKILL, STATS, carryCapacity } from '../../src/rpg/balance';
+import { itemDef } from '../../src/rpg/content/items';
 import { mapDef } from '../../src/rpg/content/maps';
 import { createWorld } from '../../src/rpg/core/create';
-import { countOf } from '../../src/rpg/core/inventory';
+import { addItem, countOf, freeWeight } from '../../src/rpg/core/inventory';
+import { derive } from '../../src/rpg/core/stats';
 import { attach } from '../../src/rpg/dev/DevTools';
 import type { World } from '../../src/rpg/types';
 
 type Api = {
   skill: (id: string, value: number) => string;
   give: (defId: string, count?: number) => string;
+  str: (value: number) => string;
   go: (mapId: string) => string;
   dur: (ratio: number, only?: string) => string;
   fast: (seconds: number) => string;
@@ -46,6 +49,7 @@ describe('시험용 명령', () => {
     const { aden } = open();
     expect(aden).toBeTruthy();
     expect(aden.help()).toContain('aden.skill');
+    expect(aden.help(), '패널에만 있고 도움말에 없으면 콘솔에서는 못 찾습니다').toContain('aden.str');
     detach?.();
     detach = null;
     expect((globalThis as unknown as { aden?: Api }).aden).toBeUndefined();
@@ -76,8 +80,84 @@ describe('시험용 명령', () => {
   it('★ give 는 무게 규칙을 우회하지 않는다 — 막히면 그대로 실패한다', () => {
     const { world, aden } = open();
     // 들 수 없는 양을 달라고 하면 규칙이 막고, 가방도 안 늘어납니다
-    expect(() => aden.give('iron-ore', 9999)).toThrow(/무게나 칸/);
+    expect(() => aden.give('iron-ore', 9999)).toThrow(/무게가 모자랍니다/);
     expect(countOf(world.me, 'iron-ore')).toBe(0);
+  });
+
+  it('★ 무게에 막힌 것을 칸 문제로 말하지 않는다 — 숫자를 댄다', () => {
+    const { world, aden } = open();
+    const free = freeWeight(world.me);
+    const each = itemDef('iron-ore').weight;
+    // 가방 칸은 넉넉한데(3/30) 무게만 모자란 자리입니다
+    expect(world.me.backpack.length).toBeLessThan(LOOT.packSlots);
+
+    let message = '';
+    try {
+      aden.give('iron-ore', 50);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message, '실패했는데 아무 말도 안 했습니다').not.toBe('');
+    expect(message).toContain('무게가 모자랍니다');
+    expect(message).not.toContain('칸');
+    expect(message).toContain(`남은 ${Math.round(free)}`);
+    expect(message).toContain(`필요 ${each * 50}`);
+    // 몇 개까지 되는지도 말해서 막다른 길로 두지 않습니다
+    expect(message).toContain(`${Math.floor(free / each)}개까지`);
+  });
+
+  it('★ 힘이 상한이면 "힘을 올려라" 라고 말하지 않는다 — 시키는 대로 해도 안 되는 길', () => {
+    const { world, aden } = open();
+
+    const before = (() => { try { aden.give('iron-ore', 50); return ''; } catch (e) { return (e as Error).message; } })();
+    expect(before).toContain('힘을 올리면');
+
+    aden.str(STATS.max);
+    expect(world.me.str).toBe(STATS.max);
+
+    const after = (() => { try { aden.give('iron-ore', 50); return ''; } catch (e) { return (e as Error).message; } })();
+    expect(after, '힘 상한에서도 여전히 못 드는 양이어야 이 시험이 뜻이 있습니다').not.toBe('');
+    expect(after).not.toContain('힘을 올리면');
+    expect(after).toContain('상한');
+    expect(after).toContain('못 듭니다');
+  });
+
+  it('★ 칸이 다 찼을 때는 무게가 아니라 칸을 말한다', () => {
+    const { world, aden } = open();
+    aden.str(STATS.max); // 무게로는 안 막히게 해둡니다
+    // 겹치지 않는 물건으로 칸을 채웁니다
+    while (world.me.backpack.length < LOOT.packSlots) {
+      const before = world.me.backpack.length;
+      addItem(world, 'rusty-sword', 1);
+      if (world.me.backpack.length === before) break;
+    }
+    expect(world.me.backpack.length).toBe(LOOT.packSlots);
+
+    expect(() => aden.give('rusty-sword', 1)).toThrow(new RegExp(`가방 칸이 다 찼습니다 \\(${LOOT.packSlots}/${LOOT.packSlots}\\)`));
+  });
+
+  it('str — 힘을 세우면 소지 상한이 따라 오른다', () => {
+    const { world, aden } = open();
+    const before = derive(world.me).carry;
+
+    const said = aden.str(STATS.max);
+    expect(world.me.str).toBe(STATS.max);
+    // ★ 상한을 저장하지 않습니다 — derive 가 힘에서 냅니다
+    expect(derive(world.me).carry).toBe(carryCapacity(STATS.max));
+    expect(derive(world.me).carry).toBeGreaterThan(before);
+    expect(said).toContain(`${carryCapacity(STATS.max)}`);
+
+    aden.str(9999);
+    expect(world.me.str).toBe(STATS.max);
+  });
+
+  it('str — 힘을 내려도 체력이 최대 위에 뜨지 않는다', () => {
+    const { world, aden } = open();
+    aden.str(STATS.max);
+    world.me.hp = derive(world.me).maxHp;
+
+    aden.str(5);
+    expect(world.me.hp).toBeLessThanOrEqual(derive(world.me).maxHp);
   });
 
   it('go — 지역을 옮긴다', () => {
