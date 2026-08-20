@@ -14,7 +14,7 @@ import { forsaken, nextStage, openRecipes, openStock, progressOf, stageReady } f
 import { SKILLS, SKILL_ORDER } from '../content/skills';
 import { VEINS } from '../content/veins';
 import { craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
-import { SLOT_LABEL, chooseTownPath, craft, repair, useItem } from '../core/commands';
+import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
@@ -359,7 +359,26 @@ function PackPanel({ world, refresh }: { world: World; refresh: () => void }) {
                 팔기 {fmt(def.sell)}골드
               </button>
             )}
+            {/* ★ 짐을 더는 길이 그동안 파는 것뿐이었습니다. 놓고 갈 수 있어야
+                   무엇을 들고 다닐지가 판단이 됩니다 (전체설계 3.2) */}
+            <button type="button"
+              onClick={() => { dropItem(world, stack.uid, 1); setSelected(null); refresh(); }}
+              className="btn rounded-sm px-2.5 py-1 text-xs text-parch-300">
+              놓기
+            </button>
+            {stack.count > 1 && (
+              <button type="button"
+                onClick={() => { dropItem(world, stack.uid, stack.count); setSelected(null); refresh(); }}
+                className="btn rounded-sm px-2.5 py-1 text-xs text-parch-300">
+                전부 놓기
+              </button>
+            )}
           </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-parch-400/80">
+            {world.map.def.safe
+              ? '여기 내려놓은 것은 없어지지 않습니다.'
+              : '밖에 내려놓은 것은 한참 뒤에 사라집니다. 가져갈 때는 눌러서 가져갑니다.'}
+          </p>
         </section>
       )}
     </div>

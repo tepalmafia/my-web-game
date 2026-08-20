@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { MAX_STEP } from '../balance';
-import { clickWorld, drinkBestPotion, moveTo, stopAction } from '../core/commands';
+import { clickWorld, drinkBestPotion, moveTo, stopAction, takeGround } from '../core/commands';
 import { startMining, veinAt } from '../core/action';
 import { GATHER } from '../balance';
 import { step } from '../core/engine';
@@ -169,6 +169,18 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     event.currentTarget.setPointerCapture(event.pointerId);
     dragging.current = true;
     const point = pointFromEvent(event);
+
+    //  ★ 일부러 놓아둔 것은 밟아도 안 주워집니다. 눌러야 가져옵니다 —
+    //    그래야 놓고 갈 수가 있습니다. 광맥·이동보다 먼저 봅니다.
+    const placed = world.ground.some(
+      (g) => g.placed && Math.hypot(g.pos.x - point.x, g.pos.y - point.y) <= 20,
+    );
+    if (placed) {
+      takeGround(world, point.x, point.y);
+      bump();
+      return;
+    }
+
     const vein = world.veins.find(
       (v) => Math.hypot(v.pos.x - point.x, v.pos.y - point.y) <= 22,
     );

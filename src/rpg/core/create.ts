@@ -102,6 +102,7 @@ export function createWorld(name: string, templateId: string): World {
     monsters: [],
     veins: [],
     ground: [],
+    stash: {},
     floaters: [],
     vfx: [],
     log: [],

@@ -435,8 +435,8 @@ function decay(world: World, dt: number): void {
   }
   for (let i = world.ground.length - 1; i >= 0; i--) {
     const item = world.ground[i]!;
-    item.life -= dt;
-    if (item.life <= 0) world.ground.splice(i, 1);
+    // ★ 시각으로 봅니다. until 이 null 이면 안 사라지는 것입니다 (안전지대에 놓아둔 것)
+    if (item.until !== null && world.time >= item.until) world.ground.splice(i, 1);
   }
   if (world.floaters.length > 80) world.floaters.splice(0, world.floaters.length - 80);
   void LOOT;

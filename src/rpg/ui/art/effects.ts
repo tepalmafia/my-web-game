@@ -310,7 +310,9 @@ export function drawGroundItem(ctx: CanvasRenderingContext2D, world: World, item
   const def = itemDef(item.defId);
   const color = ITEM_TINT[def.kind] ?? '#cbd5e1';
   const bob = Math.sin(world.time * 3.5 + item.id) * 2.2;
-  const fading = item.life < 6 ? 0.35 + 0.45 * Math.abs(Math.sin(world.time * 7)) : 1;
+  // 사라지기 직전에는 깜빡입니다. 안 사라지는 것(놓아둔 것)은 깜빡이지 않습니다
+  const left = item.until === null ? Infinity : item.until - world.time;
+  const fading = left < 6 ? 0.35 + 0.45 * Math.abs(Math.sin(world.time * 7)) : 1;
 
   ctx.save();
   ctx.globalAlpha = fading;

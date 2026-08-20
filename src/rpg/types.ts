@@ -473,7 +473,19 @@ export interface GroundItem {
   defId: string;
   count: number;
   pos: Vec2;
-  life: Seconds;
+  /**
+   *  사라질 세계 시각. null 이면 안 사라집니다 (안전지대에 놓아둔 것).
+   *
+   *  ★ 남은 시간이 아니라 ★시각입니다. 다른 지역에 가 있는 동안에도 시간이
+   *    흘러야 하는데, 남은 시간으로 세면 지금 보고 있는 지역만 줄어듭니다.
+   */
+  until: Seconds | null;
+  /**
+   *  사람이 일부러 놓은 것.
+   *  ★ 밟아도 저절로 줍지 않습니다 — 놓고 가려는데 되집으면 놓을 수가 없습니다.
+   *    가져갈 때는 눌러서 가져갑니다.
+   */
+  placed?: true;
 }
 
 export interface LogLine {
@@ -495,6 +507,13 @@ export interface World {
   monsters: Monster[];
   veins: Vein[];
   ground: GroundItem[];
+  /**
+   *  다른 지역 바닥에 놓여 있는 것들 (지역 id → 물건).
+   *  ★ 지금 있는 지역의 바닥은 ground 에 있고, 나갈 때 여기로 옮겨집니다.
+   *    이게 없으면 지역을 옮기는 순간 놓아둔 것이 사라져서,
+   *    "돌아왔을 때 남아 있을까" 가 언제나 '아니오' 가 됩니다.
+   */
+  stash: Record<MapId, GroundItem[]>;
   floaters: Floater[];
   vfx: Vfx[];
   log: LogLine[];

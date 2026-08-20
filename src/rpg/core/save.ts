@@ -13,7 +13,7 @@ import { mapDef } from '../content/maps';
 import { TOWN_STAGES, emptyTown, stageOf } from '../content/town';
 import { log } from './feedback';
 import { buildMap, populate, tileCenter } from './world';
-import type { Character, MapId, TownState, World } from '../types';
+import type { Character, GroundItem, MapId, TownState, World } from '../types';
 
 const VERSION = 2;
 const ACTIVE_KEY = 'aden:v2:active';
@@ -26,6 +26,11 @@ interface SaveData {
   time: number;
   nextId: number;
   seed: number;
+  /**
+   *  지역마다 바닥에 놓여 있는 것 (지금 있는 지역 것까지 함께).
+   *  ★ 지형과 달리 이건 씨앗으로 다시 만들 수 없습니다 — 사람이 놓은 것이니까요.
+   */
+  ground?: Record<MapId, GroundItem[]>;
 }
 
 /* --------------------------------------------------------------- 저장소 접근 */
@@ -75,7 +80,16 @@ function pack(world: World): SaveData {
     time: world.time,
     nextId: world.nextId,
     seed: world.seed,
+    ground: packGround(world),
   };
+}
+
+/** 저장할 바닥 — 지금 지역 것을 보관함에 합쳐서 한 덩어리로 만듭니다 */
+function packGround(world: World): Record<MapId, GroundItem[]> {
+  const all: Record<MapId, GroundItem[]> = { ...world.stash };
+  if (world.ground.length > 0) all[world.mapId] = world.ground;
+  else delete all[world.mapId];
+  return all;
 }
 
 export function saveWorld(world: World): void {
@@ -133,6 +147,7 @@ function rebuild(data: SaveData): World | null {
     monsters: [],
     veins: [],
     ground: [],
+    stash: {},
     floaters: [],
     vfx: [],
     log: [],
@@ -150,6 +165,16 @@ function rebuild(data: SaveData): World | null {
     meMoving: false,
     meSwing: 0,
   };
+  //  ★ 놓아둔 것을 되살립니다. 그사이 수명이 다한 것은 버립니다 —
+  //    저장하고 하루 뒤에 열어도 밖에 둔 것은 없어져 있어야 합니다.
+  const saved = data.ground ?? {};
+  for (const [id, items] of Object.entries(saved)) {
+    const kept = items.filter((item) => item.until === null || world.time < item.until);
+    if (kept.length > 0) world.stash[id] = kept;
+  }
+  world.ground = world.stash[world.mapId] ?? [];
+  delete world.stash[world.mapId];
+
   populate(world);
   //  ★ 옮겨온 것이 있으면 말해줍니다. 말없이 셈이 바뀌면 그것도 조용한 실패입니다.
   if (carried > 0) {

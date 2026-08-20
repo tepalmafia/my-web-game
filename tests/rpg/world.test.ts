@@ -174,17 +174,51 @@ describe('이동과 벽', () => {
 });
 
 describe('지역 이동', () => {
-  it('넘어가면 몬스터가 새로 배치되고 바닥의 물건은 정리된다', () => {
+  it('넘어가면 몬스터가 새로 배치되고, 그 지역 바닥은 눈앞에서 치워진다', () => {
     const world = createWorld('시험', 'miner');
-    world.ground.push({ id: 1, defId: 'potion-heal', count: 1, pos: { x: 0, y: 0 }, life: 10 });
+    world.ground.push({
+      id: 1, defId: 'potion-heal', count: 1,
+      pos: { x: 0, y: 0 }, until: world.time + 10,
+    });
 
     enterMap(world, 'forest', 5, 18);
 
     expect(world.mapId).toBe('forest');
-    expect(world.ground).toHaveLength(0);
+    expect(world.ground, '새 지역에 옛 지역 물건이 따라왔습니다').toHaveLength(0);
     expect(world.monsters.length).toBeGreaterThan(0);
     expect(world.me.moveTarget).toBeNull();
     expect(world.me.targetId).toBeNull();
+  });
+
+  it('★ 치워진 것이지 없어진 것이 아니다 — 돌아오면 그대로 있다', () => {
+    //  ★ 예전에는 enterMap 이 바닥을 그냥 비웠습니다. 그래서 놓아둔 것이
+    //    지역을 옮기는 순간 사라졌고, "돌아왔을 때 남아 있을까" 가 언제나 '아니오' 였습니다.
+    const world = createWorld('시험', 'miner');
+    world.ground.push({
+      id: 1, defId: 'potion-heal', count: 1,
+      pos: { x: 0, y: 0 }, until: null, placed: true,
+    });
+
+    enterMap(world, 'forest', 5, 18);
+    expect(world.ground).toHaveLength(0);
+
+    enterMap(world, 'town', 15, 13);
+    expect(world.ground, '놓아둔 것이 사라졌습니다').toHaveLength(1);
+    expect(world.ground[0]!.defId).toBe('potion-heal');
+  });
+
+  it('다른 지역에 가 있는 동안에도 수명은 흐른다', () => {
+    const world = createWorld('시험', 'miner');
+    world.ground.push({
+      id: 1, defId: 'potion-heal', count: 1,
+      pos: { x: 0, y: 0 }, until: world.time + 60, placed: true,
+    });
+
+    enterMap(world, 'forest', 5, 18);
+    world.time += 120;               // 숲에서 2분을 보냅니다
+    enterMap(world, 'town', 15, 13);
+
+    expect(world.ground, '내가 안 보는 동안 시간이 멈춰 있었습니다').toHaveLength(0);
   });
 
   it('처음 간 곳은 순간이동 목록에 남는다', () => {
