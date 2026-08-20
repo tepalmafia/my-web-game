@@ -132,7 +132,8 @@ function travel(world: World, to: MapId, pilot: Pilot): boolean {
 function chooseIfCalled(world: World, pilot: Pilot): void {
   if (!stageReady(world.me.town)) return;
   const stage = nextStage(world.me.town);
-  if (!stage) return;
+  // 갈림길이 없는 단계는 팔면 저절로 오릅니다 — 봇이 할 일이 없습니다
+  if (!stage || !stage.choices) return;
   const wantBlade = pilot.focus === 'fight';
   const pick = stage.choices[wantBlade ? 0 : 1];
   chooseTownPath(world, pick.id);

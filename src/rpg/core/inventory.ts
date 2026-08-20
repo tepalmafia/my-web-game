@@ -7,9 +7,10 @@
 
 import { LOOT } from '../balance';
 import { itemDef } from '../content/items';
-import { nextStage, stageReady } from '../content/town';
+import { stageReady } from '../content/town';
 import { log, toast } from './feedback';
 import { derive, equipProblem, itemName, stackWeight, totalWeight } from './stats';
+import { townDidGrow } from './town';
 import type { Character, EquipSlot, ItemStack, Stones, World } from '../types';
 
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'helmet'];
@@ -182,13 +183,8 @@ export function sellItem(world: World, uid: number, count = 1): void {
   //   골드로 세면 몬스터가 떨군 돈으로도 자라서 "판다" 는 행위가 안 걸립니다.
   const before = stageReady(me.town);
   me.town.sold[stack.defId] = (me.town.sold[stack.defId] ?? 0) + sold;
-  if (!before && stageReady(me.town)) {
-    const stage = nextStage(me.town);
-    if (stage) {
-      toast(world, `대장장이 두린이\n부른다`, 'epic');
-      log(world, `두린이 할 말이 있다고 합니다 — 대장간으로 가보세요`, 'epic');
-    }
-  }
+  // 조건이 방금 찼으면 마을이 자라거나(갈림길 없는 단계) 두린이 부릅니다
+  if (!before) townDidGrow(world);
 }
 
 /** 상점에서 사기 */

@@ -177,6 +177,8 @@ function rebuild(data: SaveData): World | null {
  *  돌려주는 값: 구릿돌에서 옮겨온 개수 (없으면 0)
  */
 function migrateTown(town: TownState): number {
+  alignStages(town);
+
   if (town.spent) return 0;
   town.spent = {};
 
@@ -189,6 +191,32 @@ function migrateTown(town: TownState): number {
   const ore = town.sold['copper-ore'] ?? 0;
   if (ore > 0) town.spent['copper-ingot'] = (town.spent['copper-ingot'] ?? 0) - ore;
   return ore;
+}
+
+/**
+ *  사다리 앞쪽에 단계가 끼어들면 옛 기록의 자리가 한 칸씩 밀립니다.
+ *
+ *  ★ chosen 은 자리로 읽습니다 — chosen[i] 가 TOWN_STAGES[i] 의 답입니다.
+ *    앞에 '화로에 불이 세진다' 를 끼워 넣었더니, 이미 대장간 확장을 고른 사람의
+ *    chosen[0] 이 엉뚱한 단계의 답이 되었습니다. 그러면 그 단계가 열어주던 것
+ *    (상인의 고급 물약)이 조용히 사라집니다.
+ *
+ *  ★ 갈림길 없는 단계는 고른 기록이 없으므로, 뒤 단계를 이미 지난 사람은
+ *    그 단계도 지난 것으로 봅니다. 다시 요구하면 이미 판 것을 또 팔라는 말이 됩니다.
+ *  ★ 이미 맞는 기록에는 아무 일도 하지 않습니다 — 몇 번을 불러도 같습니다.
+ */
+function alignStages(town: TownState): void {
+  for (let i = 0; i < TOWN_STAGES.length && i < town.chosen.length; i++) {
+    const stage = TOWN_STAGES[i]!;
+    if (stage.choices !== null) continue;
+    if (town.chosen[i] === stage.id) continue;
+    town.chosen.splice(i, 0, stage.id);
+    if (town.spent) {
+      for (const need of stage.needs) {
+        town.spent[need.defId] = (town.spent[need.defId] ?? 0) + need.count;
+      }
+    }
+  }
 }
 
 export function loadWorld(): World | null {

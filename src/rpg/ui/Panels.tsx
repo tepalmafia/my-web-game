@@ -445,10 +445,12 @@ function TownChoicePanel({ world, refresh }: { world: World; refresh: () => void
   const [asking, setAsking] = useState<string | null>(null);
   const town = world.me.town;
   const stage = nextStage(town);
-  if (!stage || !stageReady(town)) return null;
+  // ★ 갈림길이 없는 단계는 저절로 오릅니다 — 물을 것이 없으니 이 창도 안 뜹니다
+  if (!stage || !stage.choices || !stageReady(town)) return null;
+  const choices = stage.choices;
 
-  const picked = asking ? stage.choices.find((c) => c.id === asking) : null;
-  const dropped = asking ? stage.choices.find((c) => c.id !== asking) : null;
+  const picked = asking ? choices.find((c) => c.id === asking) : null;
+  const dropped = asking ? choices.find((c) => c.id !== asking) : null;
 
   return (
     <section className="rounded-sm border border-brass-400/70 bg-[#241c0e]/60 p-2.5">
@@ -483,7 +485,7 @@ function TownChoicePanel({ world, refresh }: { world: World; refresh: () => void
             두린이 둘을 내놓았습니다. <b className="text-[#e88a86]">하나만 고를 수 있습니다.</b>
           </p>
           <div className="mt-2 space-y-1.5">
-            {stage.choices.map((choice) => (
+            {choices.map((choice) => (
               <button
                 key={choice.id}
                 type="button"
