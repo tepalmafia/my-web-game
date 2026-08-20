@@ -43,14 +43,54 @@ function sell(world: World, defId: string, count: number): void {
   sellItem(world, stack.uid, count);
 }
 
+/** 갈림길이 있는 첫 단계 (0단계는 갈림길이 없습니다) */
+const FORK = TOWN_STAGES.find((stage) => stage.choices !== null)!;
+
+/** 갈림길 없는 앞 단계들을 팔아서 지나갑니다 */
+function pastFreeStages(world: World): void {
+  for (const stage of TOWN_STAGES) {
+    if (stage.choices !== null) return;
+    for (const need of stage.needs) sell(world, need.defId, need.count);
+  }
+}
+
 describe('사다리 자체', () => {
-  it('단계마다 조건·힌트·갈림길 둘이 있다', () => {
+  it('단계마다 조건·힌트가 있고, 갈림길은 둘이거나 없다', () => {
     expect(TOWN_STAGES.length).toBeGreaterThan(0);
     for (const stage of TOWN_STAGES) {
+      expect(stage.id.length, `${stage.name} 에 id 가 없습니다`).toBeGreaterThan(0);
       expect(stage.needs.length, `${stage.name} 에 조건이 없습니다`).toBeGreaterThan(0);
       expect(stage.hint.length, `${stage.name} 에 힌트가 없습니다`).toBeGreaterThan(0);
-      expect(stage.choices.length, `${stage.name} 의 갈림길이 둘이 아닙니다`).toBe(2);
+      if (stage.choices) {
+        expect(stage.choices.length, `${stage.name} 의 갈림길이 둘이 아닙니다`).toBe(2);
+      }
     }
+  });
+
+  it('단계 id 가 겹치지 않는다 — 겹치면 옛 저장의 단계가 어긋난다', () => {
+    const ids = TOWN_STAGES.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('★ 갈림길 없는 단계는 첫 번째 하나뿐이다', () => {
+    //  전체설계 3.2 — "처음 것은 싸고 빠르게". 첫 번째는 고르는 게 아니라 겪는 것입니다.
+    //  ★ 두 번째부터도 이러면 세 조건 중 '선택' 이 빠진 그냥 목표치 목록이 됩니다.
+    for (let i = 1; i < TOWN_STAGES.length; i++) {
+      expect(
+        TOWN_STAGES[i]!.choices,
+        `${TOWN_STAGES[i]!.name} 에 갈림길이 없습니다 — 첫 단계만 그럴 수 있습니다`,
+      ).not.toBeNull();
+    }
+  });
+
+  it('★ 첫 단계는 싸다 — 무슨 일이 생기는지 모르는 사람에게 많이 요구하지 않는다', () => {
+    const first = TOWN_STAGES[0]!;
+    const total = first.needs.reduce((sum, n) => sum + n.count, 0);
+    expect(total, `첫 단계가 ${total}개를 요구합니다`).toBeLessThanOrEqual(6);
+
+    // 그리고 두 번째부터는 확실히 비싸져야 합니다
+    const second = TOWN_STAGES[1]!.needs.reduce((sum, n) => sum + n.count, 0);
+    expect(second, '두 번째 단계가 첫 단계만큼 쌉니다').toBeGreaterThan(total * 3);
   });
 
   it('조건에 적힌 물건과 여는 것이 실재한다', () => {
@@ -58,7 +98,7 @@ describe('사다리 자체', () => {
       for (const need of stage.needs) expect(ITEMS[need.defId], need.defId).toBeDefined();
       for (const id of stage.opens.recipes) expect(RECIPES[id], id).toBeDefined();
       for (const id of stage.opens.stock) expect(ITEMS[id], id).toBeDefined();
-      for (const choice of stage.choices) {
+      for (const choice of stage.choices ?? []) {
         expect(choice.recipes.length, `${choice.id} 가 아무것도 안 엽니다`).toBeGreaterThan(0);
         for (const id of choice.recipes) expect(RECIPES[id], id).toBeDefined();
       }
@@ -66,14 +106,14 @@ describe('사다리 자체', () => {
   });
 
   it('갈림길 id 가 겹치지 않는다', () => {
-    const ids = TOWN_STAGES.flatMap((s) => s.choices.map((c) => c.id));
+    const ids = TOWN_STAGES.flatMap((s) => (s.choices ?? []).map((c) => c.id));
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('한 제작법을 두 갈래가 함께 열지 않는다 — 그러면 고를 이유가 없다', () => {
     const seen = new Set<string>();
     for (const stage of TOWN_STAGES) {
-      for (const id of [...stage.opens.recipes, ...stage.choices.flatMap((c) => c.recipes)]) {
+      for (const id of [...stage.opens.recipes, ...(stage.choices ?? []).flatMap((c) => c.recipes)]) {
         expect(seen.has(id), `${id} 를 여러 곳에서 엽니다`).toBe(false);
         seen.add(id);
       }
@@ -93,7 +133,7 @@ describe('사다리 자체', () => {
 describe('처음에는 잠겨 있다', () => {
   it('사다리가 쥔 제작법은 처음에 못 만든다', () => {
     const open = openRecipes(emptyTown());
-    const held = TOWN_STAGES.flatMap((s) => [...s.opens.recipes, ...s.choices.flatMap((c) => c.recipes)]);
+    const held = TOWN_STAGES.flatMap((s) => [...s.opens.recipes, ...(s.choices ?? []).flatMap((c) => c.recipes)]);
     for (const id of held) expect(open.has(id), `${id} 가 처음부터 열려 있습니다`).toBe(false);
   });
 
@@ -129,23 +169,44 @@ describe('판 것이 마을을 키운다', () => {
   it('조건을 채우기 전에는 고를 수 없다', () => {
     const world = inTown();
     expect(stageReady(world.me.town)).toBe(false);
-    expect(chooseTownPath(world, TOWN_STAGES[0]!.choices[0].id)).toBe(false);
+    expect(chooseTownPath(world, FORK.choices![0].id)).toBe(false);
     expect(stageOf(world.me.town)).toBe(0);
   });
 
-  it('다 팔면 두린이 부른다', () => {
+  it('★ 첫 단계는 고르지 않아도 저절로 오른다 — 첫 번째는 겪는 것이다', () => {
+    const world = inTown();
+    const need = TOWN_STAGES[0]!.needs[0]!;
+    expect(stageOf(world.me.town)).toBe(0);
+
+    sell(world, need.defId, need.count);
+
+    expect(stageOf(world.me.town), '팔았는데 안 자랐습니다').toBe(1);
+    expect(world.me.town.chosen[0]).toBe(TOWN_STAGES[0]!.id);
+    expect(world.log.map((l) => l.text).join(' ')).toContain('마을이 자랐습니다');
+  });
+
+  it('첫 단계에서는 두린이 부르지 않는다 — 물을 것이 없다', () => {
     const world = inTown();
     const need = TOWN_STAGES[0]!.needs[0]!;
     sell(world, need.defId, need.count);
+    expect(world.log.map((l) => l.text).join(' ')).not.toContain('할 말이 있다');
+  });
+
+  it('갈림길 단계를 다 팔면 두린이 부른다', () => {
+    const world = inTown();
+    pastFreeStages(world);
+    world.log.length = 0;
+    for (const need of FORK.needs) sell(world, need.defId, need.count);
     expect(stageReady(world.me.town), '조건을 채웠는데 안 부릅니다').toBe(true);
     expect(world.log.map((l) => l.text).join(' ')).toContain('두린');
   });
 
   it('얼마 남았는지는 보여준다 — 모르면 목표가 안 된다', () => {
     const world = inTown();
+    // ★ 12개를 한 번에 팔면 0단계(4개)가 저절로 오르고 남은 8개가 넘어옵니다
     sell(world, 'iron-ingot', 12);
     const row = progressOf(world.me.town)[0]!;
-    expect(row.have).toBe(12);
+    expect(row.have).toBe(12 - TOWN_STAGES[0]!.needs[0]!.count);
     expect(row.need).toBe(40);
   });
 });
@@ -153,14 +214,14 @@ describe('판 것이 마을을 키운다', () => {
 describe('★ 고르면 되돌릴 수 없다', () => {
   function readyWorld(): World {
     const world = inTown();
-    const need = TOWN_STAGES[0]!.needs[0]!;
-    sell(world, need.defId, need.count);
+    pastFreeStages(world);
+    for (const need of FORK.needs) sell(world, need.defId, need.count);
     return world;
   }
 
   it('고른 쪽만 열리고, 고르지 않은 쪽은 영영 안 열린다', () => {
     const world = readyWorld();
-    const [picked, dropped] = TOWN_STAGES[0]!.choices;
+    const [picked, dropped] = FORK.choices!;
 
     expect(chooseTownPath(world, picked.id)).toBe(true);
     const open = openRecipes(world.me.town);
@@ -170,18 +231,18 @@ describe('★ 고르면 되돌릴 수 없다', () => {
 
   it('한 번 고른 단계를 다시 고를 수 없다', () => {
     const world = readyWorld();
-    const [picked, dropped] = TOWN_STAGES[0]!.choices;
+    const [picked, dropped] = FORK.choices!;
     chooseTownPath(world, picked.id);
 
     // 같은 단계의 다른 쪽을 다시 고르려 해도 안 됩니다
     expect(chooseTownPath(world, dropped.id)).toBe(false);
-    expect(world.me.town.chosen).toEqual([picked.id]);
+    expect(world.me.town.chosen).toEqual([TOWN_STAGES[0]!.id, picked.id]);
     expect(openRecipes(world.me.town).has(dropped.recipes[0]!)).toBe(false);
   });
 
   it('버린 길이 화면에 남는다 — 무엇을 놓쳤는지는 알아야 한다', () => {
     const world = readyWorld();
-    const [picked, dropped] = TOWN_STAGES[0]!.choices;
+    const [picked, dropped] = FORK.choices!;
     chooseTownPath(world, picked.id);
 
     const gone = forsaken(world.me.town);
@@ -191,12 +252,12 @@ describe('★ 고르면 되돌릴 수 없다', () => {
 
   it('자란 마을은 줄어들지 않는다', () => {
     const world = readyWorld();
-    chooseTownPath(world, TOWN_STAGES[0]!.choices[0].id);
+    chooseTownPath(world, FORK.choices![0].id);
     const opened = [...openRecipes(world.me.town)];
 
     // 아무리 사고팔고 해도 단계가 내려가지 않습니다
     sell(world, 'iron-dagger', 3);
-    expect(stageOf(world.me.town)).toBe(1);
+    expect(stageOf(world.me.town)).toBe(2);   // 0단계 + 갈림길 단계
     expect([...openRecipes(world.me.town)]).toEqual(opened);
   });
 });
@@ -206,9 +267,9 @@ describe('상점도 자란다', () => {
     const world = inTown();
     expect(openStock(world.me.town)).not.toContain('potion-heal-big');
 
-    const need = TOWN_STAGES[0]!.needs[0]!;
-    sell(world, need.defId, need.count);
-    chooseTownPath(world, TOWN_STAGES[0]!.choices[0].id);
+    pastFreeStages(world);
+    for (const need of FORK.needs) sell(world, need.defId, need.count);
+    chooseTownPath(world, FORK.choices![0].id);
     expect(openStock(world.me.town)).toContain('potion-heal-big');
   });
 
@@ -217,7 +278,8 @@ describe('상점도 자란다', () => {
     for (const stage of TOWN_STAGES) {
       const need = stage.needs[0]!;
       sell(world, need.defId, need.count);
-      chooseTownPath(world, stage.choices[0].id);
+      // 갈림길이 없는 단계는 파는 순간 이미 올라가 있습니다
+      if (stage.choices) chooseTownPath(world, stage.choices[0].id);
     }
     for (const recipe of Object.values(RECIPES)) {
       expect(openStock(world.me.town), `${recipe.makes} 를 상점에서도 팝니다`).not.toContain(recipe.makes);
@@ -231,13 +293,15 @@ describe('끝까지 자라면', () => {
     for (const stage of TOWN_STAGES) {
       const need = stage.needs[0]!;
       sell(world, need.defId, need.count);
-      chooseTownPath(world, stage.choices[0].id);
+      // 갈림길이 없는 단계는 파는 순간 이미 올라가 있습니다
+      if (stage.choices) chooseTownPath(world, stage.choices[0].id);
     }
     expect(nextStage(world.me.town)).toBeNull();
 
     const open = openRecipes(world.me.town);
     const dropped = forsaken(world.me.town).flatMap((c) => c.recipes);
-    expect(dropped.length).toBe(TOWN_STAGES.length);
+    // 갈림길이 있는 단계마다 하나씩 버립니다 (갈림길 없는 단계는 버린 것이 없습니다)
+    expect(dropped.length).toBe(TOWN_STAGES.filter((stage) => stage.choices).length);
     for (const id of dropped) expect(open.has(id)).toBe(false);
     // 버린 것 말고는 전부 열려 있어야 합니다
     expect(open.size).toBe(RECIPE_ORDER.length - dropped.length);
@@ -254,15 +318,19 @@ describe('끝까지 자라면', () => {
 describe('판 누계와 단계', () => {
   it('단계를 넘겨도 판 것의 기록은 깎이지 않는다 — 나중에 기록이 앉을 자리다', () => {
     const world = inTown();
+    pastFreeStages(world);
     sell(world, 'iron-ingot', 40);
     chooseTownPath(world, 'forge-blade');
 
-    expect(world.me.town.sold['iron-ingot'], '판 기록이 깎였습니다').toBe(40);
-    expect(world.me.town.spent['iron-ingot'], '먹은 몫이 안 적혔습니다').toBe(40);
+    // 0단계가 먹은 4개까지 더한 값입니다 — 지나온 단계가 요구한 합이 곧 spent 입니다
+    const free = TOWN_STAGES[0]!.needs[0]!.count;
+    expect(world.me.town.sold['iron-ingot'], '판 기록이 깎였습니다').toBe(free + 40);
+    expect(world.me.town.spent['iron-ingot'], '먹은 몫이 안 적혔습니다').toBe(free + 40);
   });
 
   it('넘긴 뒤 다음 단계는 0 부터 센다 — 미리 채워져 있으면 안 된다', () => {
     const world = inTown();
+    pastFreeStages(world);
     // 1단계를 넘기기 전에 구리 주괴를 잔뜩 팔아둡니다 (2단계 조건과 같은 물건)
     sell(world, 'copper-ingot', 25);
     sell(world, 'iron-ingot', 40);
@@ -270,17 +338,19 @@ describe('판 누계와 단계', () => {
 
     // 2단계는 구리 주괴 25 를 요구합니다. 이미 25 를 팔았지만 그것은 1단계 이전의 일입니다.
     // ★ 여기서 25/25 가 되면 예전 버그입니다.
-    expect(stageOf(world.me.town)).toBe(1);
-    expect(stageReady(world.me.town), '2단계가 미리 채워져 있습니다').toBe(false);
+    expect(stageOf(world.me.town)).toBe(2);
+    expect(stageReady(world.me.town), '다음 단계가 미리 채워져 있습니다').toBe(false);
   });
 
   it('넘칠 만큼 팔았으면 남는 것이 다음 단계로 넘어가고, 그것이 화면에 보인다', () => {
     const world = inTown();
+    pastFreeStages(world);
     sell(world, 'iron-ingot', 45); // 40 이 필요한데 45 를 팔았습니다
     chooseTownPath(world, 'forge-blade');
 
-    expect(world.me.town.sold['iron-ingot']).toBe(45);
-    expect(world.me.town.spent['iron-ingot']).toBe(40);
+    const free = TOWN_STAGES[0]!.needs[0]!.count;
+    expect(world.me.town.sold['iron-ingot']).toBe(free + 45);
+    expect(world.me.town.spent['iron-ingot']).toBe(free + 40);
 
     // 다음 단계가 철 주괴를 요구하지 않더라도, 남은 5 는 장부에 남아 있어야 합니다
     const left = (world.me.town.sold['iron-ingot'] ?? 0) - (world.me.town.spent['iron-ingot'] ?? 0);
@@ -289,6 +359,7 @@ describe('판 누계와 단계', () => {
 
   it('같은 물건으로 두 단계를 넘길 때 진행이 이어서 보인다 (5/25 로 시작)', () => {
     const world = inTown();
+    pastFreeStages(world);
     sell(world, 'iron-ingot', 40);
     chooseTownPath(world, 'forge-blade');
 
@@ -315,7 +386,7 @@ describe('구리로 가는 길', () => {
       for (const id of stage.opens.recipes) {
         expect(id.startsWith('smelt'), `${stage.name} 이 ${id} 를 쥐고 있습니다`).toBe(false);
       }
-      for (const choice of stage.choices) {
+      for (const choice of stage.choices ?? []) {
         for (const id of choice.recipes) {
           expect(id.startsWith('smelt'), `${choice.name} 이 ${id} 를 쥐고 있습니다`).toBe(false);
         }
@@ -337,7 +408,7 @@ describe('구리로 가는 길', () => {
         const made = RECIPE_ORDER.some((id) => open.has(id) && RECIPES[id]!.makes === need.defId);
         expect(made, `${stage.name} 의 조건 ${need.defId} 는 만들 방법 없이 파는 것뿐입니다`).toBe(true);
       }
-      town.chosen.push(stage.choices[0].id);
+      town.chosen.push(stage.choices ? stage.choices[0].id : stage.id);
       for (const need of stage.needs) {
         town.spent[need.defId] = (town.spent[need.defId] ?? 0) + need.count;
       }

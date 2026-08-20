@@ -33,6 +33,8 @@ export interface TownChoice {
 }
 
 export interface TownStage {
+  /** 기록에 남는 이름. ★ 바꾸면 옛 저장의 단계가 어긋납니다 */
+  id: string;
   name: string;
   /** 오르는 조건 — ★판 물건의 누계입니다 (골드가 아닙니다) */
   needs: { defId: string; count: number }[];
@@ -40,12 +42,36 @@ export interface TownStage {
   hint: string;
   /** 오르면 무조건 열리는 것 */
   opens: { recipes: string[]; stock: string[] };
-  /** ★ 둘 중 하나만 */
-  choices: [TownChoice, TownChoice];
+  /**
+   *  ★ 둘 중 하나만. null 이면 갈림길이 없는 단계입니다 —
+   *    조건이 차는 순간 저절로 오릅니다.
+   *
+   *  ★ null 은 ★첫 단계 하나뿐이어야 합니다 (전체설계 3.2).
+   *    "처음 것은 싸고 빠르게" 라서 첫 번째는 고르는 게 아니라 겪는 것입니다.
+   *    두 번째부터도 이러면 세 조건 중 '선택' 이 빠진 목표치 목록이 됩니다.
+   *    tests/rpg/town.test.ts 가 이것을 지킵니다.
+   */
+  choices: [TownChoice, TownChoice] | null;
 }
 
 export const TOWN_STAGES: TownStage[] = [
   {
+    //  ★ 첫 단계는 거의 공짜입니다 (전체설계 3.2 — 처음 것은 싸고 빠르게).
+    //    40개를 팔면 무슨 일이 생기는지 모르는 사람에게 40개를 요구할 수는 없습니다.
+    //    네 개를 팔면 화로가 커집니다. 그 한 번을 겪어야 "팔면 세상이 변하는구나" 를 알고,
+    //    그래야 다음 40개를 향해 갑니다.
+    //
+    //  ★ 갈림길이 없습니다. 고를 것이 없으니 조건이 차는 순간 저절로 오릅니다.
+    //    무엇을 여는지도 없습니다 — 여는 것은 ★대장간 자체입니다.
+    id: 'first-forge',
+    name: '화로에 불이 세진다',
+    needs: [{ defId: 'iron-ingot', count: 4 }],
+    hint: '쇠를 좀 가져다주게. 화로가 영 시원찮아.',
+    opens: { recipes: [], stock: [] },
+    choices: null,
+  },
+  {
+    id: 'forge-expand',
     name: '대장간 확장',
     needs: [{ defId: 'iron-ingot', count: 40 }],
     hint: '쇠가 더 모이면 보여줄 게 있네.',
@@ -66,6 +92,7 @@ export const TOWN_STAGES: TownStage[] = [
     ],
   },
   {
+    id: 'copper-forge',
     name: '구리 대장간',
     //  ★ 광석이 아니라 주괴입니다.
     //    광석으로 걸었더니 이렇게 됐습니다 — 구리 제련이 이 단계에 잠겨 있어서
@@ -136,7 +163,7 @@ export function stageReady(town: TownState): boolean {
 
 export function choiceById(id: string): TownChoice | null {
   for (const stage of TOWN_STAGES) {
-    for (const choice of stage.choices) if (choice.id === id) return choice;
+    for (const choice of stage.choices ?? []) if (choice.id === id) return choice;
   }
   return null;
 }
@@ -146,7 +173,7 @@ function heldRecipes(): Set<string> {
   const held = new Set<string>();
   for (const stage of TOWN_STAGES) {
     for (const id of stage.opens.recipes) held.add(id);
-    for (const choice of stage.choices) for (const id of choice.recipes) held.add(id);
+    for (const choice of stage.choices ?? []) for (const id of choice.recipes) held.add(id);
   }
   return held;
 }
@@ -188,7 +215,8 @@ export function forsaken(town: TownState): TownChoice[] {
   for (let i = 0; i < town.chosen.length; i++) {
     const stage = TOWN_STAGES[i];
     if (!stage) continue;
-    for (const choice of stage.choices) {
+    // 갈림길이 없던 단계는 버린 것도 없습니다
+    for (const choice of stage.choices ?? []) {
       if (choice.id !== town.chosen[i]) list.push(choice);
     }
   }

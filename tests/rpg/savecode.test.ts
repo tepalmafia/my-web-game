@@ -13,7 +13,7 @@ import { createWorld } from '../../src/rpg/core/create';
 import { exportSave, importSave, readSaveCode } from '../../src/rpg/core/save';
 import { enterMap } from '../../src/rpg/core/world';
 import { mapDef } from '../../src/rpg/content/maps';
-import { stageReady } from '../../src/rpg/content/town';
+import { TOWN_STAGES, stageReady } from '../../src/rpg/content/town';
 
 /** localStorage 가 없는 곳에서도 돌아야 합니다 (vitest 는 node 환경입니다) */
 class MemoryStorage {
@@ -183,7 +183,15 @@ describe('옛 기록 맞추기', () => {
     if (!result.ok) return;
     const town = result.world.me.town;
     expect(town.sold['iron-ingot'], '판 기록이 깎였습니다').toBe(40);
-    expect(town.spent['iron-ingot'], '1단계가 먹은 몫이 안 적혔습니다').toBe(40);
+    //  ★ 사다리 앞에 갈림길 없는 단계가 끼어들었습니다. 이미 뒤 단계를 지난 사람은
+    //    그 단계도 지난 것으로 봅니다 — 다시 요구하면 이미 판 것을 또 팔라는 말입니다.
+    //    그래서 먹은 몫은 지나온 단계들이 요구한 합(4 + 40)입니다.
+    const passed = TOWN_STAGES.slice(0, 2).reduce(
+      (sum, stage) => sum + stage.needs.reduce((n, need) => n + need.count, 0),
+      0,
+    );
+    expect(town.spent['iron-ingot'], '지나온 단계의 몫이 안 적혔습니다').toBe(passed);
+    expect(town.chosen[0], '끼어든 단계가 자리를 못 찾았습니다').toBe(TOWN_STAGES[0]!.id);
   });
 
   it('이미 구릿돌을 판 사람의 진행이 0 으로 돌아가지 않는다', () => {

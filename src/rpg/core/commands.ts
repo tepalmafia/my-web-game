@@ -11,13 +11,13 @@
 import { GATHER, POTION_COOLDOWN, TILE } from '../balance';
 import { itemDef } from '../content/items';
 import { monsterDef } from '../content/monsters';
-import { recipeDef } from '../content/recipes';
-import { choiceById, nextStage, stageReady } from '../content/town';
+import { nextStage, stageReady } from '../content/town';
 import { veinDef } from '../content/veins';
 import { cancelAction, startCraft, startMining, startRepair } from './action';
 import { revive } from './death';
 import { floater, log, toast } from './feedback';
 import { findStack, removeItem } from './inventory';
+import { advanceTown } from './town';
 import { derive } from './stats';
 import { tileCenter } from './world';
 import type { EquipSlot, World } from '../types';
@@ -271,47 +271,18 @@ export function chooseTownPath(world: World, choiceId: string): boolean {
     toast(world, '아직 두린이 부르지 않았습니다.', 'bad');
     return false;
   }
+  //  ★ 갈림길이 없는 단계는 판매가 끝나는 자리에서 저절로 오릅니다(core/town.ts).
+  //    화면이 여기로 올 일이 없지만, 와도 조용히 실패하지는 않습니다.
+  if (!stage.choices) {
+    log(world, `${stage.name} — 여기서는 고를 것이 없습니다`, 'bad');
+    return false;
+  }
   if (!stage.choices.some((c) => c.id === choiceId)) {
     log(world, '지금 고를 수 있는 것이 아닙니다', 'bad');
     return false;
   }
 
-  //  ★ 여기서 장부를 정리합니다. sold 는 깎지 않습니다 —
-  //    그것은 이 인물이 판 것의 기록이고, 나중에 기록 축이 여기 앉습니다.
-  //
-  //  두 가지를 다르게 다룹니다.
-  //
-  //  ① 이 단계가 요구한 물건 — 요구한 만큼만 먹습니다.
-  //     40 이 필요한데 45 를 팔았다면 5 는 다음 단계로 넘어가고,
-  //     그 5 는 화면에 바로 보입니다. 눈에 보이는 막대를 넘겨서 판 몫이니
-  //     가져가는 것이 맞습니다.
-  //
-  //  ② 아무도 요구하지 않은 물건 — 여기서 전부 얼립니다.
-  //     ★ 이게 없으면 예전에 판 것이 다음 단계를 미리 채워둡니다.
-  //       실제로 그랬습니다 — 구릿돌을 두 시간 팔다가 1단계를 고른 그 순간
-  //       2단계가 이미 25/25 로 차 있었고, 플레이어는 그것이 차오르는 것을
-  //       한 번도 못 봤습니다. 안 보이는 곳에서 차는 막대는 선택이 아닙니다.
-  const asked = new Set(stage.needs.map((n) => n.defId));
-  for (const defId of Object.keys(town.sold)) {
-    if (asked.has(defId)) continue;
-    town.spent[defId] = town.sold[defId] ?? 0;
-  }
-  for (const need of stage.needs) {
-    town.spent[need.defId] = (town.spent[need.defId] ?? 0) + need.count;
-  }
-  town.chosen.push(choiceId);
-  const chosen = choiceById(choiceId);
-  toast(world, `${stage.name}`, 'epic');
-  log(world, `마을이 자랐습니다 — ${stage.name}: ${chosen?.name ?? choiceId}`, 'epic');
-  for (const id of chosen?.recipes ?? []) {
-    log(world, `이제 ${recipeDef(id).name}\uc744(를) 만들 수 있습니다`, 'good');
-  }
-  for (const id of stage.opens.recipes) {
-    log(world, `이제 ${recipeDef(id).name}\uc744(를) 만들 수 있습니다`, 'good');
-  }
-  for (const id of stage.opens.stock) {
-    log(world, `상인이 ${itemDef(id).name}\uc744(를) 들여놓았습니다`, 'good');
-  }
+  advanceTown(world, choiceId);
   return true;
 }
 
