@@ -16,6 +16,7 @@ import { AXES, AXIS_ORDER, SKILLS, SKILL_ORDER } from '../content/skills';
 import { canTemper, craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
 import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
+import { durinSays } from '../core/npc';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
 import { axisSpent, budgetLeft, learnBlock, lessonsFor, skillTotal } from '../core/skillgain';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
@@ -228,10 +229,15 @@ function SkillPanel({ world }: { world: World }) {
             내가 고른 일이 아닙니다 — 안 고른 것이 자리를 먹으면 무엇에 몰지 고르는 뜻이 없어집니다.
           </p>
 
+          {/*
+            ★ 사실만 적습니다. 상한은 오늘 콘텐츠로는 안 물리므로(전체설계 6.2.2)
+              "무엇에 몰지가 이 캐릭터를 정합니다" 는 아직 참이 아닌 무게입니다.
+              총량이 있다는 것과 오른 것은 줄지 않는다는 것, 둘 다 지금도 참입니다.
+          */}
           {left > 0 ? (
             <p className="text-[11px] leading-snug text-parch-400">
-              남은 자리 <b className="tabular text-parch-200">{left.toFixed(1)}</b>. 한 번 채운 자리는{' '}
-              <b className="text-parch-300">돌려받지 못합니다</b> — 무엇에 몰지가 이 캐릭터를 정합니다.
+              이 세계에는 스킬 총량이 있습니다 — 남은 자리{' '}
+              <b className="tabular text-parch-200">{left.toFixed(1)}</b>. 오른 스킬은 줄지 않습니다.
             </p>
           ) : (
             <p className="text-[11px] leading-snug text-brass-300">
@@ -492,35 +498,6 @@ function PackPanel({ world, refresh }: { world: World; refresh: () => void }) {
 /* ===========================================================================
  *  대장간
  * ======================================================================== */
-
-/**
- *  대장장이 두린이 처음 하는 말.
- *
- *  ★ 이 게임은 무엇을 해야 하는지 알려주는 퀘스트가 없습니다. 그래서 적어도
- *    "어디로 가서 무엇을 누르는가" 한 줄은 사람 입으로 나와야 합니다.
- *    쇠가 없으면 캐 오라 하고, 쇠가 있으면 두드리라 합니다.
- */
-function durinSays(world: World): string {
-  const me = world.me;
-  const iron = countOf(me, 'iron-ore') + countOf(me, 'iron-ingot');
-  const pickaxe = me.backpack.some((s) => itemDef(s.defId).tool === 'pickaxe' && (s.durability ?? 0) > 0);
-
-  if (!pickaxe) {
-    return '곡괭이부터 챙기게. 마르카에게 하나 사서 가방에 넣어 두면 되네 — 손에 들 것도 없어.';
-  }
-  if (iron <= 0) {
-    return '남쪽 문으로 나가면 초록 숲일세. 반짝이는 광맥을 찾아 눌러만 두게 — 걸어가서 알아서 캘 테니. 그걸 여기 화로로 가져오게.';
-  }
-  if (stageReady(me.town)) {
-    return '자네, 마침 잘 왔네. 보여줄 것이 있어 — 아래를 보게.';
-  }
-  const stage = nextStage(me.town);
-  if (stage && countOf(me, 'iron-ingot') > 0) {
-    // ★ 무엇이 열리는지는 말하지 않습니다. 미리 알면 선택이 아니라 목표치입니다 (기획안 5.4)
-    return `쇠를 가져왔군. 화로 앞에서 녹이고 두드려 보게. ${stage.hint}`;
-  }
-  return '쇠를 가져왔군. 화로 앞에 서서 녹이고, 주괴가 모이면 두드려 보게. 몇 번은 망칠 걸세 — 그러면서 느는 거야.';
-}
 
 /* ---------------------------------------------------------------- 마을이 자란다 */
 
