@@ -138,6 +138,8 @@ function rebuild(data: SaveData): World | null {
   me.statTouched = me.statTouched ?? { str: 0, dex: 0, int: 0 };
   // 마을을 넣기 전의 기록에는 이 값이 없습니다 — 처음부터 자라기 시작합니다
   me.town = me.town ?? emptyTown();
+  // 시체를 넣기 전의 기록에는 이 값이 없습니다
+  me.corpse = me.corpse ?? null;
   const carried = migrateTown(me.town);
 
   const world: World = {

@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { MAX_STEP } from '../balance';
-import { clickWorld, drinkBestPotion, moveTo, stopAction, takeGround } from '../core/commands';
+import { clickWorld, drinkBestPotion, moveTo, stopAction, takeGround, takeMyPack } from '../core/commands';
 import { startMining, veinAt } from '../core/action';
 import { GATHER } from '../balance';
 import { step } from '../core/engine';
@@ -169,6 +169,17 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     event.currentTarget.setPointerCapture(event.pointerId);
     dragging.current = true;
     const point = pointFromEvent(event);
+
+    //  ★ 두고 온 짐이 먼저입니다. 그 위에 광맥이 있어도 짐을 먼저 집게 합니다
+    const pack = world.me.corpse;
+    if (
+      pack && pack.mapId === world.mapId &&
+      Math.hypot(pack.pos.x - point.x, pack.pos.y - point.y) <= 26
+    ) {
+      takeMyPack(world, point.x, point.y);
+      bump();
+      return;
+    }
 
     //  ★ 일부러 놓아둔 것은 밟아도 안 주워집니다. 눌러야 가져옵니다 —
     //    그래야 놓고 갈 수가 있습니다. 광맥·이동보다 먼저 봅니다.

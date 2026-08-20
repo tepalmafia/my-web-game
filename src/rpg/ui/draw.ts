@@ -21,6 +21,7 @@ import type { World } from '../types';
 import { computeView } from './view';
 import { drawMonster, drawPlayer } from './art/actors';
 import {
+  drawCorpse,
   drawFloaters,
   drawForge,
   drawForgeLabel,
@@ -140,6 +141,12 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
   }
   drawPools(ctx, world, range, art);
   drawLights(ctx, world, range, art);
+
+  //  ★ 두고 온 짐. 어디서 죽었는지 모르면 되찾을 수 없습니다
+  const corpse = world.me.corpse;
+  if (corpse && corpse.mapId === world.mapId) {
+    drawCorpse(ctx, world, corpse.pos.x, corpse.pos.y, corpse.until - world.time);
+  }
 
   for (const portal of world.map.def.portals) {
     // 조건이 걸린 문은 빛나지 않습니다 — 보이되 열려 보이지는 않게
@@ -313,6 +320,17 @@ function drawMinimap(ctx: CanvasRenderingContext2D, world: World, width: number)
   for (const portal of def.portals) {
     ctx.fillStyle = '#5eb8ff';
     ctx.fillRect(originX + portal.tx * scale - 2, originY + portal.ty * scale - 2, 4, 4);
+  }
+  //  ★ 두고 온 짐은 작은 지도에도 찍습니다. 넓은 광산에서 그림만으로는 못 찾습니다
+  const myPack = world.me.corpse;
+  if (myPack && myPack.mapId === world.mapId) {
+    ctx.fillStyle = '#f0c674';
+    ctx.fillRect(
+      originX + (myPack.pos.x / TILE) * scale - 2.5,
+      originY + (myPack.pos.y / TILE) * scale - 2.5,
+      5,
+      5,
+    );
   }
   for (const npc of def.npcs) {
     ctx.fillStyle = '#f2c14e';

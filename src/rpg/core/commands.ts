@@ -14,7 +14,7 @@ import { monsterDef } from '../content/monsters';
 import { nextStage, stageReady } from '../content/town';
 import { veinDef } from '../content/veins';
 import { cancelAction, startCraft, startMining, startRepair } from './action';
-import { revive } from './death';
+import { revive, takeCorpse } from './death';
 import { floater, log, toast } from './feedback';
 import { findStack, removeItem } from './inventory';
 import { pickUpAt, placeItem } from './loot';
@@ -294,6 +294,11 @@ export function chooseTownPath(world: World, choiceId: string): boolean {
 /** 가방에서 꺼내 발밑에 놓습니다 */
 export function dropItem(world: World, uid: number, count = 1): boolean {
   return placeItem(world, uid, count);
+}
+
+/** 쓰러진 자리에 두고 온 짐을 눌러서 되찾습니다 */
+export function takeMyPack(world: World, x: number, y: number): boolean {
+  return takeCorpse(world, x, y);
 }
 
 /** 바닥에 놓인 것을 눌러서 가져옵니다 */
