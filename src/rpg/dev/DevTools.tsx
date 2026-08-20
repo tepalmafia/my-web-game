@@ -31,6 +31,19 @@ import { autopilot, newPilot } from '../../../tools/autopilot';
 import type { Focus } from '../../../tools/autopilot';
 import type { ItemStack, MapId, SkillId, World } from '../types';
 
+/**
+ *  '물건' 단추가 주는 것.
+ *
+ *  ★ 여기 적힌 개수는 힘 상한에서 실제로 들 수 있어야 합니다.
+ *    철광석 50 은 힘 100(소지 상한 405)에서도 500 스톤이라 못 들었고,
+ *    그래서 누를 때마다 실패하는 단추였습니다. 시험이 그것을 지킵니다.
+ */
+export const GIVE_BUTTONS: ReadonlyArray<readonly [defId: string, count: number]> = [
+  ['iron-ingot', 100],
+  ['iron-ore', 30],
+  ['potion-heal', 20],
+];
+
 /** 봇과 빨리감기가 한 번에 굴리는 시간 — tools/sim.ts 와 같은 값입니다 */
 const DT = 1 / 20;
 /** 한 번에 굴릴 수 있는 최대 시간 (초). 실수로 fast(999999) 를 쳐서 탭이 굳는 것을 막습니다 */
@@ -353,15 +366,12 @@ export function DevTools({ world, refresh }: { world: World; refresh: () => void
         {note('str')}
 
         <Row title="물건">
-          <button type="button" className={BTN} onClick={() => run('give', () => api.give('iron-ingot', 100))}>
-            철 주괴 100
-          </button>
-          <button type="button" className={BTN} onClick={() => run('give', () => api.give('iron-ore', 50))}>
-            철광석 50
-          </button>
-          <button type="button" className={BTN} onClick={() => run('give', () => api.give('potion-heal', 20))}>
-            물약 20
-          </button>
+          {/* ★ 목록을 여기 다시 적지 않습니다 — 시험이 보는 것과 같은 표여야 합니다 */}
+          {GIVE_BUTTONS.map(([defId, count]) => (
+            <button key={defId} type="button" className={BTN} onClick={() => run('give', () => api.give(defId, count))}>
+              {itemDef(defId).name} {count}
+            </button>
+          ))}
         </Row>
         {note('give')}
 

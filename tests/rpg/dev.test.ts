@@ -15,7 +15,7 @@ import { mapDef } from '../../src/rpg/content/maps';
 import { createWorld } from '../../src/rpg/core/create';
 import { addItem, countOf, freeWeight } from '../../src/rpg/core/inventory';
 import { derive } from '../../src/rpg/core/stats';
-import { attach } from '../../src/rpg/dev/DevTools';
+import { GIVE_BUTTONS, attach } from '../../src/rpg/dev/DevTools';
 import type { World } from '../../src/rpg/types';
 
 type Api = {
@@ -134,6 +134,23 @@ describe('시험용 명령', () => {
     expect(world.me.backpack.length).toBe(LOOT.packSlots);
 
     expect(() => aden.give('rusty-sword', 1)).toThrow(new RegExp(`가방 칸이 다 찼습니다 \\(${LOOT.packSlots}/${LOOT.packSlots}\\)`));
+  });
+
+  it('★ 물건 단추는 전부 힘 상한에서 들 수 있는 개수다 — 늘 실패하는 단추는 도구가 아니다', () => {
+    for (const [defId, count] of GIVE_BUTTONS) {
+      const { world, aden } = open();
+      aden.str(STATS.max);
+      const free = freeWeight(world.me);
+      const need = itemDef(defId).weight * count;
+      expect(
+        need,
+        `'${itemDef(defId).name} ${count}' 단추는 힘 ${STATS.max} 에서도 못 듭니다 (필요 ${need} / 여유 ${Math.round(free)})`,
+      ).toBeLessThanOrEqual(free);
+      expect(() => aden.give(defId, count)).not.toThrow();
+      expect(countOf(world.me, defId)).toBeGreaterThanOrEqual(count);
+      detach?.();
+      detach = null;
+    }
   });
 
   it('str — 힘을 세우면 소지 상한이 따라 오른다', () => {
