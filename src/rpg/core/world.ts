@@ -15,7 +15,7 @@ import { stageOf } from '../content/town';
 import { monsterDef } from '../content/monsters';
 import { hash2, nextRandom, randInt } from './rng';
 import { veinDef } from '../content/veins';
-import type { MapDef, MapId, MapRuntime, Monster, Portal, Vec2, World } from '../types';
+import type { GroundItem, MapDef, MapId, MapRuntime, Monster, Portal, Vec2, World } from '../types';
 
 /* 타일 값 */
 export const FLOOR = 0;
@@ -395,6 +395,22 @@ export function populate(world: World): void {
   }
 }
 
+/** 지금 지역의 바닥을 보관함에 넣습니다 (빈 지역은 자리를 차지하지 않습니다) */
+function stashGround(world: World): void {
+  const alive = world.ground.filter((item) => item.until === null || world.time < item.until);
+  if (alive.length > 0) world.stash[world.mapId] = alive;
+  else delete world.stash[world.mapId];
+}
+
+/** 그 지역에 놓여 있던 것을 꺼냅니다. 그사이 수명이 다한 것은 버립니다 */
+function takeStashed(world: World, mapId: MapId): GroundItem[] {
+  const kept = (world.stash[mapId] ?? []).filter(
+    (item) => item.until === null || world.time < item.until,
+  );
+  delete world.stash[mapId];
+  return kept;
+}
+
 /**
  *  이 문을 지금 지날 수 있는가.
  *
@@ -416,6 +432,9 @@ export function portalProblem(world: World, portal: Portal): string | null {
 
 /** 다른 지역으로 옮겨갑니다 */
 export function enterMap(world: World, mapId: MapId, tx: number, ty: number): void {
+  //  ★ 떠나기 전에 바닥을 챙겨 둡니다. 예전에는 그냥 비웠고, 그래서 놓아둔 것이
+  //    지역을 옮기는 순간 사라졌습니다 — "돌아왔을 때 남아 있을까" 가 언제나 '아니오' 였습니다.
+  stashGround(world);
   world.mapId = mapId;
   world.map = buildMap(mapDef(mapId), stageOf(world.me.town));
   world.me.pos = { x: tileCenter(tx), y: tileCenter(ty) };
@@ -424,7 +443,7 @@ export function enterMap(world: World, mapId: MapId, tx: number, ty: number): vo
   world.me.action = null;
   world.path = [];
   world.pathTimer = 0;
-  world.ground = [];
+  world.ground = takeStashed(world, mapId);
   world.floaters = [];
   world.vfx = [];
   world.pendingNpc = null;

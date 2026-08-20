@@ -250,6 +250,15 @@ export const AI = {
 
 export const LOOT = {
   lifetime: 45 as Seconds,
+  /**
+   *  사람이 일부러 놓아둔 것이 밖에서 버티는 시간.
+   *
+   *  ★ 전리품(45초)과 다릅니다. 전리품은 "지금 주울래" 이고
+   *    놓아둔 것은 "두고 갔다가 돌아올래" 라서 왕복할 틈이 있어야 합니다.
+   *  ★ 마을처럼 안전한 곳에 놓은 것은 아예 안 사라집니다 (core/loot.ts).
+   *  ★ A1.5 의 시체도 이 값을 씁니다 — 같은 규칙을 두 번 만들지 않습니다.
+   */
+  placedLifetime: 600 as Seconds,
   pickupRange: 30,
   /** 가방 칸 수. 진짜 제약은 칸이 아니라 무게입니다 */
   packSlots: 30,

@@ -9,7 +9,7 @@ import { LOOT } from '../balance';
 import { itemDef } from '../content/items';
 import { monsterDef } from '../content/monsters';
 import { floater, log } from './feedback';
-import { addItem, canCarry, hasRoom } from './inventory';
+import { addItem, canCarry, findStack, hasRoom, removeItem } from './inventory';
 import { chance, nextRandom, randInt } from './rng';
 import type { GroundItem, Monster, World } from '../types';
 
@@ -37,9 +37,80 @@ export function dropLoot(world: World, monster: Monster): void {
         x: monster.pos.x + Math.cos(angle) * distance,
         y: monster.pos.y + Math.sin(angle) * distance,
       },
-      life: LOOT.lifetime,
+      until: world.time + LOOT.lifetime,
     });
   }
+}
+
+/**
+ *  가방에서 꺼내 바닥에 놓습니다.
+ *
+ *  ★ 이 게임에서 짐을 더는 길은 그동안 "마을에서 파는 것" 하나뿐이었습니다.
+ *    그래서 무게가 축인데도 버리는 판단이 없었습니다 (전체설계 3.2).
+ *
+ *  ★ 안전한 곳(마을)에 놓은 것은 안 사라집니다. 망치를 화로 옆에 두고 나가는 것이
+ *    이 축의 첫 번째 실제 선택인데, 45초 뒤에 없어지면 선택이 아니라 함정입니다.
+ *  ★ 밖에 놓은 것은 LOOT.placedLifetime 뒤에 사라집니다. 그래서 "두고 갔다가
+ *    돌아올까" 가 도박이 됩니다.
+ */
+export function placeItem(world: World, uid: number, count = 1): boolean {
+  const me = world.me;
+  const stack = findStack(me, uid);
+  if (!stack) return false;
+
+  const put = Math.min(count, stack.count);
+  if (put <= 0) return false;
+
+  const name = `${itemDef(stack.defId).name}${put > 1 ? ` ${put}개` : ''}`;
+  const safe = world.map.def.safe === true;
+
+  //  ★ 발밑에 그대로 놓습니다. 흩뿌리지 않습니다 — 일부러 놓은 것은
+  //    어디에 뒀는지 기억할 수 있어야 합니다.
+  world.ground.push({
+    id: world.nextId++,
+    defId: stack.defId,
+    count: put,
+    pos: { x: me.pos.x, y: me.pos.y + 6 },
+    until: safe ? null : world.time + LOOT.placedLifetime,
+    placed: true,
+  });
+  removeItem(me, uid, put);
+
+  log(
+    world,
+    safe
+      ? `${name}을(를) 내려놓았습니다 — 여기서는 없어지지 않습니다`
+      : `${name}을(를) 내려놓았습니다 — 두고 가면 언젠가 사라집니다`,
+    'normal',
+  );
+  return true;
+}
+
+/**
+ *  눌러서 가져옵니다.
+ *
+ *  ★ 일부러 놓은 것은 밟아도 저절로 안 주워집니다(pickUpNearby). 그래야 놓고
+ *    갈 수가 있습니다. 대신 가져갈 때는 이렇게 눌러서 가져갑니다.
+ */
+export function pickUpAt(world: World, x: number, y: number): boolean {
+  const me = world.me;
+  for (let i = world.ground.length - 1; i >= 0; i--) {
+    const item = world.ground[i]!;
+    if (Math.hypot(item.pos.x - x, item.pos.y - y) > LOOT.pickupRange) continue;
+    if (Math.hypot(item.pos.x - me.pos.x, item.pos.y - me.pos.y) > LOOT.pickupRange * 2) {
+      // 멀면 일단 걸어갑니다 — 도착해서 다시 누르면 됩니다
+      me.moveTarget = { x: item.pos.x, y: item.pos.y };
+      return false;
+    }
+    if (!canCarry(me, item.defId, item.count) || !addItem(world, item.defId, item.count)) {
+      warnCannotCarry(world, item);
+      return false;
+    }
+    log(world, `${itemDef(item.defId).name}${item.count > 1 ? ` ${item.count}개` : ''} 획득`, 'normal');
+    world.ground.splice(i, 1);
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -64,6 +135,8 @@ export function pickUpNearby(world: World): void {
 
   for (let i = world.ground.length - 1; i >= 0; i--) {
     const item = world.ground[i]!;
+    // ★ 일부러 놓은 것은 밟아도 안 줍습니다. 되집으면 놓을 수가 없습니다
+    if (item.placed) continue;
     const distance = Math.hypot(item.pos.x - me.pos.x, item.pos.y - me.pos.y);
     if (distance > LOOT.pickupRange) continue;
 

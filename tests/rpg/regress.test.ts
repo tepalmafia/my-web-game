@@ -198,7 +198,7 @@ function withGroundItem(defId: string, count = 1): World {
     defId,
     count,
     pos: { x: world.me.pos.x, y: world.me.pos.y },
-    life: 120,
+    until: world.time + 120,
   });
   return world;
 }

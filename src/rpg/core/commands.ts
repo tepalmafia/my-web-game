@@ -17,6 +17,7 @@ import { cancelAction, startCraft, startMining, startRepair } from './action';
 import { revive } from './death';
 import { floater, log, toast } from './feedback';
 import { findStack, removeItem } from './inventory';
+import { pickUpAt, placeItem } from './loot';
 import { advanceTown } from './town';
 import { derive } from './stats';
 import { tileCenter } from './world';
@@ -289,6 +290,16 @@ export function chooseTownPath(world: World, choiceId: string): boolean {
 /* ===========================================================================
  *  기타
  * ======================================================================== */
+
+/** 가방에서 꺼내 발밑에 놓습니다 */
+export function dropItem(world: World, uid: number, count = 1): boolean {
+  return placeItem(world, uid, count);
+}
+
+/** 바닥에 놓인 것을 눌러서 가져옵니다 */
+export function takeGround(world: World, x: number, y: number): boolean {
+  return pickUpAt(world, x, y);
+}
 
 export function useItem(world: World, uid: number): boolean {
   const stack = findStack(world.me, uid);
