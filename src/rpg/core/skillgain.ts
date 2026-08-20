@@ -12,7 +12,11 @@
  */
 
 import { GAIN, MAX_SKILL, SKILL_TOTAL_MAX, STATS, gainChance } from '../balance';
+import { MONSTERS } from '../content/monsters';
+import { RECIPE_ORDER, recipeDef } from '../content/recipes';
 import { AXES, SKILLS, SKILL_ORDER } from '../content/skills';
+import { openRecipes } from '../content/town';
+import { VEINS } from '../content/veins';
 import { floater, log, toast, vfx } from './feedback';
 import { chance, pick } from './rng';
 import type { AxisId, Character, Difficulty, SkillId, StatId, World } from '../types';
@@ -149,4 +153,59 @@ function tellBudgetSpent(world: World, skillId: SkillId): void {
 /** 지금 이 일을 하면 배울 것이 있는가 (화면에 표시용) */
 export function canLearnFrom(world: World, skillId: SkillId, difficulty: Difficulty): boolean {
   return gainChance(world.me.skills[skillId], difficulty) > 0;
+}
+
+/* ===========================================================================
+ *  무엇을 하면 배우는가 — 화면이 물어보는 것
+ *
+ *  ★ 판단은 전부 여기서 합니다. ui/ 는 받아서 그리기만 합니다 (4장 3번).
+ * ======================================================================== */
+
+/** 배울 거리 하나 — 광맥이든 제작법이든 몬스터든 같은 모양입니다 */
+export interface Lesson {
+  id: string;
+  name: string;
+  difficulty: Difficulty;
+  /** 한 번 시도에 오를 확률. 0 이면 여기서 배울 것이 없습니다 */
+  chance: number;
+}
+
+/**
+ *  이 스킬이 안 오르는 이유.
+ *
+ *  ★ 이유가 둘입니다. 둘을 갈라 말하지 않으면 조용한 실패입니다 (6장).
+ *    ceiling — 세상에 이보다 어려운 일이 없다
+ *    budget  — 어려운 일은 남았는데 예산이 없다
+ */
+export type LearnBlock = 'none' | 'maxed' | 'budget' | 'ceiling';
+
+/** 이 스킬을 올리는 일들 — 지금 할 수 있는 것만 (안 열린 제작법은 안 보여줍니다) */
+export function lessonsFor(world: World, skillId: SkillId): Lesson[] {
+  const skill = world.me.skills[skillId];
+  const row = (id: string, name: string, difficulty: Difficulty): Lesson => ({
+    id,
+    name,
+    difficulty,
+    chance: gainChance(skill, difficulty),
+  });
+
+  if (skillId === 'mining') {
+    return Object.values(VEINS).map((v) => row(v.id, v.name, v.difficulty));
+  }
+  if (skillId === 'blacksmithing') {
+    const open = openRecipes(world.me.town);
+    return RECIPE_ORDER.filter((id) => open.has(id)).map((id) => {
+      const def = recipeDef(id);
+      return row(def.id, def.name, def.difficulty);
+    });
+  }
+  return Object.values(MONSTERS).map((m) => row(m.id, m.name, m.difficulty));
+}
+
+/** 왜 안 오르는가 — 안 막혀 있으면 'none' 입니다 */
+export function learnBlock(world: World, skillId: SkillId): LearnBlock {
+  if (world.me.skills[skillId] >= MAX_SKILL) return 'maxed';
+  if (budgetBlocks(world.me, skillId)) return 'budget';
+  if (lessonsFor(world, skillId).every((lesson) => lesson.chance <= 0)) return 'ceiling';
+  return 'none';
 }

@@ -26,6 +26,9 @@ import type { ItemStack, World } from '../../src/rpg/types';
 /** 화로 앞에 서서, 재료를 넉넉히 들고 있는 판 */
 function atForge(): World {
   const world = createWorld('대장장이', 'smith');
+  // ★ 씨앗을 박습니다. createWorld 는 Date.now() 로 씨를 뿌리므로
+  //   박지 않으면 제작 성패가 매번 달라져 시험이 흔들립니다 (CLAUDE.md 7장)
+  world.seed = 20250819;
   const town = mapDef('town');
   enterMap(world, 'town', town.entryTx, town.entryTy);
   world.me.pos = { x: tileCenter(town.forge!.tx), y: tileCenter(town.forge!.ty) + 20 };

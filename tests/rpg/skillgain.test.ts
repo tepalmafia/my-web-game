@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { GAIN, MAX_SKILL, SKILL_TOTAL_MAX, STATS, gainChance } from '../../src/rpg/balance';
 import { createWorld } from '../../src/rpg/core/create';
-import { axisSpent, budgetBlocks, budgetLeft, skillTotal, trySkillGain } from '../../src/rpg/core/skillgain';
+import { axisSpent, budgetBlocks, budgetLeft, learnBlock, lessonsFor, skillTotal, trySkillGain } from '../../src/rpg/core/skillgain';
 import type { World } from '../../src/rpg/types';
 
 function fresh(seed: number): World {
@@ -224,5 +224,68 @@ describe('스킬 총합 상한', () => {
 
     for (let i = 0; i < 500; i++) trySkillGain(world, 'mining', 55);
     expect(world.me.skills.mining).toBeGreaterThan(50);
+  });
+});
+
+/* ===========================================================================
+ *  왜 안 오르는가 — 화면이 물어보는 것
+ *
+ *  ★ 이유가 둘입니다. 조용히 안 오르면 그것도 조용한 실패입니다 (6장).
+ * ======================================================================== */
+
+describe('배울 수 있는 것', () => {
+  it('스킬마다 배울 거리가 있다 — 광맥만이 아니다', () => {
+    const world = fresh(1);
+
+    expect(lessonsFor(world, 'mining').length).toBeGreaterThan(0);
+    expect(lessonsFor(world, 'blacksmithing').length).toBeGreaterThan(0);
+    expect(lessonsFor(world, 'swordsmanship').length).toBeGreaterThan(0);
+    expect(lessonsFor(world, 'defense').length).toBeGreaterThan(0);
+  });
+
+  it('★ 아직 안 열린 제작법은 안 보여준다 — 무엇이 열릴지 미리 알면 선택이 아니다', () => {
+    const world = fresh(2);
+    const shown = lessonsFor(world, 'blacksmithing').map((l) => l.id);
+
+    expect(shown).toContain('smelt-iron');
+    // 1단계 갈림길에서 고르는 것들 — 고르기 전에는 존재를 알려주지 않습니다
+    expect(shown).not.toContain('make-iron-longsword');
+    expect(shown).not.toContain('make-iron-mail');
+  });
+
+  it('난이도 천장에 막히면 ceiling 이라고 말한다', () => {
+    const world = fresh(3);
+    world.me.skills.mining = 0;
+    world.me.skills.blacksmithing = 0;
+    world.me.skills.swordsmanship = 85.2; // 동굴 거미(65)보다 20 이상 높습니다
+
+    expect(lessonsFor(world, 'swordsmanship').every((l) => l.chance <= 0)).toBe(true);
+    expect(learnBlock(world, 'swordsmanship')).toBe('ceiling');
+  });
+
+  it('★ 예산이 막는 것과 천장이 막는 것을 가른다', () => {
+    const world = spent(4);
+    // 검술 0 — 배울 거리는 얼마든지 남았는데 예산이 없습니다
+    expect(lessonsFor(world, 'swordsmanship').some((l) => l.chance > 0)).toBe(true);
+    expect(learnBlock(world, 'swordsmanship')).toBe('budget');
+  });
+
+  it('방어는 예산이 다 차도 budget 이 아니다 — 총합 밖이다', () => {
+    const world = spent(5);
+    world.me.skills.defense = 0;
+
+    expect(budgetLeft(world.me)).toBe(0);
+    expect(learnBlock(world, 'defense')).toBe('none');
+  });
+
+  it('100 이면 maxed 라고 말한다', () => {
+    const world = fresh(6);
+    world.me.skills.mining = MAX_SKILL;
+    expect(learnBlock(world, 'mining')).toBe('maxed');
+  });
+
+  it('막힌 데가 없으면 none', () => {
+    const world = fresh(7);
+    expect(learnBlock(world, 'mining')).toBe('none');
   });
 });
