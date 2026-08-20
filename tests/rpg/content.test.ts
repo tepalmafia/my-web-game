@@ -140,6 +140,8 @@ describe('지역', () => {
   it('문이 실재하는 지역의 걸어갈 수 있는 자리로 이어진다', () => {
     for (const map of Object.values(MAPS)) {
       for (const portal of map.portals) {
+        // 조건이 걸린 문은 아직 갈 곳이 없어도 됩니다 (tests/rpg/maps.test.ts 가 따로 지킵니다)
+        if (portal.needs) continue;
         const target = MAPS[portal.to];
         expect(target, `${map.id} 의 문이 없는 지역 ${portal.to} 로 갑니다`).toBeDefined();
         expect(

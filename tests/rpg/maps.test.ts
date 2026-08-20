@@ -13,9 +13,11 @@ import { describe, expect, it } from 'vitest';
 
 import { TILE } from '../../src/rpg/balance';
 import { MAPS, MAP_ORDER, mapDef } from '../../src/rpg/content/maps';
+import { ITEMS } from '../../src/rpg/content/items';
 import { MONSTERS } from '../../src/rpg/content/monsters';
 import { VEINS } from '../../src/rpg/content/veins';
 import { createWorld } from '../../src/rpg/core/create';
+import { step } from '../../src/rpg/core/engine';
 import { FLOOR, LIQUID, buildMap, enterMap, tileCenter } from '../../src/rpg/core/world';
 import { nextHop } from '../../tools/autopilot';
 import type { MapDef } from '../../src/rpg/types';
@@ -27,11 +29,44 @@ const SAFE_GAP = TILE * 3;
 
 const ALL: MapDef[] = Object.values(MAPS);
 
+/**
+ *  ★ 조건이 걸린 문은 아직 갈 곳이 없어도 됩니다.
+ *    아래층은 나중에 생기고(전체설계 8절 C), 그전까지 이 문은 열리지 않습니다.
+ *    아래 검사들은 "걸어 들어갈 수 있는 문" 만 봅니다.
+ */
+const isOpen = (portal: MapDef['portals'][number]) => !portal.needs;
+const openPortals = (def: MapDef) => def.portals.filter(isOpen);
+
 describe('문 대조', () => {
   it('문이 가리키는 지역이 실제로 있다', () => {
     for (const def of ALL) {
-      for (const portal of def.portals) {
+      for (const portal of openPortals(def)) {
         expect(() => mapDef(portal.to), `${def.id} → ${portal.to}`).not.toThrow();
+      }
+    }
+  });
+
+  it('★ 갈 곳이 없는 문은 반드시 조건이 걸려 있다', () => {
+    //  아래층이 아직 없어서 갈 곳 없는 문이 하나 있습니다. 그건 봉인돼 있어야 합니다.
+    //  ★ 이 검사가 없으면 언젠가 조건을 지우는 순간, 없는 지역으로 걸어 들어가
+    //    게임이 멈춥니다. 그것도 조용한 실패입니다.
+    for (const def of ALL) {
+      for (const portal of def.portals) {
+        if (MAPS[portal.to]) continue;
+        expect(
+          portal.needs,
+          `${def.id} 의 문이 없는 지역 ${portal.to} 로 가는데 조건이 없습니다`,
+        ).toBeDefined();
+      }
+    }
+  });
+
+  it('★ 조건이 걸린 문은 왜 못 가는지 말한다 — 다만 무엇이 부족한지는 말하지 않는다', () => {
+    for (const def of ALL) {
+      for (const portal of def.portals) {
+        if (!portal.needs) continue;
+        expect(portal.needs.closed.length, `${def.id} 의 ${portal.label}`).toBeGreaterThan(0);
+        expect(portal.label.length, '이름 없는 문은 궁금할 수 없습니다').toBeGreaterThan(0);
       }
     }
   });
@@ -39,7 +74,7 @@ describe('문 대조', () => {
   it('문은 양쪽에 있다 — 한쪽만 난 문은 없다', () => {
     const oneWay: string[] = [];
     for (const def of ALL) {
-      for (const portal of def.portals) {
+      for (const portal of openPortals(def)) {
         const back = mapDef(portal.to).portals.some((p) => p.to === def.id);
         if (!back) oneWay.push(`${def.id} → ${portal.to}`);
       }
@@ -62,6 +97,7 @@ describe('문 대조', () => {
         expect(portal.tx).toBeLessThan(def.width - 1);
         expect(portal.ty).toBeLessThan(def.height - 1);
 
+        if (!isOpen(portal)) continue;
         const target = mapDef(portal.to);
         expect(portal.toTx, `${def.id} → ${portal.to} 도착 칸`).toBeGreaterThan(0);
         expect(portal.toTy).toBeGreaterThan(0);
@@ -76,7 +112,7 @@ describe('★ 무한 왕복이 생길 수 없다', () => {
   it('도착 칸은 그 지도의 모든 문에서 3칸 넘게 떨어져 있다', () => {
     const tooClose: string[] = [];
     for (const def of ALL) {
-      for (const portal of def.portals) {
+      for (const portal of openPortals(def)) {
         const target = mapDef(portal.to);
         for (const other of target.portals) {
           const distance = Math.hypot(
@@ -97,7 +133,7 @@ describe('★ 무한 왕복이 생길 수 없다', () => {
 
   it('어느 도착 칸도 문에 곧바로 걸리지 않는다 — engine 이 쓰는 값 그대로', () => {
     for (const def of ALL) {
-      for (const portal of def.portals) {
+      for (const portal of openPortals(def)) {
         for (const other of mapDef(portal.to).portals) {
           const distance = Math.hypot(
             tileCenter(portal.toTx) - tileCenter(other.tx),
@@ -362,6 +398,86 @@ describe('마을이 자랄 때', () => {
           `${stage}단계: (${spot.tx},${spot.ty}) 가 벽에 먹혔습니다`,
         ).toBe(FLOOR);
       }
+    }
+  });
+});
+
+/* ===========================================================================
+ *  못 가는 문
+ *  ---------------------------------------------------------------------------
+ *  ★ 갈 수 있는 데가 전부 갈 수 있으면 궁금할 것이 없습니다.
+ *    막힌 문 하나가 "저기 뭐가 있지" 를 심습니다 (전체설계 3.3).
+ * ======================================================================== */
+
+describe('못 가는 문', () => {
+  const sealed = ALL.flatMap((def) =>
+    def.portals.filter((p) => p.needs).map((p) => ({ def, portal: p })),
+  );
+
+  it('막힌 문이 실제로 하나는 있다', () => {
+    expect(sealed.length, '막힌 문이 하나도 없습니다').toBeGreaterThan(0);
+  });
+
+  it('문 자리에 실제로 설 수 있다 — 못 가는 것과 못 닿는 것은 다르다', () => {
+    for (const { def, portal } of sealed) {
+      const world = createWorld('시험', 'miner');
+      enterMap(world, def.id, def.entryTx, def.entryTy);
+      expect(
+        world.map.tiles[portal.ty * def.width + portal.tx],
+        `${def.id} 의 ${portal.label} 이 벽 안에 있습니다`,
+      ).toBe(FLOOR);
+    }
+  });
+
+  it('★ 밟아도 넘어가지 않는다', () => {
+    for (const { def, portal } of sealed) {
+      const world = createWorld('시험', 'miner');
+      enterMap(world, def.id, def.entryTx, def.entryTy);
+      world.me.pos = { x: tileCenter(portal.tx), y: tileCenter(portal.ty) };
+      world.log.length = 0;
+
+      // engine 이 문을 보는 그 순간을 그대로 돌립니다
+      for (let i = 0; i < 5; i++) step(world, 1 / 30);
+
+      expect(world.mapId, `${portal.label} 로 넘어가 버렸습니다`).toBe(def.id);
+    }
+  });
+
+  it('★ 조용히 막지 않는다 — 다만 무엇이 부족한지는 말하지 않는다', () => {
+    const { def, portal } = sealed[0]!;
+    const world = createWorld('시험', 'miner');
+    enterMap(world, def.id, def.entryTx, def.entryTy);
+    world.me.pos = { x: tileCenter(portal.tx), y: tileCenter(portal.ty) };
+    world.log.length = 0;
+    step(world, 1 / 30);
+
+    const said = [world.toast?.text ?? '', ...world.log.map((l) => l.text)].join(' ');
+    expect(said, '아무 말도 없이 막았습니다').toContain(portal.needs!.closed);
+
+    // 재료 이름·개수를 흘리면 궁금할 이유가 사라집니다
+    for (const item of Object.values(ITEMS)) {
+      expect(said, `${item.name} 을(를) 흘립니다`).not.toContain(item.name);
+    }
+  });
+
+  it('같은 말을 매 프레임 되풀이하지 않는다', () => {
+    const { def, portal } = sealed[0]!;
+    const world = createWorld('시험', 'miner');
+    enterMap(world, def.id, def.entryTx, def.entryTy);
+    world.me.pos = { x: tileCenter(portal.tx), y: tileCenter(portal.ty) };
+    world.log.length = 0;
+
+    for (let i = 0; i < 60; i++) step(world, 1 / 30);   // 2초 동안 문 앞에 서 있기
+    const said = world.log.filter((l) => l.text.includes(portal.needs!.closed)).length;
+    expect(said, `2초 서 있었더니 ${said}번 말했습니다`).toBe(1);
+  });
+
+  it('봇은 막힌 문으로 길을 짜지 않는다', () => {
+    for (const { def, portal } of sealed) {
+      expect(
+        nextHop(def.id, portal.to),
+        `봇이 ${portal.label} 을(를) 지나가려 합니다 — 문 앞에서 멈춰 섭니다`,
+      ).toBeNull();
     }
   });
 });

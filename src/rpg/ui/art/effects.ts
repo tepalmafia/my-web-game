@@ -422,6 +422,70 @@ export function drawNpc(ctx: CanvasRenderingContext2D, world: World, npc: Npc): 
 
 /* --------------------------------------------------------------- 지역의 문 */
 
+/**
+ *  닫힌 문.
+ *
+ *  ★ 보이기는 해야 합니다 — 숨기면 궁금할 수 없습니다 (전체설계 3.4).
+ *    그래서 열린 문과 같은 자리에 같은 크기로 서 있되, 빛이 없습니다.
+ *    파란 마법진 대신 돌문과 쇠빗장을 그립니다. 가까이 가야 할 것처럼 보이지만
+ *    가면 안 열리는 것 — 그게 이 문이 하는 일의 전부입니다.
+ */
+export function drawSealedPortal(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  tx: number,
+  ty: number,
+  text: string,
+): void {
+  const x = tileCenter(tx);
+  const y = tileCenter(ty);
+  const stone = '#4a453f';
+
+  ctx.save();
+  // 문틀 — 바닥에서 솟은 돌 아치
+  ctx.fillStyle = darken(stone, 0.45);
+  ctx.beginPath();
+  ctx.moveTo(x - 17, y + 8);
+  ctx.lineTo(x - 15, y - 20);
+  ctx.arc(x, y - 20, 15, Math.PI, 0);
+  ctx.lineTo(x + 17, y + 8);
+  ctx.closePath();
+  ctx.fill();
+
+  // 문짝 — 안쪽은 더 어둡습니다
+  ctx.fillStyle = '#221d19';
+  ctx.beginPath();
+  ctx.moveTo(x - 11, y + 7);
+  ctx.lineTo(x - 10, y - 18);
+  ctx.arc(x, y - 18, 10, Math.PI, 0);
+  ctx.lineTo(x + 11, y + 7);
+  ctx.closePath();
+  ctx.fill();
+
+  // 쇠빗장 둘 — 닫혀 있다는 것이 한눈에 읽혀야 합니다
+  ctx.fillStyle = '#6b6259';
+  for (const dy of [-12, -2]) {
+    ctx.fillRect(x - 13, y + dy, 26, 3.5);
+    ctx.fillStyle = lighten('#6b6259', 0.2);
+    ctx.fillRect(x - 13, y + dy, 26, 1);
+    ctx.fillStyle = '#6b6259';
+  }
+  // 빗장을 잠근 자물쇠
+  ctx.fillStyle = '#8a7f70';
+  ctx.fillRect(x - 3, y - 9, 6, 6);
+
+  // 문틈으로 새는 아주 약한 냉기 — 뒤에 무언가 있다는 것만
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.06 + 0.04 * Math.sin(world.time * 1.1);
+  ctx.fillStyle = '#7fa8c8';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 6, 15, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  label(ctx, text, x, y - TILE * 1.1, '#9a8f82', 11);
+}
+
 export function drawPortal(
   ctx: CanvasRenderingContext2D,
   world: World,

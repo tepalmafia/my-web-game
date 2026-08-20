@@ -79,6 +79,9 @@ export function nextHop(from: MapId, to: MapId): MapId | null {
   while (queue.length > 0) {
     const here = queue.shift()!;
     for (const portal of mapDef(here).portals) {
+      // ★ 조건이 걸린 문은 봇이 못 지나갑니다. 여기서 안 걸러내면 봇이 그 문으로
+      //   가는 길을 짜고, 문 앞에서 영원히 서 있게 됩니다.
+      if (portal.needs) continue;
       if (seen.has(portal.to)) continue;
       seen.add(portal.to);
       cameFrom.set(portal.to, here);

@@ -275,6 +275,27 @@ export interface Monster {
 export type MapId = string;
 export type MapTheme = 'town' | 'forest' | 'cave' | 'river';
 
+/**
+ *  문에 걸린 조건.
+ *
+ *  ★ 이 칸이 있으면 그냥 걸어 들어갈 수 없습니다. 여는 조건은 core/world.ts 의
+ *    portalProblem() 이 판정합니다 — 문마다 판정을 흩어놓지 않습니다.
+ *
+ *  ★ 광산 아래층으로 내려가는 문들이 이 자리를 그대로 씁니다.
+ *    그때 여기에 칸이 늘고 portalProblem 에 갈래가 늡니다.
+ *    지금 만들어 둔 것(문이 조건을 들고 있고, 엔진이 한 함수에 물어보고,
+ *    화면이 닫힌 문을 다르게 그리고, 봇이 못 지나가는 것)은 그대로 쓰입니다.
+ */
+export interface PortalNeeds {
+  /**
+   *  아직 아무도 못 엽니다.
+   *  ★ 임시입니다 — 층이 생기면(전체설계 8절 C) 실제 조건으로 바뀝니다.
+   */
+  sealed?: true;
+  /** 못 열었을 때의 한 줄. ★ 무엇이 부족한지는 적지 않습니다 */
+  closed: string;
+}
+
 export interface Portal {
   tx: number;
   ty: number;
@@ -282,6 +303,8 @@ export interface Portal {
   toTx: number;
   toTy: number;
   label: string;
+  /** 없으면 그냥 걸어 들어갑니다 */
+  needs?: PortalNeeds;
 }
 
 /** 마을에 서 있는 사람들 */
