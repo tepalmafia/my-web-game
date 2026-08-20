@@ -15,6 +15,7 @@
 import { CRAFT, GATHER } from '../balance';
 import { itemDef } from '../content/items';
 import { recipeDef } from '../content/recipes';
+import { temperDef } from '../content/tempers';
 import { openRecipes } from '../content/town';
 import { veinDef } from '../content/veins';
 import { floater, log, toast } from './feedback';
@@ -24,6 +25,7 @@ import { hasTool, repairQuote, useTool } from './durability';
 import { trySkillGain } from './skillgain';
 import { itemName } from './stats';
 import type { Quality, Vein, World } from '../types';
+import type { TemperId } from '../balance';
 
 /* ===========================================================================
  *  성공 확률
@@ -133,7 +135,22 @@ export function startMining(world: World, veinId: number, repeat = true): boolea
   return true;
 }
 
-export function startCraft(world: World, recipeId: string, repeat = false): boolean {
+/**
+ *  이 제작법이 벼림을 고를 수 있는가.
+ *
+ *  ★ 제련은 못 고릅니다. 주괴는 재료지 물건이 아니고, 겹치는 물건이라
+ *    개별 값을 달 자리가 없습니다 (ItemStack 이 더미 단위입니다).
+ */
+export function canTemper(recipeId: string): boolean {
+  return itemDef(recipeDef(recipeId).makes).slot !== undefined;
+}
+
+export function startCraft(
+  world: World,
+  recipeId: string,
+  repeat = false,
+  temper?: TemperId,
+): boolean {
   const me = world.me;
   const recipe = recipeDef(recipeId);
 
@@ -160,7 +177,15 @@ export function startCraft(world: World, recipeId: string, repeat = false): bool
   }
 
   me.moveTarget = null;
-  me.action = { kind: 'craft', targetId: recipeId, remaining: recipe.seconds, total: recipe.seconds, repeat };
+  me.action = {
+    kind: 'craft',
+    targetId: recipeId,
+    remaining: recipe.seconds,
+    total: recipe.seconds,
+    repeat,
+    // 고를 수 없는 것에 실려온 값은 버립니다 — 조용히 붙어 있으면 안 됩니다
+    temper: canTemper(recipeId) ? temper : undefined,
+  };
   return true;
 }
 
@@ -211,7 +236,7 @@ export function tickAction(world: World, dt: number): void {
   me.action = null;
 
   if (action.kind === 'mine') finishMining(world, Number(action.targetId), action.repeat);
-  else if (action.kind === 'craft') finishCraft(world, action.targetId, action.repeat);
+  else if (action.kind === 'craft') finishCraft(world, action.targetId, action.repeat, action.temper);
   else finishRepair(world, Number(action.targetId));
 }
 
@@ -260,7 +285,7 @@ function finishMining(world: World, veinId: number, repeat: boolean): void {
 
 /* --------------------------------------------------------------- 만들기 */
 
-function finishCraft(world: World, recipeId: string, repeat: boolean): void {
+function finishCraft(world: World, recipeId: string, repeat: boolean, temper?: TemperId): void {
   const me = world.me;
   const recipe = recipeDef(recipeId);
 
@@ -296,7 +321,7 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
     // ★ 기록은 화면 맨 아래라 놓칩니다. 실패는 가운데에도 띄웁니다.
     toast(world, `${recipe.name} 실패\n${burnt} 를 잃었습니다`, 'bad');
     floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '실패', 'miss', 'craft-fail');
-    if (repeat) startCraft(world, recipeId, true);
+    if (repeat) startCraft(world, recipeId, true, temper);
     return;
   }
 
@@ -307,7 +332,7 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
   // ★ 여기서 addItem 의 답을 듣지 않던 것이 제일 나쁜 버그였습니다.
   //   가방 칸이 없으면 물건은 안 들어오는데 재료는 사라지고, 기록에는
   //   '완성' 이라고 적혔습니다. 못 넣으면 **재료를 전부 돌려줍니다.**
-  if (!addItem(world, recipe.makes, recipe.makesCount, { quality })) {
+  if (!addItem(world, recipe.makes, recipe.makesCount, { quality, temper })) {
     for (const need of recipe.needs) {
       if (!addItem(world, need.defId, need.count)) {
         log(world, `${itemDef(need.defId).name} 을(를) 돌려받지 못했습니다`, 'bad');
@@ -319,13 +344,17 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
   }
   me.tally[recipe.makes] = (me.tally[recipe.makes] ?? 0) + recipe.makesCount;
 
-  const madeName = quality === 'fine' ? `우수한 ${itemDef(recipe.makes).name}` : itemDef(recipe.makes).name;
-  log(world, `${madeName} 완성`, quality === 'fine' ? 'epic' : 'good');
+  const made = [
+    quality === 'fine' ? '우수한' : '',
+    temper ? temperDef(temper).prefix : '',
+    itemDef(recipe.makes).name,
+  ].filter(Boolean).join(' ');
+  log(world, `${made} 완성`, quality === 'fine' ? 'epic' : 'good');
   if (quality === 'fine') {
     toast(world, `우수한 물건\n${itemDef(recipe.makes).name}`, 'epic', 'craft-fine');
   }
 
-  if (repeat) startCraft(world, recipeId, true);
+  if (repeat) startCraft(world, recipeId, true, temper);
 }
 
 /* --------------------------------------------------------------- 고치기 */

@@ -5,13 +5,14 @@
  *    철광석 한 덩이가 10 스톤이라, 광맥 앞에서 "몇 덩이까지 지고 갈까"를 계속 재게 됩니다.
  */
 
-import { LOOT } from '../balance';
+import { LOOT, TEMPER } from '../balance';
 import { itemDef } from '../content/items';
 import { stageReady } from '../content/town';
 import { log, toast } from './feedback';
 import { derive, equipProblem, itemName, stackWeight, totalWeight } from './stats';
 import { townDidGrow } from './town';
 import type { Character, EquipSlot, ItemStack, Stones, World } from '../types';
+import type { TemperId } from '../balance';
 
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'helmet'];
 
@@ -61,10 +62,16 @@ export function hasRoom(me: Character, defId: string): boolean {
 }
 
 /** 새 물건에 붙일 내구도 (닳는 물건이면) */
-function freshDurability(defId: string, quality: 'normal' | 'fine' | undefined): Partial<ItemStack> {
+function freshDurability(
+  defId: string,
+  quality: 'normal' | 'fine' | undefined,
+  temper: TemperId | undefined,
+): Partial<ItemStack> {
   const def = itemDef(defId);
   if (!def.durability) return {};
-  const max = Math.round(def.durability * (quality === 'fine' ? 1.25 : 1));
+  // ★ 우수품과 벼림이 곱해집니다 — 축이 다르기 때문입니다
+  const tempered = temper ? TEMPER[temper].durability : 1;
+  const max = Math.round(def.durability * (quality === 'fine' ? 1.25 : 1) * tempered);
   return { durability: max, maxDurability: max };
 }
 
@@ -76,7 +83,12 @@ export function addItem(
   world: World,
   defId: string,
   count = 1,
-  options: { quality?: 'normal' | 'fine'; durability?: number; maxDurability?: number } = {},
+  options: {
+    quality?: 'normal' | 'fine';
+    temper?: TemperId;
+    durability?: number;
+    maxDurability?: number;
+  } = {},
 ): boolean {
   const me = world.me;
   const def = itemDef(defId);
@@ -97,7 +109,8 @@ export function addItem(
     defId,
     count,
     quality: options.quality,
-    ...freshDurability(defId, options.quality),
+    temper: options.temper,
+    ...freshDurability(defId, options.quality, options.temper),
     ...(options.durability !== undefined ? { durability: options.durability } : {}),
     ...(options.maxDurability !== undefined ? { maxDurability: options.maxDurability } : {}),
   });

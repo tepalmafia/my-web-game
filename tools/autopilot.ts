@@ -27,6 +27,7 @@ import { buyItem, countOf, equip, sellItem } from '../src/rpg/core/inventory';
 import { derive, wearRatio } from '../src/rpg/core/stats';
 import { tileCenter } from '../src/rpg/core/world';
 import type { ItemStack, MapId, World } from '../src/rpg/types';
+import type { TemperId } from '../src/rpg/balance';
 
 export type Goal = 'gather' | 'haul' | 'work' | 'hunt';
 
@@ -132,6 +133,21 @@ function travel(world: World, to: MapId, pilot: Pilot): boolean {
  *  ★ 난수를 쓰지 않습니다 — 같은 씨앗이면 같은 결과라야 실측이 값을 합니다.
  *    싸움에 무게를 두면 칼을, 아니면 갑옷을 고릅니다(오래 버티는 쪽).
  */
+/**
+ *  봇이 고르는 벼림.
+ *
+ *  ★ 난수를 쓰지 않습니다 — 같은 씨앗이면 같은 결과라야 실측이 값을 합니다.
+ *  ★ 이것은 ★측정 설정이지 판단이 아닙니다 (CLAUDE.md 8장 4번).
+ *    "단단하게로 돌리면 검 수명이 X마리" 는 수치라서 써도 되지만,
+ *    셋을 돌려보고 지표가 좋은 쪽을 "더 나은 벼림" 이라고 결론지으면 안 됩니다.
+ *    봇은 물약을 아끼지도 도망가지도 않아서 내구가 긴 쪽이 늘 유리하게 나옵니다.
+ */
+function botTemper(pilot: Pilot): TemperId {
+  if (pilot.focus === 'fight') return 'sharp';
+  if (pilot.focus === 'mine') return 'light';
+  return 'tough';
+}
+
 function chooseIfCalled(world: World, pilot: Pilot): void {
   if (!stageReady(world.me.town)) return;
   const stage = nextStage(world.me.town);
@@ -545,7 +561,7 @@ function doWork(world: World, pilot: Pilot): void {
   // 3) 손에 쥘 것이 없으면 그것부터 — 만들고, 없으면 사고
   if (weaponSpent(world)) {
     const recipe = buildableWeapon(world);
-    if (recipe && startCraft(world, recipe, false)) return;
+    if (recipe && startCraft(world, recipe, false, botTemper(pilot))) return;
     equipBest(world);
     if (weaponSpent(world) && !betterSpare(world)) {
       raiseGold(world, itemDef('rusty-sword').price);
@@ -561,11 +577,11 @@ function doWork(world: World, pilot: Pilot): void {
   const target = targetRecipe(world);
   if (target) {
     if (affordable(world, target) && worthMaking(world, target)) {
-      if (startCraft(world, target, false)) return;
+      if (startCraft(world, target, false, botTemper(pilot))) return;
     } else {
       // 목표를 만들고도 남을 만큼 쇠가 넉넉하면, 남는 것으로 손을 푼다
       const spare = lesserRecipe(world, target);
-      if (spare && startCraft(world, spare, false)) return;
+      if (spare && startCraft(world, spare, false, botTemper(pilot))) return;
     }
   }
 

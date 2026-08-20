@@ -10,10 +10,11 @@ import { useState } from 'react';
 import { LOOT, MAX_SKILL, STATS, gainChance } from '../balance';
 import { ITEMS, itemDef } from '../content/items';
 import { RECIPE_ORDER, recipeDef } from '../content/recipes';
+import { TEMPER_ORDER, temperDef } from '../content/tempers';
 import { forsaken, nextStage, openRecipes, openStock, progressOf, stageReady } from '../content/town';
 import { SKILLS, SKILL_ORDER } from '../content/skills';
 import { VEINS } from '../content/veins';
-import { craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
+import { canTemper, craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
 import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
@@ -610,19 +611,49 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
                     성공 <b className={chance > 0.6 ? 'text-[#8fcf8a]' : 'text-brass-300'}>{percent(chance)}</b>
                     {fine > 0 && <span className="text-brass-300"> · 우수 {percent(fine)}</span>}
                   </span>
-                  <div className="flex gap-1">
-                    <button type="button" disabled={!forge || !enough}
-                      onClick={() => { craft(world, id, false); refresh(); }}
-                      className="btn rounded-sm px-2 py-0.5 text-[11px]">
-                      한 번
-                    </button>
-                    <button type="button" disabled={!forge || !enough}
-                      onClick={() => { craft(world, id, true); refresh(); }}
-                      className="btn btn-brass rounded-sm px-2 py-0.5 text-[11px]">
-                      반복
-                    </button>
-                  </div>
+                  {!canTemper(id) && (
+                    <div className="flex gap-1">
+                      <button type="button" disabled={!forge || !enough}
+                        onClick={() => { craft(world, id, false); refresh(); }}
+                        className="btn rounded-sm px-2 py-0.5 text-[11px]">
+                        한 번
+                      </button>
+                      <button type="button" disabled={!forge || !enough}
+                        onClick={() => { craft(world, id, true); refresh(); }}
+                        className="btn btn-brass rounded-sm px-2 py-0.5 text-[11px]">
+                        반복
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {/*
+                  ★ 셋을 나란히 놓고, 얻는 것과 버리는 것을 함께 적습니다.
+                    무엇을 버리는지 모르고 고르는 것은 선택이 아니라 제비뽑기입니다.
+                  ★ 고르면 그 물건은 영영 그것입니다 — 수리해도 안 바뀝니다.
+                */}
+                {canTemper(id) && (
+                  <div className="mt-1.5 space-y-1">
+                    <div className="eyebrow text-[10px] text-parch-400/80">
+                      어떻게 벼릴까 — 고르면 이 물건은 영영 그것입니다
+                    </div>
+                    {TEMPER_ORDER.map((tid) => {
+                      const t = temperDef(tid);
+                      return (
+                        <button key={tid} type="button" disabled={!forge || !enough}
+                          onClick={() => { craft(world, id, false, tid); refresh(); }}
+                          className="btn flex w-full items-baseline justify-between rounded-sm px-2 py-1 text-left text-[11px]">
+                          <span className="font-bold text-parch-100">{t.name}</span>
+                          <span className="text-[10px]">
+                            <span className="text-[#8fcf8a]">{t.gives}</span>
+                            <span className="text-parch-400"> · </span>
+                            <span className="text-[#e88a86]">{t.givesUp}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}

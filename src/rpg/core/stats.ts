@@ -7,8 +7,9 @@
  *  레벨이 없으므로 모든 것이 두 곳에서만 나옵니다 — 능력치와 입고 있는 물건.
  */
 
-import { BARE_HANDS, COMBAT, CRAFT, REGEN, WEIGHT, carryCapacity, maxHpOf } from '../balance';
+import { BARE_HANDS, COMBAT, CRAFT, REGEN, TEMPER, WEIGHT, carryCapacity, maxHpOf } from '../balance';
 import { itemDef } from '../content/items';
+import { temperDef } from '../content/tempers';
 import type { Character, EquipSlot, ItemStack, Ratio, Stones } from '../types';
 
 export interface Stats {
@@ -41,9 +42,22 @@ function qualityMul(stack: ItemStack): number {
   return stack.quality === 'fine' ? 1 + CRAFT.fineBonus : 1;
 }
 
+/**
+ *  벼림이 이 물건에 거는 배율.
+ *
+ *  ★ 우수품과 곱해집니다. 축이 다르기 때문입니다 —
+ *    우수품은 운(전부 좋아짐), 벼림은 선택(하나 얻고 하나 버림).
+ *  ★ 벼림이 없으면 전부 1 입니다. 상점에서 산 물건과 옛 기록이 그렇습니다.
+ */
+export function temperMul(stack: ItemStack): { damage: number; durability: number; weight: number } {
+  if (!stack.temper) return { damage: 1, durability: 1, weight: 1 };
+  return TEMPER[stack.temper];
+}
+
 /** 물건 하나(겹친 개수 포함)의 무게 */
 export function stackWeight(stack: ItemStack): Stones {
-  return itemDef(stack.defId).weight * stack.count;
+  // ★ '가볍게' 벼린 것은 실제로 가볍습니다. 3.2(짐)와 맞물리는 자리입니다
+  return itemDef(stack.defId).weight * temperMul(stack).weight * stack.count;
 }
 
 /** 지금 지고 있는 총 무게 — 입은 것도 무게에 들어갑니다 */
@@ -74,7 +88,7 @@ export function derive(me: Character): Stats {
   let swing = BARE_HANDS.swing;
 
   if (weaponDef && weaponDef.minDamage !== undefined) {
-    const mul = qualityMul(weapon!);
+    const mul = qualityMul(weapon!) * temperMul(weapon!).damage;
     minDamage = weaponDef.minDamage * mul;
     maxDamage = (weaponDef.maxDamage ?? weaponDef.minDamage) * mul;
     swing = weaponDef.swing ?? BARE_HANDS.swing;
@@ -93,7 +107,10 @@ export function derive(me: Character): Stats {
     const worn = me.equipped[slot];
     if (!worn) continue;
     const def = itemDef(worn.defId);
-    if (def.defense) defense += def.defense * qualityMul(worn);
+    // ★ 갑옷에서는 damage 배율이 방어값에 걸립니다 — '날카롭게' 는 갑옷에서
+    //   '얇고 날카롭게' 가 아니라 '잘 막게' 로 읽힙니다. 얻는 것과 버리는 것의
+    //   모양은 같고, 무엇에 걸리느냐만 다릅니다.
+    if (def.defense) defense += def.defense * qualityMul(worn) * temperMul(worn).damage;
   }
 
   const carry = carryCapacity(me.str);
@@ -123,10 +140,17 @@ export function mitigation(defense: number): Ratio {
  *  물건 표기
  * ======================================================================== */
 
-/** 품질이 이름 앞에 붙습니다 — "우수한 철검" */
+/**
+ *  이름 앞에 품질과 벼림이 붙습니다 — "우수한 날 선 철검"
+ *  ★ 이름이 곧 그 물건이 무엇인지입니다. 가방에서 보고 알 수 있어야 합니다.
+ */
 export function itemName(stack: ItemStack): string {
   const def = itemDef(stack.defId);
-  return stack.quality === 'fine' ? `우수한 ${def.name}` : def.name;
+  const parts: string[] = [];
+  if (stack.quality === 'fine') parts.push('우수한');
+  if (stack.temper) parts.push(temperDef(stack.temper).prefix);
+  parts.push(def.name);
+  return parts.join(' ');
 }
 
 /** 남은 내구도 비율 (닳지 않는 물건이면 null) */

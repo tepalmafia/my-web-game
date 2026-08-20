@@ -22,6 +22,7 @@ import { advanceTown } from './town';
 import { derive } from './stats';
 import { tileCenter } from './world';
 import type { EquipSlot, World } from '../types';
+import type { TemperId } from '../balance';
 
 /* ===========================================================================
  *  걷기와 대상
@@ -313,8 +314,8 @@ export function useItem(world: World, uid: number): boolean {
   return false;
 }
 
-export function craft(world: World, recipeId: string, repeat = false): void {
-  startCraft(world, recipeId, repeat);
+export function craft(world: World, recipeId: string, repeat = false, temper?: TemperId): void {
+  startCraft(world, recipeId, repeat, temper);
 }
 
 export function repair(world: World, uid: number): void {
