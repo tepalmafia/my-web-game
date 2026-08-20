@@ -228,10 +228,15 @@ function SkillPanel({ world }: { world: World }) {
             내가 고른 일이 아닙니다 — 안 고른 것이 자리를 먹으면 무엇에 몰지 고르는 뜻이 없어집니다.
           </p>
 
+          {/*
+            ★ 사실만 적습니다. 상한은 오늘 콘텐츠로는 안 물리므로(전체설계 6.2.2)
+              "무엇에 몰지가 이 캐릭터를 정합니다" 는 아직 참이 아닌 무게입니다.
+              총량이 있다는 것과 오른 것은 줄지 않는다는 것, 둘 다 지금도 참입니다.
+          */}
           {left > 0 ? (
             <p className="text-[11px] leading-snug text-parch-400">
-              남은 자리 <b className="tabular text-parch-200">{left.toFixed(1)}</b>. 한 번 채운 자리는{' '}
-              <b className="text-parch-300">돌려받지 못합니다</b> — 무엇에 몰지가 이 캐릭터를 정합니다.
+              이 세계에는 스킬 총량이 있습니다 — 남은 자리{' '}
+              <b className="tabular text-parch-200">{left.toFixed(1)}</b>. 오른 스킬은 줄지 않습니다.
             </p>
           ) : (
             <p className="text-[11px] leading-snug text-brass-300">
