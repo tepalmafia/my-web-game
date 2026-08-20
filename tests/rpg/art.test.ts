@@ -18,10 +18,12 @@ import { MAPS, mapDef } from '../../src/rpg/content/maps';
 import { TOWN_STAGES } from '../../src/rpg/content/town';
 import { monsterDef } from '../../src/rpg/content/monsters';
 import { nearForge } from '../../src/rpg/core/action';
+import { swingAtMonster } from '../../src/rpg/core/combat';
 import { createWorld } from '../../src/rpg/core/create';
+import { step } from '../../src/rpg/core/engine';
 import { FORGE_GROWN } from '../../src/rpg/ui/art/effects';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
-import { WEAPON_LOOK, drawMonster } from '../../src/rpg/ui/art/actors';
+import { DEATH_SECONDS, WEAPON_LOOK, deathProgress, drawMonster } from '../../src/rpg/ui/art/actors';
 import { KIND_ICON } from '../../src/rpg/ui/Panels';
 import {
   drawForge,
@@ -99,15 +101,19 @@ function fakeCtx() {
   const texts: string[] = [];
   /** stroke() 를 부른 순간의 선 색 — 무엇을 어떤 색으로 그렸는지 보려고 */
   const strokes: string[] = [];
+  /** rotate() 에 넘긴 각 — 쓰러지는 몸이 실제로 기우는지 보려고 */
+  const rotates: number[] = [];
   const record = (name: string) => (...args: unknown[]) => {
     calls.push(name);
     if (name === 'fillText' || name === 'strokeText') texts.push(String(args[0]));
     if (name === 'stroke') strokes.push(String(ctx.strokeStyle));
+    if (name === 'rotate') rotates.push(Number(args[0]));
   };
   const ctx = {
     calls,
     texts,
     strokes,
+    rotates,
     canvas: {},
     globalAlpha: 1,
     globalCompositeOperation: 'source-over',
@@ -143,7 +149,12 @@ function fakeCtx() {
     createRadialGradient: () => ({ addColorStop: () => {} }),
     createLinearGradient: () => ({ addColorStop: () => {} }),
   };
-  return ctx as unknown as CanvasRenderingContext2D & { calls: string[]; texts: string[]; strokes: string[] };
+  return ctx as unknown as CanvasRenderingContext2D & {
+    calls: string[];
+    texts: string[];
+    strokes: string[];
+    rotates: number[];
+  };
 }
 
 describe('화로', () => {
@@ -584,5 +595,121 @@ describe('화로 크기', () => {
     }
     // 마을 성장 단계(2개 + 0단계)보다 짧으면 뒤쪽 단계에서 화로가 안 자랍니다
     expect(FORGE_GROWN.length).toBeGreaterThanOrEqual(TOWN_STAGES.length + 1);
+  });
+});
+
+/* ===========================================================================
+ *  죽으면 쓰러진다
+ *
+ *  ★ 예전에는 마지막 일격과 동시에 팝 하고 사라졌습니다. 죽인 손맛이
+ *    거기서 빠졌습니다. core 는 그대로입니다 — 죽는 즉시 'dead' 로 두고
+ *    respawnIn 을 세기 시작할 뿐이고, 그림이 그 셈에서 경과를 되읽습니다.
+ * ======================================================================== */
+
+/** 죽은 지 given 초 지난 몬스터 */
+function dyingFor(world: World, seconds: number, facing = 0): Monster {
+  const monster = monsterAt(world, 'wolf', 400, 400, 'dead');
+  monster.facing = facing;
+  monster.respawnIn = monsterDef('wolf').respawn - seconds;
+  return monster;
+}
+
+describe('죽으면 쓰러진다', () => {
+  it('살아 있으면 쓰러지지 않는다', () => {
+    const world = inForest();
+    const monster = monsterAt(world, 'wolf', 400, 400, 'idle');
+    expect(deathProgress(monster)).toBeNull();
+  });
+
+  it('죽은 직후부터 0.4초까지만 쓰러지는 중이다', () => {
+    const world = inForest();
+    expect(deathProgress(dyingFor(world, 0))).toBe(0);
+    expect(deathProgress(dyingFor(world, DEATH_SECONDS / 2))).toBeCloseTo(0.5, 5);
+    expect(deathProgress(dyingFor(world, DEATH_SECONDS)), '0.4초가 지나도 남아 있습니다').toBeNull();
+    expect(deathProgress(dyingFor(world, 10))).toBeNull();
+  });
+
+  it('★ 되살아남이 0.4초보다 훨씬 길다 — 겹치면 시체가 되살아나며 눕는다', () => {
+    for (const id of ['stray-dog', 'wolf', 'cave-bat', 'river-crab', 'cave-spider']) {
+      expect(monsterDef(id).respawn, `${id}`).toBeGreaterThan(DEATH_SECONDS * 10);
+    }
+  });
+
+  it('시간이 갈수록 더 눕는다', () => {
+    const world = inForest();
+    const tilt = (t: number) => {
+      const ctx = fakeCtx();
+      drawMonster(ctx, world, dyingFor(world, t));
+      return Math.abs(ctx.rotates[0] ?? 0);
+    };
+    const early = tilt(0.05);
+    const mid = tilt(0.2);
+    const late = tilt(0.35);
+
+    expect(early).toBeGreaterThan(0);
+    expect(mid).toBeGreaterThan(early);
+    expect(late).toBeGreaterThan(mid);
+    // 다 넘어가면 거의 눕습니다 (90도 근처)
+    expect(late).toBeGreaterThan(1.3);
+  });
+
+  it('맞은 쪽 반대로 눕는다 — 등 뒤로 넘어간다', () => {
+    const world = inForest();
+    const angle = (facing: number) => {
+      const ctx = fakeCtx();
+      drawMonster(ctx, world, dyingFor(world, 0.3, facing));
+      return ctx.rotates[0] ?? 0;
+    };
+    // 오른쪽(나)을 보고 죽으면 왼쪽으로, 왼쪽을 보고 죽으면 오른쪽으로
+    expect(angle(0)).toBeLessThan(0);
+    expect(angle(Math.PI)).toBeGreaterThan(0);
+  });
+
+  it('★ 진짜로 죽여도 0.4초 동안 그려진다 — 규칙이 도는 채로', () => {
+    // deathProgress 만 따로 보면 respawnIn 을 손으로 세운 것이라 실제와 다를 수 있습니다.
+    // 여기서는 core 로 정말 죽이고, 엔진을 돌리며 매 틱 되읽습니다.
+    const world = inForest();
+    const monster = monsterAt(world, 'wolf', 400, 400, 'idle');
+    monster.hp = 1;
+    world.me.pos = { x: 400, y: 400 };
+    world.me.skills.swordsmanship = 100;
+
+    for (let guard = 0; guard < 200 && monster.state !== 'dead'; guard++) {
+      swingAtMonster(world, monster);
+      step(world, 1 / 60);
+    }
+    expect(monster.state, '늑대가 죽지 않았습니다').toBe('dead');
+
+    const seen: number[] = [];
+    for (let i = 0; i < 60; i++) {
+      const at = deathProgress(monster);
+      if (at !== null) seen.push(at);
+      step(world, 1 / 60);
+    }
+
+    // 0.4초 = 24틱쯤 그려집니다
+    expect(seen.length, `쓰러지는 프레임이 ${seen.length}장뿐입니다`).toBeGreaterThan(18);
+    expect(seen.length).toBeLessThanOrEqual(25);
+    // 점점 더 눕습니다
+    for (let i = 1; i < seen.length; i++) expect(seen[i]!).toBeGreaterThan(seen[i - 1]!);
+    // 그리고 끝납니다 — 시체가 남지 않습니다
+    expect(deathProgress(monster)).toBeNull();
+  });
+
+  it('★ 죽은 뒤 번쩍임이 얼어붙지 않는다', () => {
+    // core 는 죽은 몬스터의 hitFlash 를 더 깎지 않습니다. 그대로 두면
+    // 마지막 일격의 값이 얼어붙어 매 프레임 다시 켜지고, 시체가 영원히 하얗게 탑니다.
+    const world = inForest();
+    const monster = monsterAt(world, 'wolf', 400, 400, 'chase');
+    monster.hitFlash = 0.12;
+    drawMonster(fakeCtx(), world, monster); // 맞은 순간을 그림이 기억합니다
+
+    monster.state = 'dead';
+    monster.respawnIn = monsterDef('wolf').respawn - 0.3;
+    world.time += 1; // 번쩍임(0.26초)이 진작 식었어야 할 만큼 지났습니다
+
+    const ctx = fakeCtx();
+    drawMonster(ctx, world, monster);
+    expect(ctx.strokes.filter((c) => c === '#fff2e0').length, '시체가 계속 번쩍입니다').toBe(0);
   });
 });

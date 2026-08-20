@@ -433,6 +433,28 @@ function drawArmedHand(ctx: CanvasRenderingContext2D, world: World): void {
  *  몬스터
  * ======================================================================== */
 
+/**
+ *  쓰러지는 데 걸리는 시간.
+ *
+ *  ★ 규칙이 아니라 그림입니다. core 는 몬스터를 죽는 즉시 'dead' 로 두고
+ *    respawnIn 을 세기 시작할 뿐이고, 이 파일이 그 셈에서 경과를 되읽습니다.
+ *    core 는 이 연출이 있는지 모릅니다 (monsterFlash 와 같은 방식).
+ */
+export const DEATH_SECONDS = 0.4;
+
+/**
+ *  쓰러지는 중이면 0~1, 아니면 null.
+ *
+ *  respawnIn 은 def.respawn 에서 줄어들므로 그 차가 죽은 뒤 지난 시간입니다.
+ *  가장 짧은 되살아남이 50초라 0.4초와 겹칠 일이 없습니다.
+ */
+export function deathProgress(monster: Monster): number | null {
+  if (monster.state !== 'dead') return null;
+  const elapsed = monsterDef(monster.defId).respawn - monster.respawnIn;
+  if (elapsed < 0 || elapsed >= DEATH_SECONDS) return null;
+  return elapsed / DEATH_SECONDS;
+}
+
 export function drawMonster(ctx: CanvasRenderingContext2D, world: World, monster: Monster): void {
   const def = monsterDef(monster.defId);
   const { x, y } = monster.pos;
@@ -441,33 +463,58 @@ export function drawMonster(ctx: CanvasRenderingContext2D, world: World, monster
   const idle = Math.sin(world.time * 2.2 + monster.id) * 0.5;
   const lunge = monster.swing > 0 ? Math.sin((1 - monster.swing / 0.3) * Math.PI) : 0;
 
-  drawShadow(ctx, x, y + size * 0.78, size * 0.82, 0.32);
+  const dying = deathProgress(monster);
+  const foot = y + size * 0.78;
+
+  if (dying === null) {
+    drawShadow(ctx, x, foot, size * 0.82, 0.32);
+  } else {
+    // 넘어가면서 그림자가 길어지고 옅어집니다 — 누운 것은 바닥을 더 넓게 덮습니다
+    const fall = fallEase(dying);
+    drawShadow(ctx, x, foot, size * 0.82 * (1 + fall * 0.45), 0.32 * (1 - dying) * (1 - fall * 0.3));
+  }
 
   ctx.save();
-  ctx.translate(x + Math.cos(monster.facing) * lunge * size * 0.25, y + idle);
+  if (dying !== null) {
+    const fall = fallEase(dying);
+    // 마지막 0.16초에 스러집니다. 그 전에는 또렷하게 쓰러지는 것이 보여야 합니다
+    ctx.globalAlpha = dying < 0.6 ? 1 : 1 - (dying - 0.6) / 0.4;
+    // 맞은 쪽 반대로 넘어갑니다 — 몬스터는 나를 보고 있으므로 등 뒤로 눕습니다
+    const away = Math.cos(monster.facing) >= 0 ? -1 : 1;
+    ctx.translate(x, foot);
+    ctx.rotate(away * fall * 1.48);
+    ctx.translate(-x, -foot);
+  }
+
+  ctx.translate(
+    x + Math.cos(monster.facing) * lunge * size * 0.25 - (dying === null ? 0 : Math.cos(monster.facing) * knock(dying) * size * 0.3),
+    y + (dying === null ? idle : 0),
+  );
 
   // 왼쪽을 볼 때는 좌우를 뒤집습니다
   if (Math.cos(monster.facing) < 0) ctx.scale(-1, 1);
 
   const tone = shades(def.color);
-  drawMonsterBody(ctx, def.shape, size, tone, walk, world.time + monster.id);
+  // 쓰러지는 동안에는 걷지도 숨쉬지도 않습니다
+  drawMonsterBody(ctx, def.shape, size, tone, dying === null ? walk : 0, dying === null ? world.time + monster.id : 0);
 
   ctx.restore();
 
-  // 맞은 순간의 번쩍임
+  // 맞은 순간의 번쩍임 — 마지막 일격의 번쩍임은 쓰러지는 몸과 함께 식습니다
   const flash = monsterFlash(monster, world.time);
   if (flash > 0) {
     ctx.save();
+    if (dying !== null) ctx.globalAlpha = 1 - dying;
     ctx.globalCompositeOperation = 'lighter';
     // 하얗게 터졌다가 붉은 잔광으로 식습니다 — 흰색만으로는 0.12초가 눈에 안 걸렸습니다
-    ctx.globalAlpha = flash * 0.95;
+    ctx.globalAlpha *= flash * 0.95;
     ctx.fillStyle = flash > 0.55 ? '#ffffff' : '#ff8a72';
     ctx.beginPath();
     ctx.arc(x, y, size * (1.0 + (1 - flash) * 0.35), 0, Math.PI * 2);
     ctx.fill();
     // 터지는 순간에만 테두리 한 겹 — 여러 마리가 엉켜 있을 때 누가 맞았는지 갈립니다
     if (flash > 0.55) {
-      ctx.globalAlpha = (flash - 0.55) / 0.45;
+      ctx.globalAlpha = (dying === null ? 1 : 1 - dying) * ((flash - 0.55) / 0.45);
       ctx.strokeStyle = '#fff2e0';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -485,11 +532,27 @@ export function drawMonster(ctx: CanvasRenderingContext2D, world: World, monster
  *    규칙 값을 늘리는 대신, 번쩍이 시작된 때를 그림 쪽에서 기억해 두고
  *    조금 더 길게 보여줍니다 — core 는 이 표가 있는지도 모릅니다.
  */
+/**
+ *  넘어가는 곡선 — 처음엔 천천히, 그다음 빨라지고, 바닥에 닿으면 멈춥니다.
+ *  등속으로 눕히면 쓰러지는 게 아니라 회전하는 것으로 보입니다.
+ */
+function fallEase(t: number): number {
+  const landed = Math.min(1, t / 0.72);
+  return landed * landed;
+}
+
+/** 맞은 순간 뒤로 밀리는 정도 — 앞쪽 0.25 동안만 */
+function knock(t: number): number {
+  return Math.min(1, t / 0.25);
+}
+
 const FLASH_SECONDS = 0.26;
 const flashStart = new Map<number, number>();
 
 function monsterFlash(monster: Monster, now: number): number {
-  if (monster.hitFlash > 0.11) flashStart.set(monster.id, now); // 방금 세워진 참
+  //  ★ 죽으면 core 가 hitFlash 를 더 깎지 않습니다. 그대로 두면 마지막 일격의
+  //    0.12 가 얼어붙어 매 프레임 다시 세워지고, 시체가 영원히 하얗게 탑니다.
+  if (monster.state !== 'dead' && monster.hitFlash > 0.11) flashStart.set(monster.id, now);
   const began = flashStart.get(monster.id);
   if (began === undefined) return 0;
   const elapsed = now - began;
