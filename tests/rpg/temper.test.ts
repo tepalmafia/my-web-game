@@ -13,10 +13,10 @@ import { CRAFT, TEMPER } from '../../src/rpg/balance';
 import { itemDef } from '../../src/rpg/content/items';
 import { RECIPE_ORDER, recipeDef } from '../../src/rpg/content/recipes';
 import { TEMPERS, TEMPER_ORDER, temperDef } from '../../src/rpg/content/tempers';
-import { canTemper, startCraft, startRepair, tickAction } from '../../src/rpg/core/action';
+import { canTemper, craftLoss, startCraft, startRepair, tickAction } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
 import { repairQuote } from '../../src/rpg/core/durability';
-import { addItem } from '../../src/rpg/core/inventory';
+import { addItem, countOf } from '../../src/rpg/core/inventory';
 import { derive, itemName, stackWeight } from '../../src/rpg/core/stats';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
 import { mapDef } from '../../src/rpg/content/maps';
@@ -178,5 +178,76 @@ describe('벼림 없는 물건도 그대로 돈다', () => {
     expect(worn.temper, '시작 장비에 벼림이 붙어 있습니다').toBeUndefined();
     expect(stackWeight(worn)).toBe(itemDef(worn.defId).weight);
     expect(itemName(worn)).toBe(itemDef(worn.defId).name);
+  });
+});
+
+/* ===========================================================================
+ *  실패하면 고른 것도 함께 날아간다
+ * ======================================================================== */
+
+describe('벼림을 고르고 실패하면', () => {
+  /** 거의 확실히 실패하는 판 */
+  function willFail(): World {
+    const world = atForge();
+    world.me.skills.blacksmithing = 1;
+    return world;
+  }
+
+  it('★ 재료도 잃고, 고른 것도 남지 않는다', () => {
+    const world = willFail();
+    const need = recipeDef('make-iron-sword').needs[0]!.count;
+
+    let failed = false;
+    for (let i = 0; i < 30 && !failed; i++) {
+      const swords = world.me.backpack.filter((s) => s.defId === 'iron-sword').length;
+      const ingots = countOf(world.me, 'iron-ingot');
+      if (ingots < need) break;
+
+      startCraft(world, 'make-iron-sword', false, 'sharp');
+      tickAction(world, recipeDef('make-iron-sword').seconds + 0.1);
+
+      if (world.me.backpack.filter((s) => s.defId === 'iron-sword').length === swords) {
+        failed = true;
+        // 재료는 전부 사라졌고
+        expect(ingots - countOf(world.me, 'iron-ingot')).toBe(need);
+        // 날 선 철검은 어디에도 없습니다 — 고른 것이 물건으로 남지 않았습니다
+        expect(world.me.backpack.some((s) => s.temper === 'sharp')).toBe(false);
+      }
+    }
+    expect(failed, '30번 시도했는데 한 번도 실패하지 않았습니다').toBe(true);
+  });
+
+  it('실패했다고 말할 때 무엇을 고른 것이었는지 함께 말한다', () => {
+    const world = willFail();
+    world.log.length = 0;
+
+    startCraft(world, 'make-iron-dagger', false, 'tough');
+    tickAction(world, recipeDef('make-iron-dagger').seconds + 0.1);
+
+    const said = [world.toast?.text ?? '', ...world.log.map((l) => l.text)].join(' ');
+    if (said.includes('실패')) {
+      expect(said, '무엇을 만들려다 실패했는지 안 밝힙니다').toContain(temperDef('tough').prefix);
+      expect(said, '전부 잃었다고 안 말합니다').toContain('전부');
+    }
+  });
+});
+
+describe('누르기 전에 보이는 값', () => {
+  it('★ 화면이 읽는 값이 재료 그대로다 — 절반이 아니다', () => {
+    for (const id of RECIPE_ORDER) {
+      const needs = recipeDef(id).needs;
+      const losses = craftLoss(id);
+      for (const need of needs) {
+        const loss = losses.find((l) => l.defId === need.defId)!;
+        expect(loss.lost, `${id} 의 ${need.defId}`).toBe(need.count);
+      }
+    }
+  });
+
+  it('철검은 16개를 전부 잃는다 — 예전에는 8개였다', () => {
+    const [loss] = craftLoss('make-iron-sword');
+    expect(loss!.defId).toBe('iron-ingot');
+    expect(loss!.lost).toBe(recipeDef('make-iron-sword').needs[0]!.count);
+    expect(loss!.lost).toBe(16);
   });
 });

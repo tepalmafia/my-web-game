@@ -598,13 +598,15 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
                   })}
                 </div>
                 {/* ★ 실패하면 무엇을 잃는지 누르기 전에 보여줍니다.
-                       "절반" 이 아닙니다 — 한 개짜리 제련은 전부 잃습니다 */}
+                       돌려받는 몫은 없습니다 — 재료가 전부 사라집니다 */}
                 <div className="mt-0.5 text-[11px] text-[#e88a86]">
                   실패하면{' '}
-                  {craftLoss(id)
-                    .map((l) => `${itemDef(l.defId).name} ${l.lost}/${l.of}`)
-                    .join(' · ')}{' '}
-                  이(가) 사라집니다
+                  <b>
+                    {craftLoss(id)
+                      .map((l) => `${itemDef(l.defId).name} ${l.lost}개`)
+                      .join(' · ')}
+                  </b>
+                  가 전부 사라집니다
                 </div>
                 <div className="mt-1 flex items-center justify-between">
                   <span className="tabular text-[11px] text-parch-400">

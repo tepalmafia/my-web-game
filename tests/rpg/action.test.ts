@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { CRAFT, DURABILITY, GATHER } from '../../src/rpg/balance';
+import { DURABILITY, GATHER } from '../../src/rpg/balance';
 import { itemDef } from '../../src/rpg/content/items';
 import { mapDef } from '../../src/rpg/content/maps';
 import { RECIPE_ORDER, recipeDef } from '../../src/rpg/content/recipes';
@@ -187,10 +187,8 @@ describe('만들기', () => {
 
       const madeOne = countOf(world.me, 'iron-sword') > beforeSwords;
       if (!madeOne) {
-        // 실패하면 절반만 잃습니다
-        expect(beforeIngots - countOf(world.me, 'iron-ingot')).toBe(
-          Math.ceil(need * CRAFT.failLoss),
-        );
+        // ★ 실패하면 재료를 전부 잃습니다. 돌려받는 몫은 없습니다
+        expect(beforeIngots - countOf(world.me, 'iron-ingot')).toBe(need);
         failed = true;
       }
     }
@@ -328,29 +326,46 @@ describe('시간', () => {
 /* ===========================================================================
  *  실패하면 무엇을 잃는가 — 화면이 말하는 것과 실제가 같아야 한다
  *  ---------------------------------------------------------------------------
- *  ★ 오랫동안 "재료 절반을 잃었습니다" 라고 띄웠는데, 돌려받는 몫은 내림입니다.
- *    한 개짜리 제작법(제련)은 절반이 아니라 ★전부를 잃습니다. 화면이 거짓말을 했습니다.
+ *  ★ 예전에는 절반이 돌아왔습니다. 이 게임의 감정 축이 제작인데 절반이 돌아오면
+ *    아프지 않습니다 (전체설계 9절). 그리고 돌려받는 몫이 내림이라
+ *    한 개짜리 제련만 전부를 잃고 있었습니다 — 같은 규칙이 물건마다 달랐습니다.
  * ======================================================================== */
 
 describe('제작 실패의 값', () => {
-  it('한 개짜리 제련은 절반이 아니라 전부를 잃는다', () => {
-    for (const id of ['smelt-iron', 'smelt-copper']) {
-      const [loss] = craftLoss(id);
-      expect(loss!.of, `${id} 의 재료가 하나가 아닙니다`).toBe(1);
-      expect(loss!.lost, `${id} 은 전부를 잃어야 합니다`).toBe(1);
+  it('★ 모든 제작법이 재료를 전부 잃는다 — 같은 규칙이 물건마다 다르지 않다', () => {
+    for (const id of RECIPE_ORDER) {
+      const losses = craftLoss(id);
+      expect(losses.length, `${id}`).toBe(recipeDef(id).needs.length);
+      for (const loss of losses) {
+        const need = recipeDef(id).needs.find((n) => n.defId === loss.defId)!;
+        expect(loss.lost, `${id} 의 ${loss.defId} 가 전부가 아닙니다`).toBe(need.count);
+      }
     }
   });
 
-  it('잃는 양이 실제로 사라지는 양과 같다', () => {
-    // craftLoss 는 화면이 읽는 값입니다. 실제 손실과 어긋나면 그것이 조용한 실패입니다.
-    for (const id of RECIPE_ORDER) {
-      for (const loss of craftLoss(id)) {
-        const need = recipeDef(id).needs.find((n) => n.defId === loss.defId)!;
-        const back = Math.floor(need.count * (1 - CRAFT.failLoss));
-        expect(loss.lost, `${id} 의 ${loss.defId}`).toBe(need.count - back);
-        expect(loss.lost).toBeGreaterThan(0);
+  it('화면이 읽는 값과 실제로 사라지는 양이 같다', () => {
+    // ★ craftLoss 는 누르기 전에 화면이 보여주는 값입니다.
+    //   실제와 어긋나면 그게 바로 조용한 실패입니다.
+    const world = atForge();
+    world.me.skills.blacksmithing = 1;      // 거의 확실히 실패하게
+    addItem(world, 'iron-ingot', 60);
+
+    const before = countOf(world.me, 'iron-ingot');
+    const need = recipeDef('make-iron-sword').needs[0]!.count;
+    let failedOnce = false;
+    for (let i = 0; i < 30 && !failedOnce; i++) {
+      const swords = countOf(world.me, 'iron-sword');
+      const ingots = countOf(world.me, 'iron-ingot');
+      if (ingots < need) break;
+      startCraft(world, 'make-iron-sword', false);
+      finish(world);
+      if (countOf(world.me, 'iron-sword') === swords) {
+        expect(ingots - countOf(world.me, 'iron-ingot')).toBe(craftLoss('make-iron-sword')[0]!.lost);
+        failedOnce = true;
       }
     }
+    expect(failedOnce, '30번 시도했는데 한 번도 실패하지 않았습니다').toBe(true);
+    expect(countOf(world.me, 'iron-ingot')).toBeLessThan(before);
   });
 
   it('구리 제련은 대장기술 30 에서 성공이 20% 아래다 — 태우는 값이 분명해야 한다', () => {
