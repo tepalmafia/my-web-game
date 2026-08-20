@@ -12,12 +12,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { GATHER } from '../../src/rpg/balance';
+import { GATHER, TILE } from '../../src/rpg/balance';
 import { ITEMS } from '../../src/rpg/content/items';
 import { MAPS, mapDef } from '../../src/rpg/content/maps';
+import { TOWN_STAGES } from '../../src/rpg/content/town';
 import { monsterDef } from '../../src/rpg/content/monsters';
 import { nearForge } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
+import { FORGE_GROWN } from '../../src/rpg/ui/art/effects';
 import { enterMap, tileCenter } from '../../src/rpg/core/world';
 import { WEAPON_LOOK, drawMonster } from '../../src/rpg/ui/art/actors';
 import { KIND_ICON } from '../../src/rpg/ui/Panels';
@@ -551,5 +553,36 @@ describe('맞은 몬스터가 번쩍인다', () => {
 
     expect(flashCalls(a)).toBeGreaterThan(0);
     expect(flashCalls(b), '안 맞은 놈이 번쩍입니다').toBe(0);
+  });
+});
+
+/* ===========================================================================
+ *  화로가 대장장이를 뚫고 올라가지 않는다
+ * ======================================================================== */
+
+describe('화로 크기', () => {
+  it('아무리 자라도 굴뚝이 두린의 발끝을 넘지 않는다', () => {
+    const town = mapDef('town');
+    const forge = town.forge!;
+    const durin = town.npcs!.find((n) => n.kind === 'smith')!;
+
+    // 화로 중심에서 두린이 서 있는 자리까지의 거리
+    const room = (forge.ty - durin.ty) * TILE;
+    // 굴뚝은 화로 중심에서 36px 위에서 시작합니다 (drawForge 의 fillRect y - 34..-36)
+    const CHIMNEY = 36;
+
+    const biggest = Math.max(...FORGE_GROWN);
+    expect(
+      CHIMNEY * biggest,
+      `화로가 ${biggest}배까지 자라면 굴뚝이 두린(${durin.tx},${durin.ty})을 뚫습니다`,
+    ).toBeLessThan(room);
+  });
+
+  it('단계마다 실제로 커진다 — 중간에 멈추지 않는다', () => {
+    for (let i = 1; i < FORGE_GROWN.length; i++) {
+      expect(FORGE_GROWN[i]!, `${i}단계`).toBeGreaterThan(FORGE_GROWN[i - 1]!);
+    }
+    // 마을 성장 단계(2개 + 0단계)보다 짧으면 뒤쪽 단계에서 화로가 안 자랍니다
+    expect(FORGE_GROWN.length).toBeGreaterThanOrEqual(TOWN_STAGES.length + 1);
   });
 });

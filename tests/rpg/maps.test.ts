@@ -16,7 +16,7 @@ import { MAPS, MAP_ORDER, mapDef } from '../../src/rpg/content/maps';
 import { MONSTERS } from '../../src/rpg/content/monsters';
 import { VEINS } from '../../src/rpg/content/veins';
 import { createWorld } from '../../src/rpg/core/create';
-import { FLOOR, LIQUID, enterMap, tileCenter } from '../../src/rpg/core/world';
+import { FLOOR, LIQUID, buildMap, enterMap, tileCenter } from '../../src/rpg/core/world';
 import { nextHop } from '../../tools/autopilot';
 import type { MapDef } from '../../src/rpg/types';
 
@@ -281,5 +281,87 @@ describe('봇 길찾기', () => {
   it('숲과 광산은 여전히 서로 바로 간다', () => {
     expect(nextHop('forest', 'mine')).toBe('mine');
     expect(nextHop('mine', 'forest')).toBe('forest');
+  });
+});
+
+/* ===========================================================================
+ *  마을이 자라도 마을이 막히지 않는다
+ *  ---------------------------------------------------------------------------
+ *  ★ 대장간은 단계마다 커집니다. 벽 덩어리가 커지는 것이라, 한 칸만 잘못 잡으면
+ *    두린에게 말을 걸 수 없게 되거나 문으로 가는 길이 끊깁니다.
+ *    그것도 조용한 실패입니다 — 화면에는 그냥 마을이 커 보일 뿐입니다.
+ * ======================================================================== */
+
+describe('마을이 자랄 때', () => {
+  const STAGES = [0, 1, 2, 3, 4];
+  const town = mapDef('town');
+
+  /** 입구에서 걸어서 닿을 수 있는 칸들 */
+  function reachableFrom(map: ReturnType<typeof buildMap>, tx: number, ty: number): Uint8Array {
+    const seen = new Uint8Array(town.width * town.height);
+    const queue = [ty * town.width + tx];
+    seen[queue[0]!] = 1;
+    for (let head = 0; head < queue.length; head++) {
+      const i = queue[head]!;
+      const x = i % town.width;
+      const y = Math.floor(i / town.width);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= town.width || ny >= town.height) continue;
+        const ni = ny * town.width + nx;
+        if (seen[ni] || map.tiles[ni] !== FLOOR) continue;
+        seen[ni] = 1;
+        queue.push(ni);
+      }
+    }
+    return seen;
+  }
+
+  it('어느 단계에서도 두린·상인·화로·문에 걸어갈 수 있다', () => {
+    for (const stage of STAGES) {
+      const map = buildMap(town, stage);
+      const seen = reachableFrom(map, town.entryTx, town.entryTy);
+
+      const musts: Array<{ tx: number; ty: number; what: string }> = [
+        { tx: town.forge!.tx, ty: town.forge!.ty, what: '화로' },
+        ...town.npcs!.map((n) => ({ tx: n.tx, ty: n.ty, what: n.name })),
+        ...town.portals.map((p) => ({ tx: p.tx, ty: p.ty, what: `${p.label} 문` })),
+      ];
+
+      for (const must of musts) {
+        // 그 칸에 서지 못해도, 옆 칸에서 말을 걸거나 문에 닿을 수 있으면 됩니다
+        const near = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+          const x = must.tx + dx!;
+          const y = must.ty + dy!;
+          if (x < 0 || y < 0 || x >= town.width || y >= town.height) return false;
+          return seen[y * town.width + x] === 1;
+        });
+        expect(near, `${stage}단계: ${must.what} 에 못 갑니다`).toBe(true);
+      }
+    }
+  });
+
+  it('대장간이 단계마다 실제로 커진다 — 3·4단계에서 멈추지 않는다', () => {
+    let previous = -1;
+    for (const stage of STAGES) {
+      const map = buildMap(town, stage);
+      const walls = map.tiles.reduce<number>((sum, t) => sum + (t === FLOOR ? 0 : 1), 0);
+      expect(walls, `${stage}단계가 ${stage - 1}단계보다 크지 않습니다`).toBeGreaterThan(previous);
+      previous = walls;
+    }
+  });
+
+  it('대장간이 두린과 화로를 덮지 않는다', () => {
+    // ★ 아래로 넓히다 y9 를 먹으면 두린이 벽 안에 갇힙니다
+    for (const stage of STAGES) {
+      const map = buildMap(town, stage);
+      for (const spot of [{ ...town.forge! }, ...town.npcs!]) {
+        expect(
+          map.tiles[spot.ty * town.width + spot.tx],
+          `${stage}단계: (${spot.tx},${spot.ty}) 가 벽에 먹혔습니다`,
+        ).toBe(FLOOR);
+      }
+    }
   });
 });
