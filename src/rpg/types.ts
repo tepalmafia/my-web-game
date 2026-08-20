@@ -45,6 +45,9 @@ export interface Vec2 {
  */
 export type SkillId = 'mining' | 'blacksmithing' | 'swordsmanship' | 'defense';
 
+/** 세 길 — 전체설계 6.1. 총합 상한은 이 축들 위에서 걸립니다 */
+export type AxisId = 'gather' | 'craft' | 'combat';
+
 /** 0.0 ~ 100.0 (소수 첫째 자리까지). 100 = 최고 경지 */
 export type SkillValue = number;
 

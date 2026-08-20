@@ -7,19 +7,19 @@
 
 import { useState } from 'react';
 
-import { LOOT, MAX_SKILL, STATS, gainChance } from '../balance';
+import { LOOT, MAX_SKILL, SKILL_TOTAL_MAX, STATS } from '../balance';
 import { ITEMS, itemDef } from '../content/items';
 import { RECIPE_ORDER, recipeDef } from '../content/recipes';
 import { TEMPER_ORDER, temperDef } from '../content/tempers';
 import { forsaken, nextStage, openRecipes, openStock, progressOf, stageReady } from '../content/town';
-import { SKILLS, SKILL_ORDER } from '../content/skills';
-import { VEINS } from '../content/veins';
+import { AXES, AXIS_ORDER, SKILLS, SKILL_ORDER } from '../content/skills';
 import { canTemper, craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
 import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
+import { axisSpent, budgetLeft, learnBlock, lessonsFor, skillTotal } from '../core/skillgain';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
-import type { EquipSlot, ItemKind, ItemStack, PanelId, World } from '../types';
+import type { EquipSlot, ItemKind, ItemStack, PanelId, SkillId, World } from '../types';
 import { duration, fmt, percent } from './format';
 
 /** 가방 줄 앞에 붙는 한 글자 — 종류를 늘리면 컴파일이 막습니다 */
@@ -98,10 +98,72 @@ export function SidePanel({
  *  실력
  * ======================================================================== */
 
+/**
+ *  왜 안 오르는지 한 줄로.
+ *
+ *  ★ 이유가 둘이라 둘을 갈라 말합니다. 판단은 core/skillgain 이 하고
+ *    여기는 그 답에 말을 붙이기만 합니다.
+ */
+const BLOCK_SAID: Record<string, { text: string; tone: string }> = {
+  maxed: { text: '경지에 올랐습니다', tone: 'text-brass-300' },
+  budget: { text: '예산을 다 썼습니다', tone: 'text-[#e88a86]' },
+  ceiling: { text: '여기서 배울 수 있는 것은 다 배웠습니다', tone: 'text-parch-400' },
+};
+
+function LessonList({ world, skillId }: { world: World; skillId: SkillId }) {
+  const lessons = lessonsFor(world, skillId);
+  const block = learnBlock(world, skillId);
+  const said = BLOCK_SAID[block];
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] font-bold" style={{ color: SKILLS[skillId].color }}>
+          {SKILLS[skillId].name} {world.me.skills[skillId].toFixed(1)}
+        </span>
+        {said && <span className={`text-[11px] ${said.tone}`}>{said.text}</span>}
+      </div>
+      <div className="mt-1 space-y-1">
+        {lessons.map((lesson) => {
+          // 예산이 막고 있으면 확률이 얼마든 안 오릅니다 — 그렇게 보여야 합니다
+          const dead = block === 'budget' || block === 'maxed' || lesson.chance <= 0;
+          return (
+            <div
+              key={lesson.id}
+              className="flex items-center justify-between rounded-sm border border-ink-600 bg-ink-700/60 px-2 py-1 text-[11px]"
+            >
+              <span className={dead ? 'text-parch-400/60' : 'text-parch-200'}>{lesson.name}</span>
+              <span className="tabular text-parch-400">난이도 {lesson.difficulty}</span>
+              <span
+                className={`tabular w-20 text-right font-bold ${
+                  dead ? 'text-parch-400/60' : lesson.chance > 0.2 ? 'text-[#8fcf8a]' : 'text-brass-300'
+                }`}
+              >
+                {block === 'budget'
+                  ? '자리 없음'
+                  : lesson.chance <= 0
+                    ? '배울 것 없음'
+                    // ★ 0% 로 반올림되면 "안 오른다" 로 읽힙니다. 오르긴 오릅니다
+                    : lesson.chance < 0.005
+                      ? '성장 <1%'
+                      : `성장 ${percent(lesson.chance)}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SkillPanel({ world }: { world: World }) {
   const me = world.me;
   const stats = derive(me);
   const total = me.str + me.dex + me.int;
+
+  const spent = skillTotal(me);
+  const left = budgetLeft(me);
+  const over = spent > SKILL_TOTAL_MAX;
 
   return (
     <div className="space-y-3">
@@ -111,10 +173,14 @@ function SkillPanel({ world }: { world: World }) {
           {SKILL_ORDER.map((id) => {
             const info = SKILLS[id];
             const value = me.skills[id];
+            const block = learnBlock(world, id);
             return (
               <div key={id}>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-xs font-bold" style={{ color: info.color }}>{info.name}</span>
+                  <span className="text-xs font-bold" style={{ color: info.color }}>
+                    {info.name}
+                    {!info.counts && <span className="ml-1 text-[10px] font-normal text-parch-400">총합 밖</span>}
+                  </span>
                   <span className="tabular text-xs font-bold text-parch-100">
                     {value.toFixed(1)}
                     <span className="text-parch-400"> / {MAX_SKILL}</span>
@@ -124,9 +190,55 @@ function SkillPanel({ world }: { world: World }) {
                   <div className="fill" style={{ width: `${value}%`, background: info.color }} />
                 </div>
                 <p className="mt-0.5 text-[11px] leading-snug text-parch-400">{info.desc}</p>
+                {block !== 'none' && BLOCK_SAID[block] && (
+                  <p className={`mt-0.5 text-[11px] leading-snug ${BLOCK_SAID[block]!.tone}`}>
+                    더 오르지 않습니다 — {BLOCK_SAID[block]!.text}
+                  </p>
+                )}
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="eyebrow mb-1.5">스킬 총합</h3>
+        <div className="space-y-1 text-xs">
+          {AXIS_ORDER.map((axis) => (
+            <div key={axis} className="flex items-baseline justify-between border-b border-ink-600/70 py-1">
+              <span className="text-parch-300">
+                {AXES[axis].name}{' '}
+                <span className="text-[10px] text-parch-400">
+                  {AXES[axis].skills.filter((id) => SKILLS[id].counts).map((id) => SKILLS[id].name).join(' · ')}
+                </span>
+              </span>
+              <span className="tabular font-semibold text-parch-100">{axisSpent(me, axis).toFixed(1)}</span>
+            </div>
+          ))}
+          <div className="flex items-baseline justify-between pt-1">
+            <span className="text-parch-400">총합</span>
+            <span className={`tabular font-bold ${left <= 0 ? 'text-brass-300' : 'text-parch-200'}`}>
+              {spent.toFixed(1)} / {SKILL_TOTAL_MAX}
+            </span>
+          </div>
+
+          {/*  ★ 방어만 예외인 이유를 밝힙니다. 이유 없이 예외면 그냥 이상한 규칙입니다  */}
+          <p className="text-[11px] leading-snug text-parch-400">
+            <b className="text-parch-300">방어는 총합에 들어가지 않습니다.</b> 방어는 맞아봐야 아는 것이라
+            내가 고른 일이 아닙니다 — 안 고른 것이 자리를 먹으면 무엇에 몰지 고르는 뜻이 없어집니다.
+          </p>
+
+          {left > 0 ? (
+            <p className="text-[11px] leading-snug text-parch-400">
+              남은 자리 <b className="tabular text-parch-200">{left.toFixed(1)}</b>. 한 번 채운 자리는{' '}
+              <b className="text-parch-300">돌려받지 못합니다</b> — 무엇에 몰지가 이 캐릭터를 정합니다.
+            </p>
+          ) : (
+            <p className="text-[11px] leading-snug text-brass-300">
+              총합이 꽉 찼습니다{over && ` (${spent.toFixed(1)})`}. 이제 채광 · 대장기술 · 검술은 아무것도 오르지 않습니다.
+              {over && ' 넘긴 것은 줄지 않습니다.'}
+            </p>
+          )}
         </div>
       </section>
 
@@ -135,19 +247,10 @@ function SkillPanel({ world }: { world: World }) {
         <p className="mb-1.5 text-[11px] text-parch-400">
           지금 실력보다 <b className="text-parch-200">한참 쉬운 일에서는 아무것도 배우지 못합니다.</b>
         </p>
-        <div className="space-y-1">
-          {Object.values(VEINS).map((vein) => {
-            const chance = gainChance(me.skills.mining, vein.difficulty);
-            return (
-              <div key={vein.id} className="flex items-center justify-between rounded-sm border border-ink-600 bg-ink-700/60 px-2 py-1 text-[11px]">
-                <span className="text-parch-200">{vein.name}</span>
-                <span className="tabular text-parch-400">난이도 {vein.difficulty}</span>
-                <span className={`tabular w-20 text-right font-bold ${chance <= 0 ? 'text-parch-400/60' : chance > 0.2 ? 'text-[#8fcf8a]' : 'text-brass-300'}`}>
-                  {chance <= 0 ? '배울 것 없음' : `성장 ${percent(chance)}`}
-                </span>
-              </div>
-            );
-          })}
+        <div className="space-y-2.5">
+          {SKILL_ORDER.map((id) => (
+            <LessonList key={id} world={world} skillId={id} />
+          ))}
         </div>
       </section>
 
