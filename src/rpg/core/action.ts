@@ -55,20 +55,17 @@ export function craftFineChance(world: World, recipeId: string): number {
 }
 
 /**
- *  실패하면 무엇을 얼마나 잃는가.
+ *  실패하면 무엇을 얼마나 잃는가 — ★전부입니다.
  *
- *  ★ "재료 절반" 이라고만 말하면 거짓말이 됩니다. 돌려받는 몫은 내림이라
- *    한 개짜리 제작법(제련)은 절반이 아니라 ★전부를 잃습니다.
- *    구리 제련은 난이도 45 라 대장기술 30 이면 성공이 18% 입니다 —
- *    무엇을 태우는지 모르고 누르면 안 됩니다.
- *
- *  ★ 잃는 양의 계산은 여기 한 곳에만 둡니다. 화면이 따로 세면 언젠가 어긋납니다.
+ *  ★ 돌려받는 몫은 없습니다. 이 게임의 감정 축이 제작인데 절반이 돌아오면
+ *    아프지 않습니다 (전체설계 9절).
+ *  ★ 그래도 이 함수는 남깁니다. 화면이 "재료 = 잃는 것" 을 스스로 셈하면,
+ *    언젠가 규칙이 바뀔 때 화면만 옛말을 하게 됩니다.
  */
-export function craftLoss(recipeId: string): Array<{ defId: string; lost: number; of: number }> {
+export function craftLoss(recipeId: string): Array<{ defId: string; lost: number }> {
   return recipeDef(recipeId).needs.map((need) => ({
     defId: need.defId,
-    lost: need.count - Math.floor(need.count * (1 - CRAFT.failLoss)),
-    of: need.count,
+    lost: need.count,
   }));
 }
 
@@ -307,19 +304,16 @@ function finishCraft(world: World, recipeId: string, repeat: boolean, temper?: T
   trySkillGain(world, 'blacksmithing', recipe.difficulty);
 
   if (!chance(world, successChance(me.skills.blacksmithing, recipe.difficulty, CRAFT))) {
-    for (const need of recipe.needs) {
-      const back = Math.floor(need.count * (1 - CRAFT.failLoss));
-      if (back > 0 && !addItem(world, need.defId, back)) {
-        log(world, `${itemDef(need.defId).name} ${back}개를 돌려받지 못했습니다 — 가방이 찼습니다`, 'bad');
-      }
-    }
-    // ★ "절반" 이라고 뭉뚱그리지 않습니다. 한 개짜리 제련은 전부를 잃습니다.
+    //  ★ 돌려주지 않습니다. 재료는 위에서 이미 consume 되었고 그대로 사라집니다.
     const burnt = craftLoss(recipeId)
       .map((l) => `${itemDef(l.defId).name} ${l.lost}개`)
       .join(' · ');
-    log(world, `${recipe.name} 만들기에 실패했습니다 — ${burnt} 를 잃었습니다`, 'bad');
+    //  ★ 고른 벼림도 함께 날아갑니다. 이름을 대야 그것이 분명해집니다 —
+    //    "철검 실패" 와 "날 선 철검 실패" 는 잃은 것이 다릅니다.
+    const what = temper ? `${temperDef(temper).prefix} ${recipe.name}` : recipe.name;
+    log(world, `${what} 만들기에 실패했습니다 — ${burnt}를 전부 잃었습니다`, 'bad');
     // ★ 기록은 화면 맨 아래라 놓칩니다. 실패는 가운데에도 띄웁니다.
-    toast(world, `${recipe.name} 실패\n${burnt} 를 잃었습니다`, 'bad');
+    toast(world, `${what} 실패\n${burnt}를 전부 잃었습니다`, 'bad');
     floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '실패', 'miss', 'craft-fail');
     if (repeat) startCraft(world, recipeId, true, temper);
     return;
