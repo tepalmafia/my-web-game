@@ -16,7 +16,7 @@ import { monsterDef } from '../content/monsters';
 import { veinDef } from '../content/veins';
 import { currentTarget, distanceTo, monsterStrike, swingAtMonster, tickRespawn } from './combat';
 import { cancelAction, tickAction } from './action';
-import { die } from './death';
+import { decayCorpse, die } from './death';
 import { log, toast, vfx } from './feedback';
 import { pickUpNearby } from './loot';
 import { nextRandom, randRange } from './rng';
@@ -51,6 +51,8 @@ export function step(world: World, rawDt: number): void {
   checkNpc(world);
   decay(world, dt);
   followCamera(world, dt);
+
+  decayCorpse(world);
 
   if (me.hp <= 0 && !me.dead) die(world);
 }

@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { itemDef } from '../content/items';
+import { mapDef } from '../content/maps';
 import { SKILLS, SKILL_ORDER } from '../content/skills';
 import { drinkBestPotion, potionCount, respawnInTown, stopAction } from '../core/commands';
 import { derive } from '../core/stats';
@@ -217,6 +218,20 @@ export function DeathOverlay({ world, refresh }: { world: World; refresh: () => 
       <div className="text-center text-sm text-parch-200">
         골드의 10%를 잃었습니다.
         <br />
+        {/* ★ 가장 크게 보이는 자리에서 잃은 것을 다 말해야 합니다.
+               기록에만 적어두면 못 보고 지나갑니다 (CLAUDE.md 6장) */}
+        {world.me.corpse && (
+          <>
+            <span className="text-[#e88a86]">
+              가방을 {mapDef(world.me.corpse.mapId).name}에 떨어뜨렸습니다.
+            </span>
+            <br />
+            <span className="text-parch-400">
+              곡괭이와 망치, 입은 것은 그대로입니다. 두고 온 짐은 한참 뒤에 사라집니다.
+            </span>
+            <br />
+          </>
+        )}
         <span className="text-parch-400">배운 것은 그대로입니다.</span>
       </div>
       <button

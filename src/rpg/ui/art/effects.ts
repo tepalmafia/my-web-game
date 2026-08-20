@@ -32,7 +32,7 @@ import { veinDef } from '../../content/veins';
 import { stageOf } from '../../content/town';
 import { nearForge } from '../../core/action';
 import { tileCenter } from '../../core/world';
-import type { GroundItem, ItemKind, Monster, Npc, NpcKind, Vein, World } from '../../types';
+import type { GroundItem, ItemKind, Monster, Npc, NpcKind, Seconds, Vein, World } from '../../types';
 import { LIGHT, alpha, darken, lighten } from './palette';
 import { drawShadow } from './actors';
 
@@ -486,6 +486,67 @@ export function drawSealedPortal(
   ctx.restore();
 
   label(ctx, text, x, y - TILE * 1.1, '#9a8f82', 11);
+}
+
+/**
+ *  쓰러진 자리에 두고 온 짐.
+ *
+ *  ★ 어디서 죽었는지 모르면 되찾을 수 없습니다. 그래서 둘 다 합니다 —
+ *    ①물건 자체를 눈에 띄게 그리고, ②작은 지도에도 표시합니다(ui/draw.ts).
+ *    바닥에 떨어진 전리품과 헷갈리면 안 되므로, 크게 그리고 이름을 답니다.
+ *  ★ 사라질 때가 가까우면 깜빡입니다.
+ */
+export function drawCorpse(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  x: number,
+  y: number,
+  left: Seconds,
+): void {
+  const pulse = 0.5 + 0.5 * Math.sin(world.time * 2.2);
+  const fading = left < 60 ? 0.4 + 0.6 * Math.abs(Math.sin(world.time * 5)) : 1;
+
+  ctx.save();
+  ctx.globalAlpha = fading;
+
+  drawShadow(ctx, x, y + 7, 15);
+
+  // 바닥에 번지는 빛 — 멀리서도 "저기 뭐가 있다" 가 보여야 합니다
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = (0.16 + pulse * 0.16) * fading;
+  ctx.fillStyle = '#e8b45c';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 4, 22, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 묶어놓은 봇짐
+  ctx.fillStyle = '#6b5335';
+  ctx.beginPath();
+  ctx.ellipse(x, y - 1, 12, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8a6b44';
+  ctx.beginPath();
+  ctx.ellipse(x - 2, y - 4, 8, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 묶은 끈
+  ctx.strokeStyle = '#3d2f1d';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(x - 11, y - 1);
+  ctx.lineTo(x + 11, y - 1);
+  ctx.stroke();
+  // 삐져나온 자루
+  ctx.strokeStyle = '#9a8058';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y - 6);
+  ctx.lineTo(x + 13, y - 14);
+  ctx.stroke();
+
+  ctx.restore();
+  label(ctx, '내 짐', x, y - TILE * 0.72, '#f0c674', 11);
 }
 
 export function drawPortal(

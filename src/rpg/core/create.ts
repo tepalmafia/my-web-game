@@ -93,6 +93,7 @@ export function createWorld(name: string, templateId: string): World {
     deaths: 0,
     tally: {},
     town: emptyTown(),
+    corpse: null,
   };
 
   const world: World = {
