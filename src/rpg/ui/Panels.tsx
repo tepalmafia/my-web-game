@@ -16,6 +16,7 @@ import { AXES, AXIS_ORDER, SKILLS, SKILL_ORDER } from '../content/skills';
 import { canTemper, craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
 import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
+import { durinSays } from '../core/npc';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
 import { axisSpent, budgetLeft, learnBlock, lessonsFor, skillTotal } from '../core/skillgain';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
@@ -497,35 +498,6 @@ function PackPanel({ world, refresh }: { world: World; refresh: () => void }) {
 /* ===========================================================================
  *  대장간
  * ======================================================================== */
-
-/**
- *  대장장이 두린이 처음 하는 말.
- *
- *  ★ 이 게임은 무엇을 해야 하는지 알려주는 퀘스트가 없습니다. 그래서 적어도
- *    "어디로 가서 무엇을 누르는가" 한 줄은 사람 입으로 나와야 합니다.
- *    쇠가 없으면 캐 오라 하고, 쇠가 있으면 두드리라 합니다.
- */
-function durinSays(world: World): string {
-  const me = world.me;
-  const iron = countOf(me, 'iron-ore') + countOf(me, 'iron-ingot');
-  const pickaxe = me.backpack.some((s) => itemDef(s.defId).tool === 'pickaxe' && (s.durability ?? 0) > 0);
-
-  if (!pickaxe) {
-    return '곡괭이부터 챙기게. 마르카에게 하나 사서 가방에 넣어 두면 되네 — 손에 들 것도 없어.';
-  }
-  if (iron <= 0) {
-    return '남쪽 문으로 나가면 초록 숲일세. 반짝이는 광맥을 찾아 눌러만 두게 — 걸어가서 알아서 캘 테니. 그걸 여기 화로로 가져오게.';
-  }
-  if (stageReady(me.town)) {
-    return '자네, 마침 잘 왔네. 보여줄 것이 있어 — 아래를 보게.';
-  }
-  const stage = nextStage(me.town);
-  if (stage && countOf(me, 'iron-ingot') > 0) {
-    // ★ 무엇이 열리는지는 말하지 않습니다. 미리 알면 선택이 아니라 목표치입니다 (기획안 5.4)
-    return `쇠를 가져왔군. 화로 앞에서 녹이고 두드려 보게. ${stage.hint}`;
-  }
-  return '쇠를 가져왔군. 화로 앞에 서서 녹이고, 주괴가 모이면 두드려 보게. 몇 번은 망칠 걸세 — 그러면서 느는 거야.';
-}
 
 /* ---------------------------------------------------------------- 마을이 자란다 */
 
