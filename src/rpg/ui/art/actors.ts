@@ -365,6 +365,21 @@ function drawArmedHand(ctx: CanvasRenderingContext2D, world: World): void {
     const guardX = gripEnd + 0.5;
     const bladeX = guardX + 2.4;
 
+    //  ★ 벼림이 눈에 보여야 합니다. 고른 것이 화면에 안 나타나면
+    //    이름표에만 있는 설정이 됩니다.
+    //      날 선   — 얇고 길게      단단한 — 두껍고 짧게      가벼운 — 얇고 짧게
+    const temper = weapon?.temper;
+    const thick =
+      temper === 'tough' ? 1.45
+      : temper === 'sharp' ? 0.72
+      : temper === 'light' ? 0.78
+      : 1;
+    const long =
+      temper === 'sharp' ? 1.12
+      : temper === 'tough' ? 0.94
+      : temper === 'light' ? 0.9
+      : 1;
+
     // 자루 — 손보다 안쪽에서 시작해 손에 물립니다
     ctx.fillStyle = '#3a2c20';
     ctx.fillRect(9, -1.5, look.grip + 1, 3);
@@ -383,22 +398,25 @@ function drawArmedHand(ctx: CanvasRenderingContext2D, world: World): void {
     ctx.fillRect(guardX, -look.guard, 2.4, look.guard * 2);
 
     // 날
+    const width = look.width * thick;
+    const tip = look.tip * thick;
+    const span = reach * long;
     ctx.fillStyle = lighten(blade, 0.3);
     ctx.beginPath();
-    ctx.moveTo(bladeX, -look.width);
-    ctx.lineTo(bladeX + reach, -look.tip);
-    ctx.lineTo(bladeX + reach + look.tip * 2.2, 0);
-    ctx.lineTo(bladeX + reach, look.tip);
-    ctx.lineTo(bladeX, look.width);
+    ctx.moveTo(bladeX, -width);
+    ctx.lineTo(bladeX + span, -tip);
+    ctx.lineTo(bladeX + span + tip * 2.2, 0);
+    ctx.lineTo(bladeX + span, tip);
+    ctx.lineTo(bladeX, width);
     ctx.closePath();
     ctx.fill();
     // 아래쪽 그늘 — 빛은 언제나 왼쪽 위에서
     ctx.fillStyle = alpha(darken(blade, 0.4), 0.9);
     ctx.beginPath();
     ctx.moveTo(bladeX, 0.3);
-    ctx.lineTo(bladeX + reach, 0.2);
-    ctx.lineTo(bladeX + reach, look.tip);
-    ctx.lineTo(bladeX, look.width);
+    ctx.lineTo(bladeX + span, 0.2);
+    ctx.lineTo(bladeX + span, tip);
+    ctx.lineTo(bladeX, width);
     ctx.closePath();
     ctx.fill();
   } else {
