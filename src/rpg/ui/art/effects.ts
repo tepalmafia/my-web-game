@@ -481,15 +481,32 @@ const FORGE_LABEL_RANGE = 220;
  *  숯불을 품은 돌 화덕으로 그립니다. 불빛은 화로 자신이 내므로, 다른 것들과 달리
  *  왼쪽 위가 아니라 ★ 아궁이 쪽이 가장 밝습니다.
  */
+/**
+ *  단계별 화로 크기.
+ *
+ *  ★ 상한이 있어야 합니다. 예전 식(1 + 단계 × 0.22)은 4단계면 1.88 배인데,
+ *    굴뚝이 화로 중심에서 36px 위에서 시작하므로 68px 위 — 두 칸(64px) 위에 서 있는
+ *    두린의 발끝을 4px 넘어섭니다. 굴뚝이 대장장이 다리를 뚫고 올라갑니다.
+ *  ★ 0~2단계는 예전 값 그대로입니다. 이미 나가 있는 그림을 바꾸지 않으려고요.
+ *    (검사: tests/rpg/art.test.ts — 36 × 최대배율 < 64)
+ */
+export const FORGE_GROWN = [1, 1.22, 1.44, 1.56, 1.66];
+
 export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: number, ty: number): void {
   const x = tileCenter(tx);
   const y = tileCenter(ty);
   // 숯불은 일정하게 타지 않습니다 — 느린 흔들림 두 개를 겹쳐 불규칙하게 보이게 합니다
   const glow = 0.55 + 0.28 * Math.sin(world.time * 2.7) + 0.17 * Math.sin(world.time * 6.1 + 1.3);
 
-  // ★ 마을이 자라면 화로도 자랍니다. 숫자로만 바뀌면 아무 일도 안 일어난 것과 같습니다.
+  //  ★ 마을이 자라면 화로도 자랍니다. 숫자로만 바뀌면 아무 일도 안 일어난 것과 같습니다.
+  //
+  //  ★ 다만 계속 곱하면 안 됩니다. 예전 식(1 + 단계 × 0.22)은 상한이 없어서
+  //    4단계면 1.88 배가 되고, 굴뚝이 y-36 에서 시작하므로 68px 위 —
+  //    두 칸 위(21,9)에 서 있는 두린을 뚫고 올라갑니다.
+  //    그래서 3단계부터 걸음을 줄이고 1.66 에서 멈춥니다.
+  //    0~2단계 값은 예전 그대로입니다 (이미 나가 있는 그림을 바꾸지 않으려고).
   const stage = stageOf(world.me.town);
-  const grown = 1 + stage * 0.22;
+  const grown = FORGE_GROWN[Math.min(stage, FORGE_GROWN.length - 1)]!;
 
   drawShadow(ctx, x, y + 9 * grown, 17 * grown);
 
