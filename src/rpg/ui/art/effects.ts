@@ -29,6 +29,7 @@ export const ITEM_TINT: Record<ItemKind, string> = {
 };
 import { monsterDef } from '../../content/monsters';
 import { veinDef } from '../../content/veins';
+import { stageOf } from '../../content/town';
 import { nearForge } from '../../core/action';
 import { tileCenter } from '../../core/world';
 import type { GroundItem, ItemKind, Monster, Npc, NpcKind, Vein, World } from '../../types';
@@ -486,7 +487,16 @@ export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: numbe
   // 숯불은 일정하게 타지 않습니다 — 느린 흔들림 두 개를 겹쳐 불규칙하게 보이게 합니다
   const glow = 0.55 + 0.28 * Math.sin(world.time * 2.7) + 0.17 * Math.sin(world.time * 6.1 + 1.3);
 
-  drawShadow(ctx, x, y + 9, 17);
+  // ★ 마을이 자라면 화로도 자랍니다. 숫자로만 바뀌면 아무 일도 안 일어난 것과 같습니다.
+  const stage = stageOf(world.me.town);
+  const grown = 1 + stage * 0.22;
+
+  drawShadow(ctx, x, y + 9 * grown, 17 * grown);
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(grown, grown);
+  ctx.translate(-x, -y);
 
   const stone = '#584f47';
 
@@ -577,6 +587,34 @@ export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: numbe
   ctx.fill();
   ctx.fillStyle = '#5a5a62';
   ctx.fillRect(x - 33, y - 4.5, 17, 1.8);
+  ctx.restore();
+
+  // 두 번째 모루와 담금질 통 — 구리 대장간이 서면 자리가 늘어납니다
+  if (stage >= 2) {
+    ctx.save();
+    ctx.fillStyle = '#3b3b40';
+    ctx.fillRect(x + 22, y + 4, 10, 5);
+    ctx.beginPath();
+    ctx.moveTo(x + 19, y - 1);
+    ctx.lineTo(x + 35, y - 1);
+    ctx.lineTo(x + 31, y + 4);
+    ctx.lineTo(x + 22, y + 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#5a5a62';
+    ctx.fillRect(x + 19, y - 2.5, 16, 1.8);
+    // 담금질 통
+    ctx.fillStyle = '#4a3a28';
+    ctx.beginPath();
+    ctx.ellipse(x + 4, y + 16, 7, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = alpha('#2a6a86', 0.85);
+    ctx.beginPath();
+    ctx.ellipse(x + 4, y + 15, 5.4, 2.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 

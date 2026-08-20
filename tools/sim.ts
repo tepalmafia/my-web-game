@@ -12,6 +12,7 @@
 
 import { ITEMS, itemDef } from '../src/rpg/content/items';
 import { MONSTERS } from '../src/rpg/content/monsters';
+import { TOWN_STAGES, progressOf, stageOf } from '../src/rpg/content/town';
 import { createWorld } from '../src/rpg/core/create';
 import { step } from '../src/rpg/core/engine';
 import { countOf } from '../src/rpg/core/inventory';
@@ -216,6 +217,17 @@ function run(): void {
         .map(([id, sec]) => `${id} ${((sec / totalTime) * 100).toFixed(0)}%`)
         .join(' · '),
   );
+  // ★ 마을이 자랐는가. 안 자랐으면 안 자랐다고 찍습니다 —
+  //   "팔아서 세계를 키울까, 써서 나를 키울까" 는 선택이라, 안 고르는 것도 결과입니다.
+  const town = world.me.town;
+  const grown = stageOf(town);
+  console.log(
+    `마을: ${grown}/${TOWN_STAGES.length} 단계` +
+      (grown > 0 ? ` (${town.chosen.join(' · ')})` : '') +
+      ' · 다음까지 ' +
+      (progressOf(town).map((r) => `${itemDef(r.defId).name} ${r.have}/${r.need}`).join(' · ') || '—'),
+  );
+
   // ★ 길을 못 찾으면 봇은 엉뚱한 데서 일하면서도 숫자는 멀쩡히 냅니다. 그래서 함께 찍습니다.
   if (pilot.stranded.length > 0) {
     const tally: Record<string, number> = {};

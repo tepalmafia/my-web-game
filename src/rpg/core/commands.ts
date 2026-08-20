@@ -11,6 +11,8 @@
 import { GATHER, POTION_COOLDOWN, TILE } from '../balance';
 import { itemDef } from '../content/items';
 import { monsterDef } from '../content/monsters';
+import { recipeDef } from '../content/recipes';
+import { choiceById, nextStage, stageReady } from '../content/town';
 import { veinDef } from '../content/veins';
 import { cancelAction, startCraft, startMining, startRepair } from './action';
 import { revive } from './death';
@@ -245,6 +247,49 @@ export function drinkBestPotion(world: World): boolean {
     return false;
   }
   return drinkPotion(world, best.uid);
+}
+
+/* ===========================================================================
+ *  마을이 자란다
+ * ======================================================================== */
+
+/**
+ *  갈림길을 고릅니다. ★ 되돌릴 수 없습니다.
+ *
+ *  화면은 규칙을 모릅니다 — 조건을 채웠는지, 고를 수 있는 갈래가 맞는지,
+ *  이미 고른 단계가 아닌지를 전부 여기서 봅니다.
+ */
+export function chooseTownPath(world: World, choiceId: string): boolean {
+  const town = world.me.town;
+  const stage = nextStage(town);
+
+  if (!stage) {
+    toast(world, '더 자랄 것이 없습니다.', 'bad');
+    return false;
+  }
+  if (!stageReady(town)) {
+    toast(world, '아직 두린이 부르지 않았습니다.', 'bad');
+    return false;
+  }
+  if (!stage.choices.some((c) => c.id === choiceId)) {
+    log(world, '지금 고를 수 있는 것이 아닙니다', 'bad');
+    return false;
+  }
+
+  town.chosen.push(choiceId);
+  const chosen = choiceById(choiceId);
+  toast(world, `${stage.name}`, 'epic');
+  log(world, `마을이 자랐습니다 — ${stage.name}: ${chosen?.name ?? choiceId}`, 'epic');
+  for (const id of chosen?.recipes ?? []) {
+    log(world, `이제 ${recipeDef(id).name}\uc744(를) 만들 수 있습니다`, 'good');
+  }
+  for (const id of stage.opens.recipes) {
+    log(world, `이제 ${recipeDef(id).name}\uc744(를) 만들 수 있습니다`, 'good');
+  }
+  for (const id of stage.opens.stock) {
+    log(world, `상인이 ${itemDef(id).name}\uc744(를) 들여놓았습니다`, 'good');
+  }
+  return true;
 }
 
 /* ===========================================================================

@@ -11,6 +11,7 @@
 
 import { AI, TILE } from '../balance';
 import { MAPS, mapDef } from '../content/maps';
+import { stageOf } from '../content/town';
 import { monsterDef } from '../content/monsters';
 import { hash2, nextRandom, randInt } from './rng';
 import { veinDef } from '../content/veins';
@@ -82,12 +83,26 @@ export function valueNoise(seed: number, x: number, y: number): number {
 }
 
 /** 마을에 세울 건물들 (타일 단위 사각형) */
-const TOWN_BUILDINGS = [
-  { x: 7, y: 4, w: 6, h: 4 },
-  { x: 17, y: 4, w: 6, h: 4 },
-  { x: 4, y: 12, w: 4, h: 5 },
-  { x: 22, y: 12, w: 4, h: 5 },
-];
+/**
+ *  마을의 건물.
+ *
+ *  ★ 대장간(동쪽 위)만 단계에 따라 커집니다. 숫자로만 바뀌면 아무 일도 안 일어난 것과
+ *    같습니다(기획안 5.3) — 자란 것이 실제로 화면에 커 보여야 합니다.
+ *
+ *  ★ 두린(21,9)과 화로(21,11)를 삼키지 않도록 아래로는 y=7 까지만 자랍니다.
+ */
+function townBuildings(stage: number) {
+  const smithy =
+    stage >= 2 ? { x: 16, y: 3, w: 8, h: 5 }
+    : stage >= 1 ? { x: 17, y: 3, w: 7, h: 5 }
+    : { x: 17, y: 4, w: 6, h: 4 };
+  return [
+    { x: 7, y: 4, w: 6, h: 4 },
+    smithy,
+    { x: 4, y: 12, w: 4, h: 5 },
+    { x: 22, y: 12, w: 4, h: 5 },
+  ];
+}
 
 /**
  *  다른 지도들이 이 지도의 어느 칸으로 내려놓는가.
@@ -193,7 +208,7 @@ function reachableMask(map: MapRuntime, startTx: number, startTy: number): Uint8
 }
 
 /** 지역 하나의 지형을 만듭니다 */
-export function buildMap(def: MapDef): MapRuntime {
+export function buildMap(def: MapDef, stage = 0): MapRuntime {
   const map: MapRuntime = { def, tiles: new Uint8Array(def.width * def.height) };
 
   // 1) 바깥 테두리는 벽
@@ -208,7 +223,7 @@ export function buildMap(def: MapDef): MapRuntime {
 
   // 2) 안쪽 채우기
   if (def.theme === 'town') {
-    for (const b of TOWN_BUILDINGS) {
+    for (const b of townBuildings(stage)) {
       for (let y = b.y; y < b.y + b.h; y++) {
         for (let x = b.x; x < b.x + b.w; x++) set(map, x, y, WALL);
       }
@@ -374,7 +389,7 @@ export function populate(world: World): void {
 /** 다른 지역으로 옮겨갑니다 */
 export function enterMap(world: World, mapId: MapId, tx: number, ty: number): void {
   world.mapId = mapId;
-  world.map = buildMap(mapDef(mapId));
+  world.map = buildMap(mapDef(mapId), stageOf(world.me.town));
   world.me.pos = { x: tileCenter(tx), y: tileCenter(ty) };
   world.me.moveTarget = null;
   world.me.targetId = null;

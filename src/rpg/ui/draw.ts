@@ -15,6 +15,7 @@
  */
 
 import { TILE } from '../balance';
+import { stageOf } from '../content/town';
 import { FLOOR, LIQUID, PROP, tileCenter } from '../core/world';
 import type { World } from '../types';
 import { computeView } from './view';
@@ -70,10 +71,15 @@ const layers: Layer[] = [];
  *  매 프레임 수백 칸을 다시 칠하는 대신, 지역에 들어갈 때 통째로 한 장 그려두고
  *  그 그림을 한 번 붙여넣습니다. (물과 불빛은 움직이므로 따로 그립니다.)
  */
-const terrainCache: { mapId: string; canvas: HTMLCanvasElement | null } = { mapId: '', canvas: null };
+/**
+ *  ★ 열쇠에 마을 단계가 함께 들어갑니다. mapId 만으로 잡으면, 마을 안에 서 있는 채로
+ *    대장간이 자랐을 때 옛 그림이 그대로 붙어 있어 아무 일도 안 일어난 것처럼 보입니다.
+ */
+const terrainCache: { key: string; canvas: HTMLCanvasElement | null } = { key: '', canvas: null };
 
 function terrainLayer(world: World): HTMLCanvasElement | null {
-  if (terrainCache.mapId === world.mapId && terrainCache.canvas) return terrainCache.canvas;
+  const key = `${world.mapId}:${stageOf(world.me.town)}`;
+  if (terrainCache.key === key && terrainCache.canvas) return terrainCache.canvas;
 
   const { def } = world.map;
   const canvas = document.createElement('canvas');
@@ -88,7 +94,7 @@ function terrainLayer(world: World): HTMLCanvasElement | null {
   drawGround(ctx, world, whole, art);
   drawWalls(ctx, world, whole, art);
 
-  terrainCache.mapId = world.mapId;
+  terrainCache.key = key;
   terrainCache.canvas = canvas;
   return canvas;
 }

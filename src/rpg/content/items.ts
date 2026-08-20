@@ -123,7 +123,13 @@ export function itemDef(defId: string): ItemDef {
  *  ★ 만든 무기와 갑옷은 팔지 않습니다 — 그걸 팔면 대장장이가 필요 없어집니다.
  *    연장과 물약, 그리고 첫 검 한 자루까지가 상점의 몫입니다.
  */
+/**
+ *  상점이 처음부터 취급하는 것.
+ *
+ *  ★ 고급 체력 물약은 여기 없습니다 — 마을이 자라야 들어옵니다(content/town.ts).
+ *    지금 취급하는 것은 openStock(town) 이 알려줍니다.
+ */
 export const SHOP_STOCK: string[] = [
-  'pickaxe', 'hammer', 'potion-heal', 'potion-heal-big',
+  'pickaxe', 'hammer', 'potion-heal',
   'rusty-sword', 'leather-vest', 'leather-cap',
 ];

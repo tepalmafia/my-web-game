@@ -15,6 +15,7 @@
 import { CRAFT, GATHER } from '../balance';
 import { itemDef } from '../content/items';
 import { recipeDef } from '../content/recipes';
+import { openRecipes } from '../content/town';
 import { veinDef } from '../content/veins';
 import { floater, log, toast } from './feedback';
 import { addItem, consume, countOf } from './inventory';
@@ -118,6 +119,13 @@ export function startCraft(world: World, recipeId: string, repeat = false): bool
   const me = world.me;
   const recipe = recipeDef(recipeId);
 
+  // ★ 마을이 자라야 열리는 제작법이 있습니다. 화면을 안 거치는 길(반복 제작·시험용 도구)이
+  //   있으므로 규칙 쪽에서 막습니다. 막았으면 왜 막았는지 말합니다.
+  if (!openRecipes(me.town).has(recipeId)) {
+    toast(world, '아직 만들 줄 모릅니다.', 'bad');
+    log(world, `${recipe.name} — 대장간이 더 자라야 합니다`, 'bad');
+    return false;
+  }
   if (recipe.needsForge && !nearForge(world)) {
     toast(world, '화로 앞에서만 만들 수 있습니다.', 'bad');
     return false;
