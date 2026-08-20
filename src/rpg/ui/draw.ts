@@ -19,7 +19,7 @@ import { stageOf } from '../content/town';
 import { FLOOR, LIQUID, PROP, tileCenter } from '../core/world';
 import type { World } from '../types';
 import { computeView } from './view';
-import { drawMonster, drawPlayer } from './art/actors';
+import { deathProgress, drawMonster, drawPlayer } from './art/actors';
 import {
   drawCorpse,
   drawFloaters,
@@ -220,7 +220,8 @@ function drawDepthSorted(ctx: CanvasRenderingContext2D, world: World, range: Til
   }
   for (let i = 0; i < world.monsters.length; i++) {
     const monster = world.monsters[i]!;
-    if (monster.state === 'dead') continue;
+    // ★ 죽은 뒤 0.4초는 계속 그립니다 — 쓰러지는 것까지가 죽인 것입니다
+    if (monster.state === 'dead' && deathProgress(monster) === null) continue;
     layers.push({ y: monster.pos.y, kind: 'monster', index: i });
   }
   layers.push({ y: world.me.pos.y, kind: 'player' });
