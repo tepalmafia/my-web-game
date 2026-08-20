@@ -18,13 +18,14 @@
 
 import { useEffect, useState } from 'react';
 
-import { MAX_SKILL } from '../balance';
+import { LOOT, MAX_SKILL, STATS, carryCapacity, maxHpOf } from '../balance';
 import { ITEMS, itemDef } from '../content/items';
 import { MAPS, MAP_ORDER, mapDef } from '../content/maps';
 import { SKILL_ORDER, SKILLS } from '../content/skills';
 import { step } from '../core/engine';
-import { addItem } from '../core/inventory';
+import { addItem, freeWeight, hasRoom } from '../core/inventory';
 import { saveWorld } from '../core/save';
+import { derive, totalWeight } from '../core/stats';
 import { enterMap } from '../core/world';
 import { autopilot, newPilot } from '../../../tools/autopilot';
 import type { Focus } from '../../../tools/autopilot';
@@ -49,6 +50,34 @@ function durables(world: World): ItemStack[] {
   return [me.equipped.weapon, me.equipped.armor, me.equipped.helmet, ...me.backpack].filter(
     (stack): stack is ItemStack => !!stack && stack.maxDurability !== undefined,
   );
+}
+
+/**
+ *  왜 못 넣는지 숫자로 말합니다.
+ *
+ *  ★ "무게나 칸이 모자랍니다" 처럼 둘을 묶어 말하면 어느 쪽인지 알 수 없습니다.
+ *    실제로 가방 칸이 남아 있는데 무게에 막힌 것을 칸 문제로 읽고 헤맸습니다.
+ *    막는 쪽 하나만 대고, 숫자를 댑니다.
+ */
+function whyNot(world: World, defId: string, count: number): string | null {
+  const me = world.me;
+  const def = itemDef(defId);
+  const need = def.weight * count;
+  const free = freeWeight(me);
+  if (need > free) {
+    const fits = Math.floor(free / def.weight);
+    // ★ "힘을 올려라" 는 올릴 힘이 남아 있을 때만 참입니다.
+    //   상한에 닿았는데 그렇게 말하면 시키는 대로 해도 안 되는 길로 보냅니다.
+    const more =
+      me.str >= STATS.max
+        ? `힘이 이미 상한(${STATS.max})이라 더 못 늘립니다 — 이 개수는 규칙 안에서 못 듭니다`
+        : `힘을 올리면 상한이 늘어납니다 (힘 ${STATS.max} 이면 ${carryCapacity(STATS.max)})`;
+    return `무게가 모자랍니다 (남은 ${Math.round(free)} / 필요 ${need}) — 지금은 ${fits}개까지. ${more}`;
+  }
+  if (!hasRoom(me, defId)) {
+    return `가방 칸이 다 찼습니다 (${me.backpack.length}/${LOOT.packSlots}) — 겹치지 않는 물건이라 빈 칸이 필요합니다`;
+  }
+  return null;
 }
 
 /* ===========================================================================
@@ -76,13 +105,30 @@ export function createApi(world: World, refresh: () => void) {
       if (!ITEMS[defId]) throw new Error(`그런 물건이 없습니다: ${defId} (aden.items 로 목록)`);
       // ★ addItem 을 그대로 씁니다. 무게·칸 규칙에 막히면 그 사실을 알려줍니다 —
       //   규칙을 우회하면 여기서 만든 상태가 게임에서 나올 수 없는 상태가 됩니다.
+      const why = whyNot(world, defId, count);
+      if (why) throw new Error(`${itemDef(defId).name} ${count}개를 못 넣었습니다 — ${why}`);
       if (!addItem(world, defId, count)) {
-        throw new Error(
-          `${itemDef(defId).name} ${count}개를 못 넣었습니다 — 무게나 칸이 모자랍니다. ` +
-            `적게 나눠 주거나, 가방을 비우고 다시 해보세요.`,
-        );
+        // whyNot 이 막을 이유를 못 찾았는데 addItem 이 거절했다면 둘이 어긋난 것입니다.
+        // 조용히 넘기면 여기가 거짓말을 하기 시작합니다.
+        throw new Error(`${itemDef(defId).name} ${count}개를 못 넣었습니다 — 이유를 못 찾았습니다 (whyNot 과 addItem 이 어긋납니다)`);
       }
       return done(`${itemDef(defId).name} ${count}개`);
+    },
+
+    /**
+     *  힘을 세웁니다 — aden.str(100)
+     *
+     *  ★ 소지 상한을 직접 세우지 않습니다. 상한은 힘에서 나오는 값이라
+     *    저장하면 계산 가능한 값을 저장하는 것이 됩니다 (CLAUDE.md 4장 1번).
+     *    여기서는 힘만 세우고 상한은 그대로 derive 가 냅니다.
+     */
+    str(value: number) {
+      const next = Math.max(1, Math.min(STATS.max, value));
+      world.me.str = next;
+      // 힘을 내리면 최대 체력도 내려갑니다. 지금 체력이 그 위에 떠 있게 두지 않습니다.
+      world.me.hp = Math.min(world.me.hp, maxHpOf(next));
+      const me = world.me;
+      return done(`힘 ${next} · 소지 상한 ${derive(me).carry} (지금 ${Math.round(totalWeight(me))})`);
     },
 
     /** 지역을 옮깁니다 — aden.go('mine') */
@@ -151,6 +197,7 @@ export function createApi(world: World, refresh: () => void) {
       return [
         "aden.skill('mining'|'blacksmithing'|'swordsmanship'|'defense', 0~100)",
         'aden.give(물건id, 개수)   물건id 목록: aden.items',
+        `aden.str(1~${STATS.max})           소지 상한 (힘 ${STATS.max} 이면 ${carryCapacity(STATS.max)})`,
         `aden.go('${Object.keys(MAPS).join("'|'")}')`,
         "aden.dur(0~1, 'weapon'|'armor'|'helmet'|물건id)",
         'aden.fast(초)            시간만 흘려보냅니다',
@@ -192,20 +239,36 @@ function Row({ title, children }: { title: string; children: React.ReactNode }) 
 
 export function DevTools({ world, refresh }: { world: World; refresh: () => void }) {
   const [open, setOpen] = useState(false);
-  const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null);
+  // ★ where 를 함께 들고 있습니다 — 답을 패널 맨 밑에 몰아 놓으면
+  //   무엇을 눌러서 나온 말인지 알 수 없고, 줄이 길어지면 스크롤 밖으로 나갑니다.
+  const [said, setSaid] = useState<{ text: string; bad: boolean; where: string } | null>(null);
   const [skillId, setSkillId] = useState<SkillId>('mining');
 
   // 콘솔 명령은 패널을 열지 않아도 늘 붙어 있습니다
   useEffect(() => attach(world, refresh), [world, refresh]);
 
   const api = createApi(world, refresh);
-  const run = (fn: () => string) => {
+  const run = (where: string, fn: () => string) => {
     try {
-      setSaid({ text: fn(), bad: false });
+      setSaid({ text: fn(), bad: false, where });
     } catch (error) {
-      setSaid({ text: error instanceof Error ? error.message : String(error), bad: true });
+      setSaid({ text: error instanceof Error ? error.message : String(error), bad: true, where });
     }
   };
+
+  /** 답을 누른 단추 바로 아래에 놓습니다 */
+  const note = (where: string) =>
+    said && said.where === where ? (
+      <p
+        className={`rounded-sm border px-2.5 py-2 text-[12px] leading-snug ${
+          said.bad
+            ? 'border-[#e88a86]/50 bg-[#3a1512]/40 text-[#e88a86]'
+            : 'border-ink-600 bg-ink-700/60 text-parch-200'
+        }`}
+      >
+        {said.text}
+      </p>
+    ) : null;
 
   if (!open) {
     return (
@@ -231,11 +294,12 @@ export function DevTools({ world, refresh }: { world: World; refresh: () => void
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2.5">
         <Row title="봇이 대신 놀기">
           {[5, 15, 30, 60].map((m) => (
-            <button key={m} type="button" className={BTN} onClick={() => run(() => api.bot(m, 'balanced'))}>
+            <button key={m} type="button" className={BTN} onClick={() => run('bot', () => api.bot(m, 'balanced'))}>
               {m}분
             </button>
           ))}
         </Row>
+        {note('bot')}
 
         <Row title="스킬 고르기">
           {SKILL_ORDER.map((id) => (
@@ -251,61 +315,65 @@ export function DevTools({ world, refresh }: { world: World; refresh: () => void
         </Row>
         <div className="-mt-1.5 flex flex-wrap gap-1.5">
           {[25, 50, 75, 100].map((v) => (
-            <button key={v} type="button" className={BTN} onClick={() => run(() => api.skill(skillId, v))}>
+            <button key={v} type="button" className={BTN} onClick={() => run('skill', () => api.skill(skillId, v))}>
               {SKILLS[skillId].name} {v}
             </button>
           ))}
         </div>
+        {note('skill')}
 
         <Row title="지역">
           {/* ★ 목록을 여기 다시 적지 않습니다 — 지역을 늘리면 단추도 저절로 생깁니다 */}
           {MAP_ORDER.map((id) => (
-            <button key={id} type="button" className={BTN} onClick={() => run(() => api.go(id))}>
+            <button key={id} type="button" className={BTN} onClick={() => run('go', () => api.go(id))}>
               {mapDef(id).name}
             </button>
           ))}
         </Row>
+        {note('go')}
 
         <Row title="장비 닳게 하기">
           {[0.5, 0.1, 0.02].map((r) => (
-            <button key={r} type="button" className={BTN} onClick={() => run(() => api.dur(r))}>
+            <button key={r} type="button" className={BTN} onClick={() => run('dur', () => api.dur(r))}>
               {Math.round(r * 100)}% 남기기
             </button>
           ))}
         </Row>
+        {note('dur')}
+
+        {/* ★ 물건 바로 위에 둡니다 — 물건이 안 들어가는 이유가 거의 늘 무게라서,
+            막혔을 때 손이 갈 곳이 눈앞에 있어야 합니다 */}
+        <Row title={`힘 ${Math.round(world.me.str)} · 소지 ${Math.round(totalWeight(world.me))}/${derive(world.me).carry}`}>
+          {[20, 50, 100].map((v) => (
+            <button key={v} type="button" className={BTN} onClick={() => run('str', () => api.str(v))}>
+              힘 {v}
+            </button>
+          ))}
+        </Row>
+        {note('str')}
 
         <Row title="물건">
-          <button type="button" className={BTN} onClick={() => run(() => api.give('iron-ingot', 100))}>
+          <button type="button" className={BTN} onClick={() => run('give', () => api.give('iron-ingot', 100))}>
             철 주괴 100
           </button>
-          <button type="button" className={BTN} onClick={() => run(() => api.give('iron-ore', 50))}>
+          <button type="button" className={BTN} onClick={() => run('give', () => api.give('iron-ore', 50))}>
             철광석 50
           </button>
-          <button type="button" className={BTN} onClick={() => run(() => api.give('potion-heal', 20))}>
+          <button type="button" className={BTN} onClick={() => run('give', () => api.give('potion-heal', 20))}>
             물약 20
           </button>
         </Row>
+        {note('give')}
 
         <Row title="시간">
-          <button type="button" className={BTN} onClick={() => run(() => api.fast(30))}>
+          <button type="button" className={BTN} onClick={() => run('fast', () => api.fast(30))}>
             30초
           </button>
-          <button type="button" className={BTN} onClick={() => run(() => api.fast(300))}>
+          <button type="button" className={BTN} onClick={() => run('fast', () => api.fast(300))}>
             5분
           </button>
         </Row>
-
-        {said && (
-          <p
-            className={`rounded-sm border px-2.5 py-2 text-[12px] leading-snug ${
-              said.bad
-                ? 'border-[#e88a86]/50 bg-[#3a1512]/40 text-[#e88a86]'
-                : 'border-ink-600 bg-ink-700/60 text-parch-200'
-            }`}
-          >
-            {said.text}
-          </p>
-        )}
+        {note('fast')}
 
         <p className="text-[11px] leading-snug text-parch-400/70">
           콘솔에서는 <b className="text-parch-300">aden.help()</b> — 이 패널과 같은 명령입니다.
