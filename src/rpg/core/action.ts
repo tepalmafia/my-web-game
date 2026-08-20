@@ -52,6 +52,24 @@ export function craftFineChance(world: World, recipeId: string): number {
   return fineChance(world.me.skills.blacksmithing, recipeDef(recipeId).difficulty);
 }
 
+/**
+ *  실패하면 무엇을 얼마나 잃는가.
+ *
+ *  ★ "재료 절반" 이라고만 말하면 거짓말이 됩니다. 돌려받는 몫은 내림이라
+ *    한 개짜리 제작법(제련)은 절반이 아니라 ★전부를 잃습니다.
+ *    구리 제련은 난이도 45 라 대장기술 30 이면 성공이 18% 입니다 —
+ *    무엇을 태우는지 모르고 누르면 안 됩니다.
+ *
+ *  ★ 잃는 양의 계산은 여기 한 곳에만 둡니다. 화면이 따로 세면 언젠가 어긋납니다.
+ */
+export function craftLoss(recipeId: string): Array<{ defId: string; lost: number; of: number }> {
+  return recipeDef(recipeId).needs.map((need) => ({
+    defId: need.defId,
+    lost: need.count - Math.floor(need.count * (1 - CRAFT.failLoss)),
+    of: need.count,
+  }));
+}
+
 /** 이 광맥의 지금 성공 확률 */
 export function mineChance(world: World, veinDefId: string): number {
   return successChance(world.me.skills.mining, veinDef(veinDefId).difficulty, GATHER);
@@ -270,9 +288,13 @@ function finishCraft(world: World, recipeId: string, repeat: boolean): void {
         log(world, `${itemDef(need.defId).name} ${back}개를 돌려받지 못했습니다 — 가방이 찼습니다`, 'bad');
       }
     }
-    log(world, `${recipe.name} 만들기에 실패했습니다`, 'bad');
+    // ★ "절반" 이라고 뭉뚱그리지 않습니다. 한 개짜리 제련은 전부를 잃습니다.
+    const burnt = craftLoss(recipeId)
+      .map((l) => `${itemDef(l.defId).name} ${l.lost}개`)
+      .join(' · ');
+    log(world, `${recipe.name} 만들기에 실패했습니다 — ${burnt} 를 잃었습니다`, 'bad');
     // ★ 기록은 화면 맨 아래라 놓칩니다. 실패는 가운데에도 띄웁니다.
-    toast(world, `${recipe.name} 실패\n재료 절반을 잃었습니다`, 'bad');
+    toast(world, `${recipe.name} 실패\n${burnt} 를 잃었습니다`, 'bad');
     floater(world, { x: me.pos.x, y: me.pos.y - 30 }, '실패', 'miss', 'craft-fail');
     if (repeat) startCraft(world, recipeId, true);
     return;

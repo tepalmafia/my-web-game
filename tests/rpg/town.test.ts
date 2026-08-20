@@ -243,3 +243,104 @@ describe('끝까지 자라면', () => {
     expect(open.size).toBe(RECIPE_ORDER.length - dropped.length);
   });
 });
+
+/* ===========================================================================
+ *  누계가 다음 단계를 미리 채우지 않는다
+ *  ---------------------------------------------------------------------------
+ *  ★ 예전에는 sold 가 누계라서, 1단계를 고른 그 프레임에 2단계가 이미 다 차 있었습니다.
+ *    플레이어는 그것이 차오르는 것을 한 번도 못 봤습니다. 6장 조용한 실패입니다.
+ * ======================================================================== */
+
+describe('판 누계와 단계', () => {
+  it('단계를 넘겨도 판 것의 기록은 깎이지 않는다 — 나중에 기록이 앉을 자리다', () => {
+    const world = inTown();
+    sell(world, 'iron-ingot', 40);
+    chooseTownPath(world, 'forge-blade');
+
+    expect(world.me.town.sold['iron-ingot'], '판 기록이 깎였습니다').toBe(40);
+    expect(world.me.town.spent['iron-ingot'], '먹은 몫이 안 적혔습니다').toBe(40);
+  });
+
+  it('넘긴 뒤 다음 단계는 0 부터 센다 — 미리 채워져 있으면 안 된다', () => {
+    const world = inTown();
+    // 1단계를 넘기기 전에 구리 주괴를 잔뜩 팔아둡니다 (2단계 조건과 같은 물건)
+    sell(world, 'copper-ingot', 25);
+    sell(world, 'iron-ingot', 40);
+    chooseTownPath(world, 'forge-blade');
+
+    // 2단계는 구리 주괴 25 를 요구합니다. 이미 25 를 팔았지만 그것은 1단계 이전의 일입니다.
+    // ★ 여기서 25/25 가 되면 예전 버그입니다.
+    expect(stageOf(world.me.town)).toBe(1);
+    expect(stageReady(world.me.town), '2단계가 미리 채워져 있습니다').toBe(false);
+  });
+
+  it('넘칠 만큼 팔았으면 남는 것이 다음 단계로 넘어가고, 그것이 화면에 보인다', () => {
+    const world = inTown();
+    sell(world, 'iron-ingot', 45); // 40 이 필요한데 45 를 팔았습니다
+    chooseTownPath(world, 'forge-blade');
+
+    expect(world.me.town.sold['iron-ingot']).toBe(45);
+    expect(world.me.town.spent['iron-ingot']).toBe(40);
+
+    // 다음 단계가 철 주괴를 요구하지 않더라도, 남은 5 는 장부에 남아 있어야 합니다
+    const left = (world.me.town.sold['iron-ingot'] ?? 0) - (world.me.town.spent['iron-ingot'] ?? 0);
+    expect(left, '넘치게 판 몫이 사라졌습니다').toBe(5);
+  });
+
+  it('같은 물건으로 두 단계를 넘길 때 진행이 이어서 보인다 (5/25 로 시작)', () => {
+    const world = inTown();
+    sell(world, 'iron-ingot', 40);
+    chooseTownPath(world, 'forge-blade');
+
+    // 2단계(구리 주괴 25) 로 5 개를 판다 → 화면에 5/25 로 보여야 합니다
+    sell(world, 'copper-ingot', 5);
+    const row = progressOf(world.me.town).find((r) => r.defId === 'copper-ingot')!;
+    expect(row).toBeDefined();
+    expect(row.have).toBe(5);
+    expect(row.need).toBe(25);
+  });
+});
+
+/* ===========================================================================
+ *  구리 — 팔 수밖에 없는 것은 조건이 될 수 없다
+ * ======================================================================== */
+
+describe('구리로 가는 길', () => {
+  it('구리 제련은 처음부터 열려 있다 — 잠그면 구리광석이 팔 수밖에 없는 돌이 된다', () => {
+    expect(openRecipes(emptyTown()).has('smelt-copper')).toBe(true);
+  });
+
+  it('사다리가 쥐고 있는 것 중에 제련은 없다', () => {
+    for (const stage of TOWN_STAGES) {
+      for (const id of stage.opens.recipes) {
+        expect(id.startsWith('smelt'), `${stage.name} 이 ${id} 를 쥐고 있습니다`).toBe(false);
+      }
+      for (const choice of stage.choices) {
+        for (const id of choice.recipes) {
+          expect(id.startsWith('smelt'), `${choice.name} 이 ${id} 를 쥐고 있습니다`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('단계의 조건은 그때 만들 수 있는 물건이어야 한다 — 캐서 바로 파는 것은 선택이 아니다', () => {
+    //  ★ 이것이 이번에 고친 버그입니다. 조건이 구리광석이던 시절,
+    //    구리 제련이 바로 그 단계에 잠겨 있어서 구리광석은 녹일 수 없는 돌이었습니다.
+    //    할 수 있는 일이 "판다" 하나뿐이면 그것은 선택이 아니라 그냥 일어나는 일입니다.
+    //
+    //  ★ 그래서 조건은 ★만들어야 나오는 물건으로 겁니다. 만드는 데 재료와 실력과
+    //    실패가 들고, 그렇게 나온 것을 팔지 쥘지가 그때 비로소 선택이 됩니다.
+    const town = emptyTown();
+    for (const stage of TOWN_STAGES) {
+      const open = openRecipes(town);
+      for (const need of stage.needs) {
+        const made = RECIPE_ORDER.some((id) => open.has(id) && RECIPES[id]!.makes === need.defId);
+        expect(made, `${stage.name} 의 조건 ${need.defId} 는 만들 방법 없이 파는 것뿐입니다`).toBe(true);
+      }
+      town.chosen.push(stage.choices[0].id);
+      for (const need of stage.needs) {
+        town.spent[need.defId] = (town.spent[need.defId] ?? 0) + need.count;
+      }
+    }
+  });
+});

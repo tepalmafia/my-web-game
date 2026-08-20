@@ -13,7 +13,7 @@ import { RECIPE_ORDER, recipeDef } from '../content/recipes';
 import { forsaken, nextStage, openRecipes, openStock, progressOf, stageReady } from '../content/town';
 import { SKILLS, SKILL_ORDER } from '../content/skills';
 import { VEINS } from '../content/veins';
-import { craftChance, craftFineChance, nearForge } from '../core/action';
+import { craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
 import { SLOT_LABEL, chooseTownPath, craft, repair, useItem } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
@@ -574,6 +574,15 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
                       </span>
                     );
                   })}
+                </div>
+                {/* ★ 실패하면 무엇을 잃는지 누르기 전에 보여줍니다.
+                       "절반" 이 아닙니다 — 한 개짜리 제련은 전부 잃습니다 */}
+                <div className="mt-0.5 text-[11px] text-[#e88a86]">
+                  실패하면{' '}
+                  {craftLoss(id)
+                    .map((l) => `${itemDef(l.defId).name} ${l.lost}/${l.of}`)
+                    .join(' · ')}{' '}
+                  이(가) 사라집니다
                 </div>
                 <div className="mt-1 flex items-center justify-between">
                   <span className="tabular text-[11px] text-parch-400">

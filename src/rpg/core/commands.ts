@@ -276,6 +276,29 @@ export function chooseTownPath(world: World, choiceId: string): boolean {
     return false;
   }
 
+  //  ★ 여기서 장부를 정리합니다. sold 는 깎지 않습니다 —
+  //    그것은 이 인물이 판 것의 기록이고, 나중에 기록 축이 여기 앉습니다.
+  //
+  //  두 가지를 다르게 다룹니다.
+  //
+  //  ① 이 단계가 요구한 물건 — 요구한 만큼만 먹습니다.
+  //     40 이 필요한데 45 를 팔았다면 5 는 다음 단계로 넘어가고,
+  //     그 5 는 화면에 바로 보입니다. 눈에 보이는 막대를 넘겨서 판 몫이니
+  //     가져가는 것이 맞습니다.
+  //
+  //  ② 아무도 요구하지 않은 물건 — 여기서 전부 얼립니다.
+  //     ★ 이게 없으면 예전에 판 것이 다음 단계를 미리 채워둡니다.
+  //       실제로 그랬습니다 — 구릿돌을 두 시간 팔다가 1단계를 고른 그 순간
+  //       2단계가 이미 25/25 로 차 있었고, 플레이어는 그것이 차오르는 것을
+  //       한 번도 못 봤습니다. 안 보이는 곳에서 차는 막대는 선택이 아닙니다.
+  const asked = new Set(stage.needs.map((n) => n.defId));
+  for (const defId of Object.keys(town.sold)) {
+    if (asked.has(defId)) continue;
+    town.spent[defId] = town.sold[defId] ?? 0;
+  }
+  for (const need of stage.needs) {
+    town.spent[need.defId] = (town.spent[need.defId] ?? 0) + need.count;
+  }
   town.chosen.push(choiceId);
   const chosen = choiceById(choiceId);
   toast(world, `${stage.name}`, 'epic');
