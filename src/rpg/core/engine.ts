@@ -21,8 +21,8 @@ import { log, toast, vfx } from './feedback';
 import { pickUpNearby } from './loot';
 import { nextRandom, randRange } from './rng';
 import { derive } from './stats';
-import { blockedAt, enterMap, findPath, slideMove, tileCenter } from './world';
-import type { Monster, World } from '../types';
+import { blockedAt, enterMap, findPath, portalProblem, slideMove, tileCenter } from './world';
+import type { Monster, Seconds, World } from '../types';
 
 export function step(world: World, rawDt: number): void {
   const dt = Math.min(rawDt, MAX_STEP);
@@ -366,12 +366,36 @@ function regenerate(world: World, dt: number): void {
   me.hp = Math.min(stats.maxHp, me.hp + stats.regen * multiplier * dt);
 }
 
+/**
+ *  닫힌 문 앞에서 방금 말을 걸었는가.
+ *
+ *  ★ 문 앞에 서 있으면 매 프레임 판정이 돌아갑니다. 그대로 두면 같은 말이
+ *    초당 예순 번 뜹니다. 세계마다 따로 세되 저장에는 넣지 않습니다 —
+ *    "굳게 닫혀 있다" 는 사실은 기록할 것이 아니라 그때그때 알려줄 것입니다.
+ */
+const knockedAt = new WeakMap<World, { tx: number; ty: number; at: Seconds }>();
+const KNOCK_AGAIN = 6;
+
 function checkPortals(world: World): void {
   const me = world.me;
   for (const portal of world.map.def.portals) {
     const px = tileCenter(portal.tx);
     const py = tileCenter(portal.ty);
     if (Math.hypot(px - me.pos.x, py - me.pos.y) > TILE * 0.7) continue;
+
+    //  ★ 조건이 걸린 문은 여기서 막힙니다. 조용히 막지 않습니다 —
+    //    다만 무엇이 부족한지는 말하지 않습니다 (전체설계 3.4).
+    const problem = portalProblem(world, portal);
+    if (problem) {
+      const last = knockedAt.get(world);
+      const same = last && last.tx === portal.tx && last.ty === portal.ty;
+      if (!same || world.time - last!.at > KNOCK_AGAIN) {
+        knockedAt.set(world, { tx: portal.tx, ty: portal.ty, at: world.time });
+        toast(world, problem, 'bad');
+        log(world, `${portal.label} — ${problem}`, 'bad');
+      }
+      continue;
+    }
 
     enterMap(world, portal.to, portal.toTx, portal.toTy);
     log(world, `${world.map.def.name} 진입`, 'normal');

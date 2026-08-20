@@ -106,6 +106,18 @@ const LIST: MapDef[] = [
     portals: [
       { tx: 1, ty: 20, to: 'forest', toTx: 40, toTy: 18, label: '초록 숲' },
       { tx: 4, ty: 24, to: 'town', toTx: 24, toTy: 19, label: '마을' },
+      //  ★ 아래로 내려가는 문. 아직 아무도 못 엽니다.
+      //    광산 맨 안쪽(입구에서 36칸)이라 구리를 캐러 들어가면 자연히 만납니다.
+      //    보이기는 해야 합니다 — 숨기면 궁금할 수 없습니다 (전체설계 3.4).
+      //    무엇이 부족한지는 말하지 않습니다.
+      //  ★ 갈 곳(mine-deep)은 아직 없는 지역입니다. 봉인된 문만 그럴 수 있고,
+      //    tests/rpg/maps.test.ts 가 그것을 지킵니다.
+      {
+        tx: 40, ty: 20,
+        to: 'mine-deep', toTx: 4, toTy: 20,
+        label: '내려가는 길',
+        needs: { sealed: true, closed: '굳게 닫혀 있습니다.' },
+      },
     ],
   },
   {

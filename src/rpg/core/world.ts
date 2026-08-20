@@ -15,7 +15,7 @@ import { stageOf } from '../content/town';
 import { monsterDef } from '../content/monsters';
 import { hash2, nextRandom, randInt } from './rng';
 import { veinDef } from '../content/veins';
-import type { MapDef, MapId, MapRuntime, Monster, Vec2, World } from '../types';
+import type { MapDef, MapId, MapRuntime, Monster, Portal, Vec2, World } from '../types';
 
 /* 타일 값 */
 export const FLOOR = 0;
@@ -393,6 +393,25 @@ export function populate(world: World): void {
       });
     }
   }
+}
+
+/**
+ *  이 문을 지금 지날 수 있는가.
+ *
+ *  ★ 판정을 여기 한 곳에만 둡니다. 문마다 흩어놓으면 어떤 문은 검사하고
+ *    어떤 문은 안 하는 상태가 됩니다 — 그리고 그건 아무도 모릅니다.
+ *
+ *  돌려주는 값: 못 지나가는 이유 한 줄, 지날 수 있으면 null.
+ *  ★ 이유에는 무엇이 부족한지 적지 않습니다. 궁금한 채로 두는 것이 목적입니다.
+ */
+export function portalProblem(world: World, portal: Portal): string | null {
+  const needs = portal.needs;
+  if (!needs) return null;
+  //  층이 생기면(전체설계 8절 C) 여기에 갈래가 늡니다 — 갖춘 장비를 보는 검사 같은 것.
+  //  그때도 부르는 쪽은 이 함수 하나만 알면 됩니다.
+  void world;
+  if (needs.sealed) return needs.closed;
+  return null;
 }
 
 /** 다른 지역으로 옮겨갑니다 */

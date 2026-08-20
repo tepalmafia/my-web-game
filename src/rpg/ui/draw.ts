@@ -29,6 +29,7 @@ import {
   drawNameplates,
   drawNpc,
   drawPortal,
+  drawSealedPortal,
   drawTargetMark,
   drawThreatMarks,
   drawThreatRings,
@@ -141,7 +142,9 @@ export function draw(ctx: CanvasRenderingContext2D, world: World, width: number,
   drawLights(ctx, world, range, art);
 
   for (const portal of world.map.def.portals) {
-    drawPortal(ctx, world, portal.tx, portal.ty, portal.label);
+    // 조건이 걸린 문은 빛나지 않습니다 — 보이되 열려 보이지는 않게
+    if (portal.needs) drawSealedPortal(ctx, world, portal.tx, portal.ty, portal.label);
+    else drawPortal(ctx, world, portal.tx, portal.ty, portal.label);
   }
 
   // 만들 수 있는 자리를 바닥에 그립니다 — 발밑이므로 몸통보다 먼저
