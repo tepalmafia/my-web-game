@@ -671,11 +671,23 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
 
   return (
     <div className="space-y-3">
-      <p className="rounded-sm border border-ink-600 bg-ink-700/60 p-2 text-[11px] leading-snug text-parch-300">
-        <span className="font-bold text-[#e0764a]">대장장이 두린</span>
-        <span className="text-parch-400"> — </span>
-        {durinSays(world)}
-      </p>
+      {/*
+        ★ 두린의 말은 두 겹입니다 (이야기-기획안 2.2).
+          인정은 도달했을 때만 얹히고, 안내는 늘 있습니다.
+          어느 줄을 할지는 core/npc 가 정합니다 — 여기는 받아 그리기만 합니다.
+      */}
+      {(() => {
+        const said = durinSays(world);
+        return (
+          <div className="rounded-sm border border-ink-600 bg-ink-700/60 p-2">
+            <span className="text-[11px] font-bold text-[#e0764a]">대장장이 두린</span>
+            {said.noted && (
+              <p className="mt-1 text-[11px] italic leading-snug text-brass-300">{said.noted}</p>
+            )}
+            <p className="mt-1 text-[11px] leading-snug text-parch-300">{said.guide}</p>
+          </div>
+        );
+      })()}
 
       {!forge && (
         <p className="rounded-sm border border-[#5a3a12] bg-[#2a1c0a] p-2 text-[11px] text-[#e8b483]">

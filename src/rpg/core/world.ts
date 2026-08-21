@@ -10,7 +10,7 @@
  */
 
 import { AI, TILE } from '../balance';
-import { MAPS, mapDef } from '../content/maps';
+import { MAPS, MAP_ORDER, mapDef } from '../content/maps';
 import { stageOf } from '../content/town';
 import { monsterDef } from '../content/monsters';
 import { hash2, nextRandom, randInt } from './rng';
@@ -273,6 +273,9 @@ export function buildMap(def: MapDef, stage = 0): MapRuntime {
   clearAround(map, def.entryTx, def.entryTy, 2);
   for (const portal of def.portals) clearAround(map, portal.tx, portal.ty, 2);
   for (const npc of def.npcs) clearAround(map, npc.tx, npc.ty, 2);
+  //  ★ 놓여 있던 것도 비웁니다. 안 그러면 바위 속에 떨어져서 못 줍습니다 —
+  //    아무 말도 없이 그냥 못 줍는 것이라 알아채기가 어렵습니다.
+  for (const relic of def.relics ?? []) clearAround(map, relic.tx, relic.ty, 1);
   // ★ 다른 지도에서 이리로 내려놓는 칸도 비웁니다.
   //   예전에는 도착 칸이 어쩌다 문 옆(clearAround 반경 안)이라 우연히 걸을 수 있었을 뿐이고,
   //   문을 하나만 옮겨도 나무 한가운데에 떨어질 수 있었습니다.
@@ -282,6 +285,7 @@ export function buildMap(def: MapDef, stage = 0): MapRuntime {
   let mask = reachableMask(map, def.entryTx, def.entryTy);
   const mustReach = [
     ...def.portals.map((p) => ({ tx: p.tx, ty: p.ty })),
+    ...(def.relics ?? []).map((r) => ({ tx: r.tx, ty: r.ty })),
     ...arrivalsInto(def.id),
   ];
   for (const spot of mustReach) {
@@ -455,6 +459,26 @@ export function portalProblem(world: World, portal: Portal): string | null {
   return null;
 }
 
+/**
+ *  마을에서 조건 걸린 문 없이 걸어서 닿는 지역들.
+ *
+ *  ★ 그 지역의 문이 열려 있는가가 아니라 **들어오는 문이 열려 있는가**입니다.
+ *    2층은 자기 문(위층으로)이 열려 있지만, 들어오는 문에 조건이 걸려 있습니다.
+ *  ★ 한 칸이 아니라 이어서 봅니다 — 나중에 2층 너머에 지역이 생겨도 맞습니다.
+ */
+export function openRegions(): Set<MapId> {
+  const found = new Set<MapId>(['town']);
+  for (let pass = 0; pass < MAP_ORDER.length; pass++) {
+    for (const id of MAP_ORDER) {
+      if (!found.has(id)) continue;
+      for (const portal of mapDef(id).portals) {
+        if (!portal.needs) found.add(portal.to);
+      }
+    }
+  }
+  return found;
+}
+
 /** 이 문을 연 것으로 남깁니다 — 두 번 적지 않습니다 */
 export function markOpened(world: World, portal: Portal): void {
   if (!portal.needs) return;
@@ -481,7 +505,27 @@ export function enterMap(world: World, mapId: MapId, tx: number, ty: number): vo
   world.pendingNpc = null;
   populate(world);
 
-  if (!world.me.discovered.includes(mapId)) world.me.discovered.push(mapId);
+  //  ★ 처음 온 자리에는 놓여 있던 것을 깔아 둡니다. 두 번째부터는 안 놓습니다 —
+  //    안 주웠으면 바닥에 그대로 있고(stash 가 들고 있습니다), 주웠으면 없습니다.
+  //    discovered 가 "처음인가" 를 이미 알고 있어서 새로 저장할 것이 없습니다.
+  if (!world.me.discovered.includes(mapId)) {
+    world.me.discovered.push(mapId);
+    layRelics(world);
+  }
+}
+
+/** 그 자리에 원래 놓여 있던 것 — 시간이 지나도 안 사라집니다 */
+function layRelics(world: World): void {
+  for (const relic of world.map.def.relics ?? []) {
+    world.ground.push({
+      id: world.nextId++,
+      defId: relic.defId,
+      count: 1,
+      pos: { x: tileCenter(relic.tx), y: tileCenter(relic.ty) },
+      // ★ 사람이 놓은 것이 아니라 원래 있던 것이라 삭지 않습니다
+      until: null,
+    });
+  }
 }
 
 /* ===========================================================================

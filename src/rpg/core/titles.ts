@@ -10,7 +10,7 @@
  *    화면에 없었습니다 (6장). 여기서 처음 읽습니다.
  */
 
-import { MAP_ORDER } from '../content/maps';
+import { openRegions } from './world';
 import { TITLE_ORDER, titleDef } from '../content/titles';
 import { log, toast, vfx } from './feedback';
 import type { Character, TitleId, World } from '../types';
@@ -19,8 +19,11 @@ import type { Character, TitleId, World } from '../types';
 function earned(me: Character, id: TitleId): boolean {
   switch (id) {
     case 'walked-all':
-      //  ★ 지역 목록을 여기 다시 적지 않습니다 — 지역을 늘리면 조건도 함께 무거워집니다.
-      return MAP_ORDER.every((mapId) => me.discovered.includes(mapId));
+      //  ★ 조건이 걸린 문 너머는 빼고 셉니다. 안 그러면 이 칭호가
+      //    "2층까지 내려간 사람" 이 되어 아래 것과 같은 말이 됩니다.
+      return [...openRegions()].every((mapId) => me.discovered.includes(mapId));
+    case 'went-below':
+      return me.discovered.includes('mine-deep');
     default:
       return false;
   }

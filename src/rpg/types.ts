@@ -382,6 +382,14 @@ export interface MapDef {
   clutter: number;
   spawns: MapSpawn[];
   veins: MapVeins[];
+  /**
+   *  그 자리에 처음부터 놓여 있는 것 (이야기-기획안 2.3의 발도르).
+   *
+   *  ★ 처음 그 지역에 들어갈 때 한 번만 놓입니다 — discovered 가 그것을 압니다.
+   *    안 주웠으면 바닥에 그대로 있고, world.stash 가 저장합니다.
+   *    그래서 새로 저장할 것이 없습니다.
+   */
+  relics?: { defId: string; tx: number; ty: number }[];
   portals: Portal[];
   npcs: Npc[];
   /** 화로와 모루가 있는 자리 (제작은 여기서만) */

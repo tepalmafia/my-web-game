@@ -8,25 +8,31 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { MAP_ORDER, mapDef } from '../../src/rpg/content/maps';
+import { mapDef } from '../../src/rpg/content/maps';
 import { TITLES, TITLE_ORDER, titleDef } from '../../src/rpg/content/titles';
 import { wear } from '../../src/rpg/core/commands';
 import { createWorld } from '../../src/rpg/core/create';
 import { step } from '../../src/rpg/core/engine';
 import { checkTitles, displayName, wornTitle } from '../../src/rpg/core/titles';
-import { enterMap } from '../../src/rpg/core/world';
+import { enterMap, openRegions } from '../../src/rpg/core/world';
 import type { World } from '../../src/rpg/types';
 
 function fresh(): World {
   return createWorld('아무개', 'miner');
 }
 
-/** 모든 지역을 한 번씩 밟습니다 */
+/** 걸어서 닿는 지역을 한 번씩 밟습니다 — 2층은 조건 뒤라 여기 없습니다 */
 function walkEverywhere(world: World): void {
-  for (const id of MAP_ORDER) {
+  for (const id of openRegions()) {
     const def = mapDef(id);
     enterMap(world, id, def.entryTx, def.entryTy);
   }
+}
+
+/** 2층까지 내려갑니다 */
+function goBelow(world: World): void {
+  const def = mapDef('mine-deep');
+  enterMap(world, 'mine-deep', def.entryTx, def.entryTy);
 }
 
 describe('표 자체', () => {
@@ -143,5 +149,58 @@ describe('다는 것', () => {
     step(world, 1 / 20);
 
     expect(checkTitles(world)).toEqual([]);
+  });
+});
+
+/* ===========================================================================
+ *  두 번째 칭호 — 여기서 처음으로 '고르는 것' 이 생깁니다
+ * ======================================================================== */
+
+describe('아래를 본 사람', () => {
+  it('2층에 안 내려가면 안 준다', () => {
+    const world = fresh();
+    walkEverywhere(world);
+    step(world, 1 / 20);
+
+    expect(world.me.titles).not.toContain('went-below');
+  });
+
+  it('★ 2층에 내려가면 준다', () => {
+    const world = fresh();
+    goBelow(world);
+    step(world, 1 / 20);
+
+    expect(world.me.titles).toContain('went-below');
+  });
+
+  it('★ 「길 아는 사람」은 2층을 안 센다 — 세면 둘이 같은 말이 된다', () => {
+    const world = fresh();
+    goBelow(world);
+    step(world, 1 / 20);
+
+    expect(world.me.titles).not.toContain('walked-all');
+  });
+
+  it('★ 둘을 다 얻어도 자동으로 갈아 끼우지 않는다 — 고르는 것은 사람이다', () => {
+    const world = fresh();
+    walkEverywhere(world);
+    step(world, 1 / 20);
+    expect(world.me.wearing).toBe('walked-all');
+
+    goBelow(world);
+    step(world, 1 / 20);
+
+    expect(world.me.titles).toHaveLength(2);
+    expect(world.me.wearing, '나중 것이 멋대로 달렸습니다').toBe('walked-all');
+  });
+
+  it('고르면 이름이 바뀐다', () => {
+    const world = fresh();
+    walkEverywhere(world);
+    goBelow(world);
+    step(world, 1 / 20);
+
+    expect(wear(world, 'went-below')).toBe(true);
+    expect(displayName(world.me)).toBe('아래를 본 사람 아무개');
   });
 });
