@@ -13,8 +13,9 @@ import { RECIPE_ORDER, recipeDef } from '../content/recipes';
 import { TEMPER_ORDER, temperDef } from '../content/tempers';
 import { forsaken, nextStage, openRecipes, openStock, progressOf, stageReady } from '../content/town';
 import { AXES, AXIS_ORDER, SKILLS, SKILL_ORDER } from '../content/skills';
+import { titleDef } from '../content/titles';
 import { canTemper, craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
-import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem } from '../core/commands';
+import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem, wear } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { durinSays } from '../core/npc';
 import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
@@ -247,6 +248,40 @@ function SkillPanel({ world }: { world: World }) {
           )}
         </div>
       </section>
+
+      {me.titles.length > 0 && (
+        <section>
+          <h3 className="eyebrow mb-1.5">칭호</h3>
+          <div className="space-y-1">
+            {me.titles.map((id) => {
+              const def = titleDef(id);
+              const worn = me.wearing === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => wear(world, worn ? null : id)}
+                  className={`btn w-full rounded-sm px-2 py-1.5 text-left ${worn ? 'text-brass-300' : 'text-parch-400'}`}
+                >
+                  <span className="text-xs font-bold">
+                    「{def.name}」{worn && <span className="ml-1 text-[10px] font-normal">달고 있음</span>}
+                  </span>
+                  <span className="block text-[11px] leading-snug text-parch-400">{def.earned}</span>
+                </button>
+              );
+            })}
+          </div>
+          {/*
+            ★ 하나뿐일 때는 고르라고 하지 않습니다. 아직 없는 선택을 미리 말하면
+              이상해집니다 — 둘이 되는 순간 이 줄이 나타납니다 (목적지-기획안 2.3).
+          */}
+          {me.titles.length > 1 && (
+            <p className="mt-1 text-[11px] leading-snug text-parch-400">
+              <b className="text-parch-300">하나만 달 수 있습니다.</b> 단 것이 이름 옆에 붙습니다.
+            </p>
+          )}
+        </section>
+      )}
 
       <section>
         <h3 className="eyebrow mb-1.5">지금 배울 수 있는 것</h3>

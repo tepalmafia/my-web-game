@@ -11,6 +11,7 @@
 import { GATHER, POTION_COOLDOWN, TILE } from '../balance';
 import { itemDef } from '../content/items';
 import { monsterDef } from '../content/monsters';
+import { titleDef } from '../content/titles';
 import { nextStage, stageReady } from '../content/town';
 import { veinDef } from '../content/veins';
 import { cancelAction, startCraft, startMining, startRepair } from './action';
@@ -20,8 +21,9 @@ import { findStack, removeItem } from './inventory';
 import { pickUpAt, placeItem } from './loot';
 import { advanceTown } from './town';
 import { derive } from './stats';
+import { wearTitle } from './titles';
 import { tileCenter } from './world';
-import type { EquipSlot, World } from '../types';
+import type { EquipSlot, TitleId, World } from '../types';
 import type { TemperId } from '../balance';
 
 /* ===========================================================================
@@ -249,6 +251,25 @@ export function drinkBestPotion(world: World): boolean {
     return false;
   }
   return drinkPotion(world, best.uid);
+}
+
+/* ===========================================================================
+ *  칭호
+ * ======================================================================== */
+
+/**
+ *  칭호를 답니다. null 이면 뗍니다.
+ *
+ *  화면은 규칙을 모릅니다 — 가진 칭호인지는 여기서 봅니다.
+ */
+export function wear(world: World, id: TitleId | null): boolean {
+  if (!wearTitle(world.me, id)) {
+    log(world, '가지지 않은 칭호입니다', 'bad');
+    return false;
+  }
+  if (id === null) log(world, '칭호를 뗐습니다', 'normal');
+  else log(world, `이제 이렇게 불립니다 — 「${titleDef(id).name}」`, 'good');
+  return true;
 }
 
 /* ===========================================================================
