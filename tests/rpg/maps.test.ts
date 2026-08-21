@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { PLAYER_RADIUS, TILE } from '../../src/rpg/balance';
+import { GAIN, PLAYER_RADIUS, TILE } from '../../src/rpg/balance';
 import { MAPS, MAP_ORDER, mapDef } from '../../src/rpg/content/maps';
 import { ITEMS, itemDef } from '../../src/rpg/content/items';
 import { MONSTERS } from '../../src/rpg/content/monsters';
@@ -265,6 +265,38 @@ describe('지역마다 갈 이유가 다르다', () => {
     // 숲(철) < 강가(구리) < 광산(깊은 구리) — 셋이 같으면 갈림길이 아닙니다
     expect(hardest('forest')).toBeLessThan(hardest('river'));
     expect(hardest('river')).toBeLessThan(hardest('mine'));
+  });
+
+  /*
+   *  ★ 이것이 C1' 이 고친 것이고, ★고치지 않은 것이기도 합니다.
+   *
+   *    버려진 광산은 다른 두 밭의 광맥을 전부 갖고 있습니다. 그것이 설계입니다 —
+   *    "광산 가장 좋은 광석" (이 파일 머리). 그러니 '밭마다 전용 광맥' 은 여기서
+   *    지킬 수 있는 규칙이 아닙니다. 실제로 지킬 수 있는 것은 ★천장이 서로 다른 것입니다.
+   *
+   *    고치기 전에는 숲의 천장이 65 여서 채광 10~45 내내 숲과 광산의 초당 성장이
+   *    소수점까지 같았습니다(22.41). 30~45 에서는 강가까지 셋이 동점이었습니다.
+   *    답이 여럿이면 선택이지만 답이 ★같으면 선택이 아닙니다.
+   *
+   *    숲에서 깊은 철광맥(45)을 빼서 천장이 65 → 40 이 됐습니다.
+   *    봇 실측(씨앗 여덟 · 20분): 숲을 떠나는 씨앗이 0/8 → 6/8, 그리고 채광 30 을
+   *    찍는 자리가 숲에서 광산으로 옮겨갔습니다. ★떠날 때가 생기는 것이 이 배치의 값입니다.
+   */
+  it('밭마다 채광 천장이 다르다 — 숲 40 · 강가 80 · 광산 100', () => {
+    const ceiling = (id: string) =>
+      Math.max(...mapDef(id).veins.map((v) => VEINS[v.veinId]!.difficulty)) + GAIN.easyCutoff;
+    expect(ceiling('forest'), '숲이 졸업되지 않습니다').toBe(40);
+    expect(ceiling('river')).toBe(80);
+    expect(ceiling('mine')).toBe(100);
+
+    // 셋이 서로 달라야 합니다. 같으면 "어디서 캘까" 의 답이 하나입니다
+    const fields = ['forest', 'river', 'mine'];
+    expect(new Set(fields.map(ceiling)).size).toBe(fields.length);
+  });
+
+  it('초록 숲에는 깊은 철광맥이 없다 — 늑대 구역까지 캐러 갈 것이 없다', () => {
+    const forest = mapDef('forest').veins.map((v) => v.veinId);
+    expect(forest).toEqual(['iron-shallow']);
   });
 });
 

@@ -7,7 +7,7 @@
  *  레벨이 없으므로 모든 것이 두 곳에서만 나옵니다 — 능력치와 입고 있는 물건.
  */
 
-import { BARE_HANDS, COMBAT, CRAFT, REGEN, TEMPER, WEIGHT, carryCapacity, maxHpOf } from '../balance';
+import { BARE_HANDS, COMBAT, CRAFT, REGEN, TEMPER, TOOL_TEMPER, WEIGHT, carryCapacity, maxHpOf } from '../balance';
 import { itemDef } from '../content/items';
 import { temperDef } from '../content/tempers';
 import type { Character, EquipSlot, ItemStack, Ratio, Stones } from '../types';
@@ -52,6 +52,21 @@ function qualityMul(stack: ItemStack): number {
 export function temperMul(stack: ItemStack): { damage: number; durability: number; weight: number } {
   if (!stack.temper) return { damage: 1, durability: 1, weight: 1 };
   return TEMPER[stack.temper];
+}
+
+/**
+ *  연장의 벼림이 성공률에 거는 배수.
+ *
+ *  ★ 갑옷에서 `damage` 를 '잘 막게' 로 읽는 것과 같은 방식입니다 —
+ *    얻는 것과 버리는 것의 모양은 같고, 무엇에 걸리느냐만 다릅니다.
+ *    곡괭이면 채굴 성공률, 망치면 제작 성공률입니다.
+ *
+ *  ★ 연장이 없으면 1 입니다. 맨손으로 캐는 길은 없으니 실제로는 안 오는 자리지만,
+ *    ?? 로 덮지 않고 뜻이 있는 값을 돌려줍니다.
+ */
+export function toolTemperMul(tool: ItemStack | null): number {
+  if (!tool || !tool.temper) return 1;
+  return TOOL_TEMPER[tool.temper];
 }
 
 /** 물건 하나(겹친 개수 포함)의 무게 */

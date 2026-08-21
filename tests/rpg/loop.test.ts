@@ -45,9 +45,23 @@ function play(templateId: string, seed: number, minutes: number) {
 }
 
 describe('한 바퀴', () => {
+  /*
+   *  ★ 20분에서 30분으로 늘렸습니다. 숨기지 않고 적어 둡니다 —
+   *    초록 숲에서 깊은 철광맥(45)을 뺀 뒤(C1') 봇이 숲의 늑대 구역(minDepth 20)에
+   *    갈 이유가 없어졌습니다. 전에는 깊은 철광맥이 minDepth 26 이라 캐러 가면
+   *    늑대를 지나야 했고, 그것이 이 게임의 ★유일한 강제 전투였습니다.
+   *
+   *  ★ 재본 것 (씨앗 여덟 · smith · 20분): 첫 사냥이 있는 씨앗은 전 4/8, 후 4/8 로
+   *    총량이 같습니다. 어느 씨앗이 싸우느냐가 섞였을 뿐입니다. 30분이면 5/8 입니다.
+   *
+   *  ★ 그래서 이것을 밸런스 근거로 읽지 않습니다 (CLAUDE.md 8장 4번) —
+   *    들개는 aggroRange 0 이라 먼저 안 덤빕니다. 싸울지 말지는 사람이 고르는 것이고,
+   *    봇이 안 고른 것을 "전투가 사라졌다" 로 읽으면 안 됩니다.
+   *    여기서 지키는 것은 취향이 아니라 ★고리가 끊기지 않는가입니다.
+   */
   for (const seed of [11, 22, 33]) {
-    it(`20분이면 캐고 만들고 싸운다 (씨앗 ${seed})`, () => {
-      const { world, kills } = play('smith', seed, 20);
+    it(`30분이면 캐고 만들고 싸운다 (씨앗 ${seed})`, () => {
+      const { world, kills } = play('smith', seed, 30);
       const me = world.me;
 
       expect(me.tally['iron-ore'] ?? 0, '광석을 못 캤습니다').toBeGreaterThan(0);

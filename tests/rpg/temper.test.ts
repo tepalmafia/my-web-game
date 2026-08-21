@@ -9,11 +9,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { CRAFT, TEMPER } from '../../src/rpg/balance';
+import { CRAFT, GATHER, TEMPER, TOOL_TEMPER } from '../../src/rpg/balance';
 import { itemDef } from '../../src/rpg/content/items';
 import { RECIPE_ORDER, recipeDef } from '../../src/rpg/content/recipes';
 import { TEMPERS, TEMPER_ORDER, temperDef } from '../../src/rpg/content/tempers';
-import { canTemper, craftLoss, startCraft, startRepair, tickAction } from '../../src/rpg/core/action';
+import { canTemper, craftChance, craftLoss, startCraft, startRepair, tickAction } from '../../src/rpg/core/action';
 import { createWorld } from '../../src/rpg/core/create';
 import { repairQuote } from '../../src/rpg/core/durability';
 import { addItem, countOf } from '../../src/rpg/core/inventory';
@@ -90,13 +90,15 @@ describe('표 자체', () => {
 });
 
 describe('무엇을 고를 수 있는가', () => {
-  it('장비는 고르고, 제련은 못 고른다 — 주괴는 재료지 물건이 아니다', () => {
+  it('장비와 연장은 고르고, 제련은 못 고른다 — 주괴는 재료지 물건이 아니다', () => {
     for (const id of RECIPE_ORDER) {
       const makes = itemDef(recipeDef(id).makes);
-      expect(canTemper(id), `${id}`).toBe(makes.slot !== undefined);
+      expect(canTemper(id), `${id}`).toBe(makes.slot !== undefined || makes.tool !== undefined);
     }
     expect(canTemper('smelt-iron')).toBe(false);
     expect(canTemper('make-iron-sword')).toBe(true);
+    // ★ 연장도 고릅니다 — damage 가 성공률로 읽힙니다 (balance.ts 의 TOOL_TEMPER)
+    expect(canTemper('make-iron-pickaxe')).toBe(true);
   });
 
   it('못 고르는 것에 벼림을 밀어넣어도 붙지 않는다', () => {
@@ -252,5 +254,72 @@ describe('누르기 전에 보이는 값', () => {
     expect(loss!.defId).toBe('iron-ingot');
     expect(loss!.lost).toBe(recipeDef('make-iron-sword').needs[0]!.count);
     expect(loss!.lost).toBe(16);
+  });
+});
+
+/* ===========================================================================
+ *  연장의 벼림 — damage 를 '그 연장이 쓰이는 일의 성공률' 로 읽는다
+ *
+ *  ★ 이 묶음이 지키는 것은 하나입니다:
+ *    **셋이 각각 하나씩만 이긴다.** 하나라도 세 축을 다 지면 그 벼림은 함정이고
+ *    (전체설계 7.3), 하나라도 다 이기면 나머지 둘이 장식입니다.
+ * ======================================================================== */
+
+describe('연장의 벼림', () => {
+  const PICK = 'iron-pickaxe';
+
+  /** 이 벼림으로 벼린 철 곡괭이 하나가 어떤 물건이 되는가 */
+  function pick(temper: TemperId | undefined) {
+    const def = itemDef(PICK);
+    const dur = Math.round(def.durability! * (temper ? TEMPER[temper].durability : 1));
+    const weight = def.weight * (temper ? TEMPER[temper].weight : 1);
+    const mul = temper ? TOOL_TEMPER[temper] : 1;
+    // 채광 30 · 철광맥(난이도 20) 에서의 성공률 — 상·하한 전에 곱합니다
+    const raw = (GATHER.baseSuccess + (30 - 20) * GATHER.successPerPoint) * mul;
+    const success = Math.max(GATHER.minSuccess, Math.min(GATHER.maxSuccess, raw));
+    return {
+      perSwing: success,          // 시간으로 얼마나 나오나
+      perTool: success * dur,     // 곡괭이 한 자루로 얼마나 나오나
+      perStone: success / weight, // 짐 한 스톤당 얼마나 나오나
+    };
+  }
+
+  it('셋이 각각 하나씩만 이긴다 — 다 지는 벼림도, 다 이기는 벼림도 없다', () => {
+    const axes = ['perSwing', 'perTool', 'perStone'] as const;
+    const winners = axes.map((axis) =>
+      TEMPER_ORDER.reduce((a, b) => (pick(b)[axis] > pick(a)[axis] ? b : a)),
+    );
+    // 세 축의 승자가 서로 달라야 합니다
+    expect(new Set(winners).size, `승자가 겹칩니다: ${winners.join(' · ')}`).toBe(3);
+  });
+
+  it('벼림 셋 다 무언가를 버린다 — 벼림 안 한 것보다 나은 축과 못한 축이 둘 다 있다', () => {
+    const bare = pick(undefined);
+    for (const id of TEMPER_ORDER) {
+      const t = pick(id);
+      const better = (['perSwing', 'perTool', 'perStone'] as const).filter((a) => t[a] > bare[a]);
+      const worse = (['perSwing', 'perTool', 'perStone'] as const).filter((a) => t[a] < bare[a]);
+      expect(better.length, `${temperDef(id).name}: 나아지는 축이 없습니다`).toBeGreaterThan(0);
+      expect(worse.length, `${temperDef(id).name}: 버리는 것이 없습니다 (공짜입니다)`).toBeGreaterThan(0);
+    }
+  });
+
+  it('연장의 벼림이 화면에 그대로 나온다 — 만들 확률이 든 망치를 센다', () => {
+    const world = atForge();
+    // ★ atForge 는 대장 95 라 성공률이 상한(0.98)에 붙어 있습니다. 붙어 있으면
+    //   벼림을 걸어도 안 움직여서, 배수가 안 걸린 것과 구별이 안 됩니다.
+    world.me.skills.blacksmithing = 40;
+    const plain = craftChance(world, 'make-iron-sword');
+    // 날카롭게 벼린 망치를 들려줍니다
+    const hammer = world.me.backpack.find((s) => s.defId === 'hammer')!;
+    hammer.temper = 'sharp';
+    expect(craftChance(world, 'make-iron-sword'), '망치의 벼림이 화면에 안 셉니다').toBeGreaterThan(plain);
+    hammer.temper = 'tough';
+    expect(craftChance(world, 'make-iron-sword')).toBeLessThan(plain);
+  });
+
+  it('철 곡괭이는 연장이라 죽어도 안 떨어진다', () => {
+    expect(itemDef(PICK).kind).toBe('tool');
+    expect(itemDef(PICK).tool).toBe('pickaxe');
   });
 });

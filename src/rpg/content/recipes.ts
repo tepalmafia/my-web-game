@@ -22,7 +22,6 @@ const LIST: RecipeDef[] = [
     needs: [{ defId: 'copper-ore', count: 1 }], difficulty: 45, seconds: 2, needsForge: true,
   },
 
-  /* --- 무기 --- */
   {
     //  ★ 난이도 65 의 근거: 철 제련(10)은 철광맥 최저(20)의 0.50배,
     //    구리 제련(45)은 구리 광맥 최저(60)의 0.75배입니다. 검은쇠 광맥은 88 하나뿐이라
@@ -33,10 +32,26 @@ const LIST: RecipeDef[] = [
     id: 'smelt-dark-iron', name: '검은쇠 제련', makes: 'dark-iron-ingot', makesCount: 1,
     needs: [{ defId: 'dark-iron-ore', count: 1 }], difficulty: 65, seconds: 2.5, needsForge: true,
   },
+  /* --- 무기 --- */
   {
     id: 'make-iron-dagger', name: '철 단검', makes: 'iron-dagger', makesCount: 1,
     needs: [{ defId: 'iron-ingot', count: 3 }], difficulty: 18, seconds: 4, needsForge: true,
   },
+  /* --- 연장 --- */
+  {
+    //  ★ 난이도 사다리의 25~38 이 비어 있었습니다 — 철 단검(18) 다음이 철검(41) 이라
+    //    틈이 23 으로 게임에서 제일 컸고, 그 안에 있던 것은 표에도 없는 수리(30) 뿐이었습니다.
+    //
+    //  ★ 재료가 싼 것이 요점입니다. 대장 30 에서 대장기술 +1.0 을 올리는 값이
+    //    철검은 철 주괴 259 개(왕복 29 번)인데 철 곡괭이는 79 개입니다.
+    //    두드릴 것이 없던 게 아니라 두드리는 값이 왕복 스물아홉 번이었습니다.
+    //
+    //  ★ 30 인 이유: 철 단검(18) 과 철검(41) 사이이고, 수리(30)와 같은 자리입니다.
+    id: 'make-iron-pickaxe', name: '철 곡괭이', makes: 'iron-pickaxe', makesCount: 1,
+    needs: [{ defId: 'iron-ingot', count: 5 }], difficulty: 30, seconds: 4.5, needsForge: true,
+  },
+
+  /* --- 무기 (이어서) --- */
   {
     id: 'make-iron-sword', name: '철검', makes: 'iron-sword', makesCount: 1,
     needs: [{ defId: 'iron-ingot', count: 16 }], difficulty: 41, seconds: 5, needsForge: true,
