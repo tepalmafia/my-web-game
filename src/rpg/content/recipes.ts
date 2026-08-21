@@ -24,6 +24,16 @@ const LIST: RecipeDef[] = [
 
   /* --- 무기 --- */
   {
+    //  ★ 난이도 65 의 근거: 철 제련(10)은 철광맥 최저(20)의 0.50배,
+    //    구리 제련(45)은 구리 광맥 최저(60)의 0.75배입니다. 검은쇠 광맥은 88 하나뿐이라
+    //    같은 비율이면 66 이고, 딱 떨어지게 65 로 둡니다.
+    //  ★ 더 올리지 않는 이유: 실패하면 재료가 전부 사라지는데(A2),
+    //    검은쇠 광석은 한 덩이가 25 스톤이라 왕복해서 가져온 것입니다.
+    //    태우는 값이 다른 광석과 다릅니다.
+    id: 'smelt-dark-iron', name: '검은쇠 제련', makes: 'dark-iron-ingot', makesCount: 1,
+    needs: [{ defId: 'dark-iron-ore', count: 1 }], difficulty: 65, seconds: 2.5, needsForge: true,
+  },
+  {
     id: 'make-iron-dagger', name: '철 단검', makes: 'iron-dagger', makesCount: 1,
     needs: [{ defId: 'iron-ingot', count: 3 }], difficulty: 18, seconds: 4, needsForge: true,
   },
@@ -48,6 +58,14 @@ const LIST: RecipeDef[] = [
   {
     id: 'make-iron-mail', name: '철 사슬갑옷', makes: 'iron-mail', makesCount: 1,
     needs: [{ defId: 'iron-ingot', count: 32 }], difficulty: 62, seconds: 6, needsForge: true,
+  },
+  {
+    id: 'make-dark-sword', name: '검은쇠 검', makes: 'dark-iron-sword', makesCount: 1,
+    needs: [{ defId: 'dark-iron-ingot', count: 10 }], difficulty: 78, seconds: 6.5, needsForge: true,
+  },
+  {
+    id: 'make-dark-plate', name: '검은쇠 판금', makes: 'dark-iron-plate', makesCount: 1,
+    needs: [{ defId: 'dark-iron-ingot', count: 12 }], difficulty: 84, seconds: 7.5, needsForge: true,
   },
   {
     id: 'make-copper-mail', name: '구리 사슬갑옷', makes: 'copper-mail', makesCount: 1,

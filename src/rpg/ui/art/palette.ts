@@ -237,6 +237,7 @@ export const MATERIAL: Record<string, string> = {
   /* --- 가죽 --- */
   'leather-vest': '#7a5433',
   'leather-cap': '#8a5f3a',
+  'dark-iron-plate': '#4a4652',
   /* --- 철 --- */
   'iron-mail': '#8892a0',
   'iron-helm': '#7c848f',

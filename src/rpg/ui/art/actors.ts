@@ -287,6 +287,8 @@ export const WEAPON_LOOK: Record<string, WeaponLook> = {
   'iron-longsword': { grip: 7.5, guard: 5.6, width: 2.5, tip: 0.9, reach: 1.16, blade: '#cfd6df', metal: BRASS },
   // 구릿빛. 코등이가 넓고 날이 두껍다
   'copper-sword': { grip: 5.5, guard: 5.2, width: 3.3, tip: 1.4, reach: 1.04, blade: '#c98f5e', metal: '#8a5a30' },
+  // 빛을 거의 되쏘지 않는다. 넓고 길고 무겁다 — 지금 가장 큰 칼
+  'dark-iron-sword': { grip: 6.5, guard: 6, width: 3.6, tip: 1.5, reach: 1.12, blade: '#6a6572', metal: '#3f3a48' },
 };
 
 const DEFAULT_LOOK: WeaponLook = {
