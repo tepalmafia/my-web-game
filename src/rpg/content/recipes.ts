@@ -41,6 +41,10 @@ const LIST: RecipeDef[] = [
     id: 'smelt-frost-iron', name: '서릿쇠 제련', makes: 'frost-iron-ingot', makesCount: 1,
     needs: [{ defId: 'frost-iron-ore', count: 1 }], difficulty: 68, seconds: 3, needsForge: true,
   },
+  {
+    id: 'smelt-ember-iron', name: '불꽃쇠 제련', makes: 'ember-iron-ingot', makesCount: 1,
+    needs: [{ defId: 'ember-iron-ore', count: 1 }], difficulty: 74, seconds: 3.5, needsForge: true,
+  },
 
   /* --- 무기 --- */
   {
@@ -91,6 +95,16 @@ const LIST: RecipeDef[] = [
   {
     id: 'make-dark-plate', name: '검은쇠 판금', makes: 'dark-iron-plate', makesCount: 1,
     needs: [{ defId: 'dark-iron-ingot', count: 12 }], difficulty: 84, seconds: 7.5, needsForge: true,
+  },
+  {
+    //  ★ 마을 단계에 안 넣습니다 — 어느 단계의 opens 에도 없는 제작법은
+    //    openRecipes 가 처음부터 열어 줍니다. 잠그는 것은 난이도 하나입니다.
+    id: 'make-frost-helm', name: '서릿쇠 투구', makes: 'frost-iron-helm', makesCount: 1,
+    needs: [{ defId: 'frost-iron-ingot', count: 6 }], difficulty: 82, seconds: 6, needsForge: true,
+  },
+  {
+    id: 'make-frost-plate', name: '서릿쇠 갑옷', makes: 'frost-iron-plate', makesCount: 1,
+    needs: [{ defId: 'frost-iron-ingot', count: 12 }], difficulty: 90, seconds: 8, needsForge: true,
   },
   {
     id: 'make-copper-mail', name: '구리 사슬갑옷', makes: 'copper-mail', makesCount: 1,

@@ -9,8 +9,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { DURABILITY, TEMPER } from '../../src/rpg/balance';
-import { SHOP_STOCK, itemDef } from '../../src/rpg/content/items';
-import { mapDef } from '../../src/rpg/content/maps';
+import { ITEMS, SHOP_STOCK, itemDef } from '../../src/rpg/content/items';
+import { MAP_ORDER, mapDef } from '../../src/rpg/content/maps';
 import { RECIPES, RECIPE_ORDER, recipeDef } from '../../src/rpg/content/recipes';
 import { TOWN_STAGES, emptyTown, openRecipes } from '../../src/rpg/content/town';
 import { veinDef } from '../../src/rpg/content/veins';
@@ -19,9 +19,10 @@ import { createWorld } from '../../src/rpg/core/create';
 import { step } from '../../src/rpg/core/engine';
 import { addItem, freeWeight } from '../../src/rpg/core/inventory';
 import { gearScore } from '../../src/rpg/core/stats';
-import { enterMap, portalId, portalProblem, tileCenter } from '../../src/rpg/core/world';
+import { cancelPending, enterPending } from '../../src/rpg/core/commands';
+import { enterMap, portalId, portalProblem, portalWarning, tileCenter } from '../../src/rpg/core/world';
 import type { TemperId } from '../../src/rpg/balance';
-import type { EquipSlot, ItemStack, World } from '../../src/rpg/types';
+import type { EquipSlot, ItemStack, MapId, World } from '../../src/rpg/types';
 
 /** 내려가는 문 */
 const DOOR = mapDef('mine').portals.find((p) => p.to === 'mine-deep')!;
@@ -30,12 +31,64 @@ const GATE = DOOR.needs!.gear!;
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'helmet'];
 const TEMPERS: TemperId[] = ['sharp', 'tough', 'light'];
 
-/** 이 갈림길들을 고른 사람이 만들거나 살 수 있는 장비 */
-function reachableGear(chosen: string[]): string[] {
+/**
+ *  이 광석은 어느 지역에서 나는가.
+ *  ★ 표에서 끌어옵니다. 박아두면 광맥을 옮길 때 이 시험이 조용히 거짓말을 합니다.
+ */
+function oreMaps(oreId: string): Set<MapId> {
+  const found = new Set<MapId>();
+  for (const id of MAP_ORDER) {
+    for (const patch of mapDef(id).veins) {
+      if (veinDef(patch.veinId).yields === oreId) found.add(id);
+    }
+  }
+  return found;
+}
+
+/**
+ *  이 제작법이 결국 필요로 하는 **밑재료 광석** 전부 — 제련을 거슬러 올라갑니다.
+ *  (철검 → 철 주괴 → 철광석)
+ */
+function baseOres(recipeId: string, seen = new Set<string>()): Set<string> {
+  const out = new Set<string>();
+  for (const need of recipeDef(recipeId).needs) {
+    const from = RECIPE_ORDER.find((id) => RECIPES[id]!.makes === need.defId);
+    if (from && !seen.has(from)) {
+      seen.add(from);
+      for (const ore of baseOres(from, seen)) out.add(ore);
+    } else if (!from) {
+      out.add(need.defId);
+    }
+  }
+  return out;
+}
+
+/**
+ *  이 갈림길들을 고르고 **이 지역들까지 내려간** 사람이 만들거나 살 수 있는 장비.
+ *
+ *  ★ 제작법이 열린 것만으로는 부족합니다. 서릿쇠 갑옷은 처음부터 열려 있지만
+ *    서릿쇠는 3층에서만 납니다 — 3층에 못 간 사람은 못 만듭니다.
+ *    예전에는 이걸 안 봐서, 2층 문 앞의 사람에게 3층 장비를 입히고 있었습니다.
+ */
+function reachableGear(chosen: string[], floors: MapId[]): string[] {
   const open = openRecipes({ sold: {}, spent: {}, chosen } as never);
-  const made = RECIPE_ORDER.filter((id) => open.has(id)).map((id) => RECIPES[id]!.makes);
+  const here = new Set(floors);
+  const made = RECIPE_ORDER.filter((id) => {
+    if (!open.has(id)) return false;
+    for (const ore of baseOres(id)) {
+      const where = oreMaps(ore);
+      // 광맥에서 안 나는 재료(가죽 같은 것)는 어디서든 구합니다
+      if (where.size > 0 && ![...where].some((m) => here.has(m))) return false;
+    }
+    return true;
+  }).map((id) => RECIPES[id]!.makes);
   return [...new Set([...made, ...SHOP_STOCK])].filter((id) => itemDef(id).slot !== undefined);
 }
+
+/** 마을에서 그 층 문 앞까지 내려간 사람이 다녀본 지역들 */
+const UPTO_MINE = ['town', 'forest', 'river', 'mine'] as MapId[];
+const UPTO_DEEP = [...UPTO_MINE, 'mine-deep'] as MapId[];
+const UPTO_THIRD = [...UPTO_DEEP, 'mine-third'] as MapId[];
 
 function wear(world: World, defId: string, temper: TemperId | undefined): void {
   const def = itemDef(defId);
@@ -51,8 +104,8 @@ function wear(world: World, defId: string, temper: TemperId | undefined): void {
 }
 
 /** 이 경로 · 이 벼림으로 갖출 수 있는 가장 좋은 차림 */
-function dressBest(world: World, chosen: string[], temper: TemperId): void {
-  const pool = reachableGear(chosen);
+function dressBest(world: World, chosen: string[], temper: TemperId, floors: MapId[] = UPTO_MINE): void {
+  const pool = reachableGear(chosen, floors);
   for (const slot of SLOTS) {
     let bestId: string | null = null;
     let best = -1;
@@ -243,7 +296,7 @@ function ceiling3(): number {
     for (const temper of TEMPERS) {
       const world = createWorld('시험', 'miner');
       world.me.equipped = { weapon: null, armor: null, helmet: null };
-      dressBest(world, route.chosen, temper);
+      dressBest(world, route.chosen, temper, UPTO_DEEP);
       floor = Math.min(floor, gearScore(world.me));
     }
   }
@@ -327,7 +380,7 @@ describe('★ 3층 문턱이 함정이 아니다', () => {
       for (const temper of TEMPERS) {
         const world = createWorld('시험', 'miner');
         world.me.equipped = { weapon: null, armor: null, helmet: null };
-        dressBest(world, route.chosen, temper);
+        dressBest(world, route.chosen, temper, UPTO_DEEP);
         const have = gearScore(world.me);
         if (have < GATE3) failed.push(`${route.name} · ${temper} = ${have}`);
       }
@@ -357,7 +410,7 @@ describe('★ 3층 문턱이 함정이 아니다', () => {
         for (const temper of TEMPERS) {
           const world = createWorld('시험', 'miner');
           world.me.equipped = { weapon: null, armor: null, helmet: null };
-          dressBest(world, [FIRST, a, b], temper);
+          dressBest(world, [FIRST, a, b], temper, UPTO_DEEP);
           worst = Math.min(worst, gearScore(world.me));
         }
       }
@@ -410,5 +463,190 @@ describe("3층의 성격은 연장이다", () => {
   it('★ 녹일 수 있다 — 파는 것 말고 할 게 있다', () => {
     expect(openRecipes(emptyTown()).has('smelt-frost-iron')).toBe(true);
     expect(recipeDef('smelt-frost-iron').difficulty).toBeLessThan(veinDef('frost-iron').difficulty);
+  });
+});
+
+/* ===========================================================================
+ *  최심부 — 되돌아갈 수 없는 문 (C3'a)
+ *
+ *  ★ 지키는 것은 2·3층과 같습니다. **갈림길에서 무엇을 골랐든, 벼림을 무엇으로
+ *    했든 문을 넘을 수 있어야 한다.** 하나라도 못 넘으면 그 벼림이 함정입니다.
+ *  ★ 여기에 하나가 더 붙습니다 — **모르고 지나칠 수 없어야 한다.**
+ * ======================================================================== */
+
+const ABYSS = mapDef('mine-third').portals.find((p) => p.to === 'mine-abyss')!;
+const GATE_A = ABYSS.needs!.gear!;
+
+describe('★ 최심부 문턱이 함정이 아니다', () => {
+  it('경로 여덟 × 벼림 셋 — 스물넷이 다 최심부 문을 넘는다', () => {
+    const failed: string[] = [];
+    for (const route of ROUTES3) {
+      for (const temper of TEMPERS) {
+        const world = createWorld('시험', 'miner');
+        world.me.equipped = { weapon: null, armor: null, helmet: null };
+        //  3층까지 내려간 사람입니다 — 서릿쇠를 손에 넣을 수 있습니다
+        dressBest(world, route.chosen, temper, UPTO_THIRD);
+        const have = gearScore(world.me);
+        if (have < GATE_A) failed.push(`${route.name} · ${temper} = ${have}`);
+      }
+    }
+    expect(failed, `이 조합은 최심부에 못 갑니다:\n${failed.join('\n')}`).toEqual([]);
+  });
+
+  it('가장 낮은 천장에도 여유가 남는다', () => {
+    let floor = Infinity;
+    for (const route of ROUTES3) {
+      for (const temper of TEMPERS) {
+        const world = createWorld('시험', 'miner');
+        world.me.equipped = { weapon: null, armor: null, helmet: null };
+        dressBest(world, route.chosen, temper, UPTO_THIRD);
+        floor = Math.min(floor, gearScore(world.me));
+      }
+    }
+    expect(floor - GATE_A, `여유가 ${(floor - GATE_A).toFixed(1)} 뿐입니다`).toBeGreaterThan(3);
+  });
+
+  it('★ 3층 문보다 확실히 위다 — 문이 하나 더 있을 값을 한다', () => {
+    expect(GATE_A).toBeGreaterThan(GATE3 + 10);
+  });
+
+  /*
+   *  ★ 이 문턱이 왜 서릿쇠를 필요로 하는가.
+   *
+   *    서릿쇠가 없으면 4단계 완주자의 합산이 **45.9 ~ 88.8** 로 벌어집니다.
+   *    바닥이 45.9 인 이유는 갈림길이 매번 「무기냐 갑옷이냐」라서, 세 번 다
+   *    무기를 고른 사람의 갑옷이 상점 가죽 조끼(6)에서 멈추기 때문입니다.
+   *    그래서 문턱을 45.9 위로 잡는 순간 그 사람이 함정에 빠집니다.
+   *
+   *    서릿쇠 투구·갑옷을 **난이도로만** 잠그면 갈림길과 무관하게 누구나 만들 수
+   *    있어서 그 빈 칸이 메워지고, 바닥이 71.4 로 올라옵니다. 문턱 65 는 그 위에
+   *    서는 값입니다. 이 시험은 그 인과를 지킵니다 — 서릿쇠를 빼면 깨집니다.
+   */
+  it('★ 서릿쇠가 바닥을 올린다 — 그게 없으면 이 문턱이 함정이 된다', () => {
+    const floorOf = (floors: MapId[]) => {
+      let lo = Infinity;
+      for (const route of ROUTES3) {
+        for (const temper of TEMPERS) {
+          const world = createWorld('시험', 'miner');
+          world.me.equipped = { weapon: null, armor: null, helmet: null };
+          dressBest(world, route.chosen, temper, floors);
+          lo = Math.min(lo, gearScore(world.me));
+        }
+      }
+      return lo;
+    };
+    const without = floorOf(UPTO_DEEP);
+    const withFrost = floorOf(UPTO_THIRD);
+
+    expect(without, `서릿쇠 없이도 바닥이 ${without} 라 문턱이 안 필요합니다`).toBeLessThan(GATE_A);
+    expect(withFrost, `서릿쇠를 넣어도 바닥이 ${withFrost} 입니다`).toBeGreaterThan(GATE_A);
+  });
+});
+
+describe('★ 되돌아갈 수 없는 문은 모르고 지나칠 수 없다', () => {
+  it('문이 한 방향이라고 표에 적혀 있다', () => {
+    expect(ABYSS.needs!.oneWay, '최심부 문이 한 방향이 아닙니다').toBe(true);
+  });
+
+  it('★ 들어온 문으로는 못 나온다 — 최심부에 3층으로 되돌아가는 문이 없다', () => {
+    const back = mapDef('mine-abyss').portals.filter((p) => p.to === 'mine-third');
+    //  나가는 길은 있어야 합니다. 다만 **들어온 자리가 아니어야** 합니다.
+    expect(back.length, '최심부에서 나가는 길이 없습니다 — 갇힙니다').toBeGreaterThan(0);
+    for (const out of back) {
+      const dx = Math.abs(out.tx - mapDef('mine-abyss').entryTx);
+      expect(dx, '나가는 길이 들어온 자리 옆에 있습니다 — 돌아설 수 있으면 무게가 없습니다').toBeGreaterThan(20);
+    }
+  });
+
+  it('★ 걸어 들어가는 것만으로는 안 들어가진다 — 반드시 묻는다', () => {
+    const world = createWorld('시험', 'miner');
+    world.me.skills.blacksmithing = 100;
+    enterMap(world, 'mine-third', mapDef('mine-third').entryTx, mapDef('mine-third').entryTy);
+    // 문턱을 넘는 차림으로 갈아입힙니다
+    world.me.equipped = { weapon: null, armor: null, helmet: null };
+    dressBest(world, ROUTES3[0]!.chosen, 'sharp', UPTO_THIRD);
+    expect(gearScore(world.me)).toBeGreaterThanOrEqual(GATE_A);
+
+    world.me.pos = { x: tileCenter(ABYSS.tx), y: tileCenter(ABYSS.ty) };
+    for (let i = 0; i < 20; i++) step(world, 1 / 20);
+
+    expect(world.mapId, '묻지도 않고 들어갔습니다').toBe('mine-third');
+    expect(world.pendingPortal, '묻지 않았습니다').toBeTruthy();
+    expect(portalWarning(world, ABYSS), '경고 문구가 없습니다').toContain('못 돌아옵니다');
+  });
+
+  it('★ 「들어간다」에 답해야 들어간다', () => {
+    const world = createWorld('시험', 'miner');
+    enterMap(world, 'mine-third', mapDef('mine-third').entryTx, mapDef('mine-third').entryTy);
+    world.me.equipped = { weapon: null, armor: null, helmet: null };
+    dressBest(world, ROUTES3[0]!.chosen, 'sharp', UPTO_THIRD);
+    world.me.pos = { x: tileCenter(ABYSS.tx), y: tileCenter(ABYSS.ty) };
+    for (let i = 0; i < 20; i++) step(world, 1 / 20);
+
+    expect(enterPending(world)).toBe(true);
+    expect(world.mapId).toBe('mine-abyss');
+    expect(world.pendingPortal).toBeNull();
+  });
+
+  it('★ 「돌아선다」면 안 들어간다', () => {
+    const world = createWorld('시험', 'miner');
+    enterMap(world, 'mine-third', mapDef('mine-third').entryTx, mapDef('mine-third').entryTy);
+    world.me.equipped = { weapon: null, armor: null, helmet: null };
+    dressBest(world, ROUTES3[0]!.chosen, 'sharp', UPTO_THIRD);
+    world.me.pos = { x: tileCenter(ABYSS.tx), y: tileCenter(ABYSS.ty) };
+    for (let i = 0; i < 20; i++) step(world, 1 / 20);
+
+    cancelPending(world);
+    expect(world.pendingPortal).toBeNull();
+    expect(world.mapId).toBe('mine-third');
+  });
+
+  it('★ 한 번 지난 뒤에는 다시 안 묻는다', () => {
+    const world = createWorld('시험', 'miner');
+    enterMap(world, 'mine-third', mapDef('mine-third').entryTx, mapDef('mine-third').entryTy);
+    world.me.equipped = { weapon: null, armor: null, helmet: null };
+    dressBest(world, ROUTES3[0]!.chosen, 'sharp', UPTO_THIRD);
+    world.me.pos = { x: tileCenter(ABYSS.tx), y: tileCenter(ABYSS.ty) };
+    for (let i = 0; i < 20; i++) step(world, 1 / 20);
+    enterPending(world);
+
+    enterMap(world, 'mine-third', mapDef('mine-third').entryTx, mapDef('mine-third').entryTy);
+    expect(portalWarning(world, ABYSS), '이미 겪은 것을 또 묻습니다').toBeNull();
+  });
+});
+
+describe('최심부에서만 나는 것', () => {
+  it('★ 불꽃쇠는 최심부에만 있다', () => {
+    const where = MAP_ORDER.filter((id) =>
+      mapDef(id).veins.some((v) => v.veinId === 'ember-iron'),
+    );
+    expect(where).toEqual(['mine-abyss']);
+  });
+
+  it('★ 녹일 수 있다 — 캐서 끝나는 재료가 아니다', () => {
+    const world = createWorld('시험', 'miner');
+    expect(openRecipes(world.me.town).has('smelt-ember-iron')).toBe(true);
+  });
+});
+
+describe('★ 서릿쇠에 쓸 데가 생겼다', () => {
+  it('서릿쇠 주괴를 쓰는 제작법이 있다 — 캐서 끝나는 재료가 아니다', () => {
+    const uses = RECIPE_ORDER.filter((id) =>
+      recipeDef(id).needs.some((n) => n.defId === 'frost-iron-ingot'),
+    );
+    expect(uses.length, '서릿쇠 주괴가 갈 데가 없습니다').toBeGreaterThan(0);
+  });
+
+  it('★ 마을 단계로 안 잠근다 — 난이도만이 잠근다', () => {
+    const world = createWorld('시험', 'miner');
+    const open = openRecipes(world.me.town);
+    expect(open.has('make-frost-helm'), '서릿쇠 투구가 마을 단계에 잠겨 있습니다').toBe(true);
+    expect(open.has('make-frost-plate'), '서릿쇠 갑옷이 마을 단계에 잠겨 있습니다').toBe(true);
+  });
+
+  it('★ 투구의 빈 칸을 메운다 — 4단계까지 가도 철 투구에서 멈추던 자리', () => {
+    const helms = Object.values(ITEMS).filter((d) => d.slot === 'helmet');
+    const best = Math.max(...helms.map((d) => d.defense ?? 0));
+    expect(best, '가장 좋은 투구가 여전히 철 투구입니다').toBeGreaterThan(8);
   });
 });

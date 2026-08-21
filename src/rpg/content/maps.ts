@@ -218,6 +218,53 @@ const LIST: MapDef[] = [
     portals: [
       //  ★ 도착 칸(33,20)을 2층의 두 문(4,16)·(38,20)에서 떼어 놓습니다.
       { tx: 4, ty: 16, to: 'mine-deep', toTx: 33, toTy: 20, label: '위층' },
+      {
+        //  ★ 되돌아갈 수 없는 문. 여기로 들어가면 이 문으로는 못 나옵니다.
+        //    나가는 길은 최심부 반대편 끝에 있습니다 — 돌아설 수는 없고
+        //    앞으로 나아가야 나옵니다 (전체설계 7.2 최심부).
+        tx: 38, ty: 18, to: 'mine-abyss', toTx: 4, toTy: 17, label: '갈라진 틈',
+        needs: {
+          gear: 65,
+          oneWay: true,
+          closed: '아래에서 열기가 올라옵니다.',
+        },
+      },
+    ],
+  },
+  {
+    /*
+     *  최심부 — 되돌아갈 수 없다.
+     *
+     *  ★ 층마다 다른 문제를 하나씩 줍니다 (전체설계 7.2).
+     *    2층은 무겁다, 3층은 연장이 상한다, 여기는 **돌아설 수 없다** 입니다.
+     *
+     *  ★ 들어온 문으로는 못 나옵니다. 나가는 길은 반대편 끝(36,17)에 있어서
+     *    지역을 가로질러야 합니다. 가둬 놓는 것이 아니라 무르지 못하게 하는 것입니다.
+     *
+     *  ★ 몬스터는 새로 만들지 않았습니다. 여기의 문제는 센 놈이 아니라
+     *    돌아설 수 없다는 것이고, 같은 놈도 물러설 데가 없으면 다른 놈입니다.
+     */
+    id: 'mine-abyss',
+    name: '최심부',
+    subtitle: '들어온 틈은 등 뒤에서 닫혔습니다. 길은 앞쪽뿐입니다',
+    theme: 'cave',
+    width: 40, height: 34,
+    safe: false,
+    seed: 7007,
+    clutter: 0.28,
+    entryTx: 4, entryTy: 17,
+    spawns: [
+      { monsterId: 'frozen-thing', count: 5, minDepth: 6 },
+      { monsterId: 'deep-lurker', count: 6, minDepth: 12 },
+    ],
+    veins: [
+      { veinId: 'frost-iron', count: 2, minDepth: 5 },
+      { veinId: 'ember-iron', count: 6, minDepth: 12 },
+    ],
+    npcs: [],
+    portals: [
+      //  ★ 나가는 길. 들어온 자리(4,17)의 반대편 끝입니다.
+      { tx: 36, ty: 17, to: 'mine-third', toTx: 33, toTy: 18, label: '위로 뚫린 굴' },
     ],
   },
   {

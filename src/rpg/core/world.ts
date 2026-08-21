@@ -460,6 +460,20 @@ export function portalProblem(world: World, portal: Portal): string | null {
 }
 
 /**
+ *  이 문에 대해 먼저 물어야 할 것이 있는가. 없으면 null.
+ *
+ *  ★ 되돌아갈 수 없는 문을 조용히 지나가게 두지 않습니다. 무엇을 잃는지 모르는 채
+ *    잃는 것은 무게가 아니라 결함입니다 (전체설계 0장).
+ *  ★ 한 번 지난 문은 다시 안 묻습니다 — 이미 겪어서 아는 것을 또 묻는 것은
+ *    무게가 아니라 성가심입니다.
+ */
+export function portalWarning(world: World, portal: Portal): string | null {
+  if (!portal.needs?.oneWay) return null;
+  if (world.me.opened.includes(portalId(world.mapId, portal))) return null;
+  return `${mapDef(portal.to).name} — 이 문으로는 못 돌아옵니다. 나가는 길은 저 안에서 따로 찾아야 합니다.`;
+}
+
+/**
  *  마을에서 조건 걸린 문 없이 걸어서 닿는 지역들.
  *
  *  ★ 그 지역의 문이 열려 있는가가 아니라 **들어오는 문이 열려 있는가**입니다.

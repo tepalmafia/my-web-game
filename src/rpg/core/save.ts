@@ -167,6 +167,7 @@ function rebuild(data: SaveData): World | null {
     pathTimer: 0,
     panel: null,
     pendingNpc: null,
+    pendingPortal: null,
     toast: null,
     seed: data.seed ?? 12345,
     meAnim: 0,

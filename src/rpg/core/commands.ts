@@ -24,7 +24,7 @@ import { LOAN_PICKAXE, pickaxeLoanProblem } from './npc';
 import { advanceTown } from './town';
 import { derive } from './stats';
 import { wearTitle } from './titles';
-import { tileCenter } from './world';
+import { enterMap, markOpened, portalProblem, tileCenter } from './world';
 import type { EquipSlot, TitleId, World } from '../types';
 import type { TemperId } from '../balance';
 
@@ -390,4 +390,40 @@ export function potionCount(world: World): number {
 export function warnIfHeavy(world: World): void {
   const stats = derive(world.me);
   if (stats.load > stats.carry * 0.9) toast(world, '짐이 무겁습니다', 'bad');
+}
+
+/* ===========================================================================
+ *  되돌아갈 수 없는 문
+ * ======================================================================== */
+
+/**
+ *  물음에 「들어간다」로 답합니다.
+ *
+ *  ★ engine 의 checkPortals 는 이 문으로 **절대 안 들어갑니다.** 들어가는 것은
+ *    여기 하나뿐이라, 모르고 지나치는 일이 구조적으로 없습니다.
+ */
+export function enterPending(world: World): boolean {
+  const portal = world.pendingPortal;
+  if (!portal) return false;
+
+  const problem = portalProblem(world, portal);
+  if (problem) {
+    toast(world, problem, 'bad');
+    return false;
+  }
+
+  //  ★ enterMap 이 world.mapId 를 바꾸므로 그 전에 적습니다.
+  markOpened(world, portal);
+  world.pendingPortal = null;
+  enterMap(world, portal.to, portal.toTx, portal.toTy);
+  log(world, `${world.map.def.name} 진입 — ${portal.label} 은 등 뒤에 있습니다`, 'epic');
+  toast(world, world.map.def.name, 'good');
+  return true;
+}
+
+/** 물음을 물립니다 — 아직 안 들어갑니다 */
+export function cancelPending(world: World): void {
+  if (!world.pendingPortal) return;
+  world.pendingPortal = null;
+  log(world, '돌아섰습니다', 'normal');
 }
