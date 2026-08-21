@@ -26,7 +26,20 @@ import { attachFlinch, tickFlinch } from './flinch';
 import { attachImpact, frozen, kick, tickImpact } from './impact';
 import { SoundControl } from './SoundControl';
 import { attachAudio } from '../audio';
-import { DevTools } from '../dev/DevTools'; // 지울 때: 이 줄과 아래 <DevTools/> 한 줄, 그리고 dev/ 폴더
+import { DevTools, devSpeed, reportSpeed } from '../dev/DevTools'; // 지울 때: 이 줄과 아래 <DevTools/> 한 줄, 그리고 dev/ 폴더
+
+/**
+ *  한 프레임에 흘릴 수 있는 세계 시간의 천장.
+ *
+ *  ★ 이 값이 하는 일이 둘입니다.
+ *      · 탭에서 돌아왔을 때 밀린 시간이 한꺼번에 쏟아지는 것을 막습니다
+ *      · 배속이 아무리 높아도 한 프레임이 이보다 더 흐르지 못하게 합니다
+ *    둘은 같은 문제입니다 — 한 프레임에 시간을 몰아 흘리는 것.
+ *
+ *  ★ 0.25초면 MAX_STEP(0.05) 다섯 조각입니다. 그보다 크게 잡으면 한 프레임에
+ *    몬스터가 여러 번 때리고, 작게 잡으면 8배속이 낮은 프레임에서 안 나옵니다.
+ */
+const FRAME_MAX = 0.25;
 
 export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -81,22 +94,33 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
 
     const loop = (now: number) => {
       frame = requestAnimationFrame(loop);
-      const dt = Math.min(0.25, (now - last) / 1000);
+      const dt = Math.min(FRAME_MAX, (now - last) / 1000);
       last = now;
 
       // 히트스톱과 움찔거림은 실제 시간으로 흐릅니다 — 멈춰 있는 동안에도 재워야 풀립니다
       tickImpact(dt);
       tickFlinch(dt);
 
-      // 한 번에 크게 뛰지 않도록 잘게 나눠 계산합니다 (탭을 다시 켰을 때 순간이동을 막습니다)
+      //  한 번에 크게 뛰지 않도록 잘게 나눠 계산합니다.
+      //
+      //  ★ 상한이 두 겹입니다. 위의 dt 상한(0.25초)이 **한 프레임에 흘릴 수 있는
+      //    세계 시간의 천장**이고, 여기 MAX_STEP(0.05초) 은 그것을 다시 썹니다.
+      //    상한이 없으면 탭에서 돌아온 순간이나 배속에서 캐릭터가 순간이동하고
+      //    몬스터에게 몰매를 맞습니다 — 한 프레임에 몰아 흐르는 것은 둘 다 같은 문제입니다.
+      //
+      //  ★ 배속(dev/)은 흘릴 시간을 곱할 뿐입니다. core/ 는 배속을 모릅니다.
+      //    상한에 걸리면 요청한 배수보다 덜 흐르는데, 그것을 그대로 알려줍니다 —
+      //    조용히 느려지면 왜 이상한지 알 수가 없습니다 (CLAUDE.md 6장).
       if (!frozen()) {
-        let remaining = dt;
-        let guard = 0;
-        while (remaining > 0 && guard++ < 6) {
+        const want = dt * devSpeed();
+        let remaining = Math.min(FRAME_MAX, want);
+        const willFlow = remaining;
+        while (remaining > 0) {
           const slice = Math.min(MAX_STEP, remaining);
           step(world, slice);
           remaining -= slice;
         }
+        reportSpeed(dt > 0 ? willFlow / dt : devSpeed());
       }
 
       const canvas = canvasRef.current;
