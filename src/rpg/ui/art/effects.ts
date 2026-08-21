@@ -36,6 +36,7 @@ import { tileCenter } from '../../core/world';
 import type { GroundItem, ItemKind, Monster, Npc, NpcKind, Seconds, Vein, World } from '../../types';
 import { LIGHT, alpha, darken, lighten } from './palette';
 import { drawShadow } from './actors';
+import { drawSprite, spriteFor } from './sprites';
 
 /* ------------------------------------------------------------------ 글자 */
 
@@ -813,6 +814,15 @@ export function drawVein(ctx: CanvasRenderingContext2D, world: World, vein: Vein
 
   ctx.save();
   if (empty) ctx.globalAlpha = 0.45;
+
+  //  ★ 남은 양이 화면에 보여야 합니다 (③). 바닥난 광맥은 돌만 남으므로
+  //    광맥 종류를 안 가리고 한 장을 같이 씁니다 — 색으로 갈리던 것이 사라지니까요.
+  const img = empty ? spriteFor('vein/empty') : spriteFor(`vein/${vein.defId}`, 'vein');
+  if (img) {
+    drawSprite(ctx, img, x, y + 12, 32);
+    ctx.restore();
+    return;
+  }
 
   // 바위 덩이 — 광석이 박혀 있는 바탕. 광석이 도드라지도록 어둡게 깔았습니다
   const rock = '#463f38';
