@@ -11,14 +11,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { TILE } from '../../src/rpg/balance';
+import { PLAYER_RADIUS, TILE } from '../../src/rpg/balance';
 import { MAPS, MAP_ORDER, mapDef } from '../../src/rpg/content/maps';
-import { ITEMS } from '../../src/rpg/content/items';
+import { ITEMS, itemDef } from '../../src/rpg/content/items';
 import { MONSTERS } from '../../src/rpg/content/monsters';
 import { VEINS } from '../../src/rpg/content/veins';
 import { createWorld } from '../../src/rpg/core/create';
 import { step } from '../../src/rpg/core/engine';
-import { FLOOR, LIQUID, buildMap, enterMap, tileCenter } from '../../src/rpg/core/world';
+import { FLOOR, LIQUID, buildMap, enterMap, findPath, tileCenter } from '../../src/rpg/core/world';
 import { nextHop } from '../../tools/autopilot';
 import type { MapDef } from '../../src/rpg/types';
 
@@ -499,6 +499,55 @@ describe('못 가는 문', () => {
         nextHop(def.id, portal.to),
         `봇이 ${portal.label} 을(를) 지나가려 합니다 — 문 앞에서 멈춰 섭니다`,
       ).toBeNull();
+    }
+  });
+});
+
+/* ===========================================================================
+ *  놓여 있던 것 (이야기-기획안 2.3)
+ * ======================================================================== */
+
+describe('원래 놓여 있던 것', () => {
+  const withRelics = ALL.filter((def) => (def.relics ?? []).length > 0);
+
+  it('놓여 있는 것이 실제로 하나는 있다', () => {
+    expect(withRelics.length, '어느 지역에도 놓여 있는 것이 없습니다').toBeGreaterThan(0);
+  });
+
+  it('★ 자리가 벽 속이 아니다 — 바위에 떨어지면 아무 말 없이 못 줍는다', () => {
+    for (const def of withRelics) {
+      const world = createWorld('시험', 'miner');
+      enterMap(world, def.id, def.entryTx, def.entryTy);
+      for (const relic of def.relics!) {
+        expect(
+          world.map.tiles[relic.ty * def.width + relic.tx],
+          `${def.id} 의 ${relic.defId} 가 벽 안에 있습니다`,
+        ).toBe(FLOOR);
+      }
+    }
+  });
+
+  it('★ 입구에서 걸어서 닿는다', () => {
+    for (const def of withRelics) {
+      const world = createWorld('시험', 'miner');
+      enterMap(world, def.id, def.entryTx, def.entryTy);
+      for (const relic of def.relics!) {
+        const path = findPath(
+          world.map,
+          { x: tileCenter(def.entryTx), y: tileCenter(def.entryTy) },
+          { x: tileCenter(relic.tx), y: tileCenter(relic.ty) },
+          PLAYER_RADIUS,
+        );
+        expect(path, `${def.id} 의 ${relic.defId} 까지 갈 수가 없습니다`).not.toBeNull();
+      }
+    }
+  });
+
+  it('가리키는 물건이 실제로 있다', () => {
+    for (const def of withRelics) {
+      for (const relic of def.relics!) {
+        expect(() => itemDef(relic.defId), `${relic.defId}`).not.toThrow();
+      }
     }
   });
 });

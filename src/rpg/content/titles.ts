@@ -31,6 +31,14 @@ const LIST: TitleDef[] = [
     earned: '마을과 숲과 강과 광산을 다 밟았습니다.',
     kind: '장소',
   },
+  {
+    //  ★ 두 번째 칭호. 여기서 처음으로 "하나만 달 수 있습니다" 가 나타납니다.
+    //    첫 칭호가 싼 것이었으니 이건 값이 있어야 합니다 — 문을 넘어야 얻습니다.
+    id: 'went-below',
+    name: '아래를 본 사람',
+    earned: '광산 2층까지 내려갔다 왔습니다.',
+    kind: '장소',
+  },
 ];
 
 export const TITLES: Record<string, TitleDef> = Object.fromEntries(LIST.map((t) => [t.id, t]));

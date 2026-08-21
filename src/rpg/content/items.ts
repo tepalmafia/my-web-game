@@ -20,6 +20,14 @@ const LIST: ItemDef[] = [
     desc: '광맥을 캘 때 필요합니다. 쓸수록 닳고, 닳으면 부러집니다.',
   },
   {
+    //  ★ 발도르가 남긴 것 (이야기-기획안 2.3). 2층 바닥에 하나 놓여 있습니다.
+    //    쓸 수 있는 곡괭이지만 거의 다 닳았습니다 — 값은 쓰임이 아니라
+    //    두린에게 보여주는 데 있습니다. 들고 나오려면 10 스톤을 내야 합니다.
+    id: 'baldor-pickaxe', name: '낡은 곡괭이', kind: 'tool', tool: 'pickaxe',
+    weight: 10, durability: 14, price: 0, sell: 0,
+    desc: '자루에 이름이 새겨져 있습니다 — 발도르. 누구인지는 적혀 있지 않습니다.',
+  },
+  {
     id: 'hammer', name: '대장장이 망치', kind: 'tool', tool: 'hammer',
     weight: 8, durability: 120, price: 120, sell: 25,
     desc: '화로 앞에서 물건을 만들고 고칠 때 씁니다.',

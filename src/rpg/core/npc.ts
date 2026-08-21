@@ -12,13 +12,39 @@
  */
 
 import { itemDef } from '../content/items';
-import { DURIN } from '../content/lines';
+import { DURIN, DURIN_NOTES } from '../content/lines';
 import { nextStage, stageReady } from '../content/town';
 import { countOf } from './inventory';
 import type { World } from '../types';
 
-/** 대장장이 두린이 지금 하는 말 */
-export function durinSays(world: World): string {
+/**
+ *  두린의 말은 두 겹입니다 (이야기-기획안 2.2).
+ *
+ *    noted  — 인정. 도달했을 때만 있습니다. 없으면 null
+ *    guide  — 안내. 늘 있습니다. ★ 지우지 마십시오
+ */
+export interface DurinLines {
+  noted: string | null;
+  guide: string;
+}
+
+/**
+ *  두린이 알아본 것.
+ *
+ *  ★ 발도르의 것은 **들고 있어야** 압니다 — "두린이 2층 도구를 보면" 이라
+ *    가방에 없으면 보여준 것이 아닙니다. 그래서 따로 저장할 것이 없습니다.
+ */
+function durinNotes(world: World): string | null {
+  const me = world.me;
+  for (const note of DURIN_NOTES) {
+    if (note.id === 'baldor' && me.backpack.some((s) => s.defId === 'baldor-pickaxe')) return note.line;
+    if (note.id === 'went-below' && me.discovered.includes('mine-deep')) return note.line;
+  }
+  return null;
+}
+
+/** 지금 해야 할 일을 알려주는 줄 — 늘 있습니다 */
+function durinGuides(world: World): string {
   const me = world.me;
   const iron = countOf(me, 'iron-ore') + countOf(me, 'iron-ingot');
   const pickaxe = me.backpack.some((s) => itemDef(s.defId).tool === 'pickaxe' && (s.durability ?? 0) > 0);
@@ -31,4 +57,9 @@ export function durinSays(world: World): string {
   if (stage && countOf(me, 'iron-ingot') > 0) return `${DURIN.broughtIron} ${stage.hint}`;
 
   return DURIN.keepAtIt;
+}
+
+/** 대장장이 두린이 지금 하는 말 */
+export function durinSays(world: World): DurinLines {
+  return { noted: durinNotes(world), guide: durinGuides(world) };
 }
