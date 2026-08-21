@@ -88,7 +88,7 @@ describe('audio 층은 문구를 읽지 않는다', () => {
   });
 });
 
-describe('소리 사양 (설계 문서 §4)', () => {
+describe('소리 사양 (사운드-설계.md §4)', () => {
   it('막힘에는 무게 층이 없다', () => {
     // 막았으니 몸에 안 들어갔다는 뜻이어야 합니다
     expect(Object.keys(BLOCK)).toEqual(['jitter', 'edge', 'ring']);

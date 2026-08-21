@@ -64,7 +64,10 @@ export function createWorld(name: string, templateId: string): World {
   const town = mapDef('town');
 
   const me: Character = {
-    name: name.trim() || '이름 없는 사람',
+    //  ★ '사람' 을 넣지 않습니다. 칭호가 「길 아는 사람」 처럼 그 말로 끝나면
+    //    이름표가 "길 아는 사람 이름 없는 사람" 이 됩니다. 칭호는 앞으로 계속
+    //    늘어나므로 피해야 할 쪽은 칭호가 아니라 이 기본값입니다.
+    name: name.trim() || '나그네',
     str: STATS.start,
     dex: STATS.start,
     int: STATS.start,
