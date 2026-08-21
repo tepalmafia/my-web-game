@@ -12,13 +12,13 @@
  *  마스터 게인을 따로 두는 이유는 볼륨 때문만이 아닙니다.
  *  크리티컬이 터질 때 주변을 잠깐 눌러주고(덕킹), 제작에 실패했을 때
  *  세상을 통째로 잠깐 조용하게 만드는 것이 전부 여기서 일어납니다.
- *  (설계 문서 §4.2 · §4.5 · §4.7)
+ *  (사운드-설계.md §4.2 · §4.5 · §4.7)
  */
 
 /** 게인은 0 으로 내리지 않습니다 — exponentialRamp 가 0 을 못 받습니다 */
 const FLOOR = 0.0001;
 
-/** 동시에 낼 수 있는 소리 (설계 문서 §5) */
+/** 동시에 낼 수 있는 소리 (사운드-설계.md §5) */
 const MAX_VOICES = 8;
 
 /** 같은 소리가 이 간격 안에 겹치면 뒤엣것을 버립니다 (연타 시 게인 폭발 방지) */
@@ -74,7 +74,7 @@ let serial = 0;
 /** 덕킹이 끝나고 마스터를 되돌릴 시각 (겹칠 때 늦은 쪽이 이깁니다) */
 let restoreAt = 0;
 
-/** 이 시각까지는 새 소리를 받지 않습니다 (설계 문서 §4.7 의 정적) */
+/** 이 시각까지는 새 소리를 받지 않습니다 (사운드-설계.md §4.7 의 정적) */
 let silentUntil = 0;
 
 /* ===========================================================================
@@ -158,7 +158,7 @@ export function unlock(): void {
     }
 
     compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -12; // 설계 문서 §5
+    compressor.threshold.value = -12; // 사운드-설계.md §5
     compressor.ratio.value = 4;
     compressor.knee.value = 6;
     compressor.attack.value = 0.003;
@@ -251,7 +251,7 @@ export function duck(decibels: number, holdMs: number): void {
 }
 
 /**
- * 세상을 통째로 잠깐 끕니다 (설계 문서 §4.7 제작 실패).
+ * 세상을 통째로 잠깐 끕니다 (사운드-설계.md §4.7 제작 실패).
  *
  * 울리던 것을 즉시 지우고, 그 뒤 holdMs 동안 **새 소리를 받지 않습니다.**
  * ★ 마스터 게인을 내리는 대신 이렇게 하는 이유: 마스터를 내려버리면
@@ -294,7 +294,7 @@ function hold(target: number, holdMs: number, fallSeconds: number, riseSeconds: 
  *
  * @param key         같은 소리인지 가리는 이름 (12ms 안에 같은 이름이면 거절)
  * @param durationMs  이 소리가 이어지는 길이
- * @param delayMs     지금부터 이만큼 뒤에 시작 (설계 문서 §4.2 의 잔향 등)
+ * @param delayMs     지금부터 이만큼 뒤에 시작 (사운드-설계.md §4.2 의 잔향 등)
  * @param force       정적 중에도 통과 (§4.7 의 실패음 하나만 씁니다)
  * @returns 자리. 소리를 낼 수 없거나 거절되면 null
  */

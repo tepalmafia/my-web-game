@@ -26,7 +26,7 @@ import { takeVoice, type Voice } from './bus';
 /** 게인은 여기까지만 내립니다 */
 const FLOOR = 0.0001;
 
-/** 어택 (설계 문서 §3) */
+/** 어택 (사운드-설계.md §3) */
 const ATTACK = 0.003;
 
 /** 금속의 기본 배음비 — 정수배가 아니라서 '쇳소리'가 됩니다 */
