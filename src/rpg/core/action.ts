@@ -263,7 +263,8 @@ function finishMining(world: World, veinId: number, repeat: boolean): void {
 
   const def = veinDef(vein.defId);
 
-  const pick = useTool(world, 'pickaxe');
+  //  ★ 광맥마다 곡괭이를 먹는 양이 다릅니다 (3층은 3). 표가 정하고 여기는 셈만 합니다.
+  const pick = useTool(world, 'pickaxe', def.toolWear ?? DURABILITY.toolPerUse);
   if (!pick) {
     toast(world, '곡괭이가 부러졌습니다.', 'bad');
     return;

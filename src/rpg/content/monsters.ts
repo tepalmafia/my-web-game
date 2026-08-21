@@ -56,6 +56,20 @@ const LIST: MonsterDef[] = [
     ],
   },
   {
+    //  ★ 3층에서만 나옵니다. 난이도 95 — 검술이 100 까지 갈 길을 엽니다.
+    //  ★ 모양은 'beast' 를 다시 씁니다. 2층이 거미였으니 여기는 네 발입니다 —
+    //    새 모양을 만들지 않는 것은 그릴 코드를 늘리지 않으려는 것입니다.
+    id: 'frozen-thing', name: '얼어붙은 것', difficulty: 95,
+    hp: 420, minDamage: 30, maxDamage: 48, defense: 26,
+    attackRange: 38, attackInterval: 1.6, moveSpeed: 84, aggroRange: 240,
+    shape: 'beast', color: '#aebcc4', size: 21,
+    goldMin: 70, goldMax: 150, respawn: 160,
+    drops: [
+      { defId: 'potion-heal-big', chance: 0.2 },
+      { defId: 'frost-iron-ore', chance: 0.15 },
+    ],
+  },
+  {
     //  ★ 2층에서만 나옵니다. 난이도 82 는 지금까지의 천장(거미 65)을 넘습니다 —
     //    검술이 85 에서 멈추던 것이 여기서 풀립니다 (전체설계 6.2.2).
     id: 'deep-lurker', name: '굴 밑의 것', difficulty: 82,

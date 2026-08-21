@@ -15,18 +15,27 @@ import { TITLE_ORDER, titleDef } from '../content/titles';
 import { log, toast, vfx } from './feedback';
 import type { Character, TitleId, World } from '../types';
 
+/**
+ *  칭호마다의 조건.
+ *
+ *  ★ switch 였습니다. `default: return false` 가 있어서, 표(content/titles.ts)에
+ *    칭호를 더하고 여기를 잊으면 **조용히 영영 안 붙었습니다** — 화면에는 있는데
+ *    아무리 해도 안 얻어지는 칭호가 됩니다 (CLAUDE.md 6장).
+ *    표로 바꾸면 밖에서 맞춰볼 수 있습니다 — tests/rpg/titles.test.ts 가 지킵니다.
+ */
+export const TITLE_RULES: Record<TitleId, (me: Character) => boolean> = {
+  //  ★ 조건이 걸린 문 너머는 빼고 셉니다. 안 그러면 이 칭호가
+  //    "2층까지 내려간 사람" 이 되어 아래 것과 같은 말이 됩니다.
+  'walked-all': (me) => [...openRegions()].every((mapId) => me.discovered.includes(mapId)),
+  'went-below': (me) => me.discovered.includes('mine-deep'),
+};
+
 /** 이 칭호를 얻을 조건이 찼는가 */
 function earned(me: Character, id: TitleId): boolean {
-  switch (id) {
-    case 'walked-all':
-      //  ★ 조건이 걸린 문 너머는 빼고 셉니다. 안 그러면 이 칭호가
-      //    "2층까지 내려간 사람" 이 되어 아래 것과 같은 말이 됩니다.
-      return [...openRegions()].every((mapId) => me.discovered.includes(mapId));
-    case 'went-below':
-      return me.discovered.includes('mine-deep');
-    default:
-      return false;
-  }
+  const rule = TITLE_RULES[id];
+  //  ★ 조용히 false 를 돌려주지 않습니다. 규칙이 없는 칭호는 표가 어긋난 것입니다.
+  if (!rule) throw new Error(`조건이 없는 칭호입니다: ${id} (core/titles.ts 의 TITLE_RULES)`);
+  return rule(me);
 }
 
 /** 지금 달고 있는 칭호. 없으면 null */

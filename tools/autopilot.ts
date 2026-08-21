@@ -592,6 +592,12 @@ function doWork(world: World, pilot: Pilot): void {
 
   // 6) 물약과 연장을 채운다
   if (!hasPickaxe(me)) {
+    //  ★ C1' 이후로 곡괭이는 **만들 수도** 있습니다 (철 주괴 5, 난이도 30).
+    //    사는 길만 알던 이 자리가, 골드가 마르는 순간 봇을 마을에 가둬 놓았습니다 —
+    //    늑대를 앞으로 당기니(첫 죽음) 죽어서 짐을 떨구는 판이 늘었고,
+    //    그러면 팔 것이 없어 곡괭이값 60 을 못 만듭니다.
+    //  ★ 살 수 있으면 사는 것이 먼저입니다. 만드는 것은 45% 라 주괴를 태웁니다.
+    if (liquidGold(world) < itemDef('pickaxe').price && startCraft(world, 'make-iron-pickaxe', false, botTemper(pilot))) return;
     raiseGold(world, itemDef('pickaxe').price, true);
     buyItem(world, 'pickaxe', 1);
   }
@@ -768,9 +774,15 @@ function doHunt(world: World, pilot: Pilot): void {
   const me = world.me;
   const stats = derive(me);
 
-  // 검이 지치면 부러지기 전에 돌아갑니다 — 고쳐 쓸 수 있을 때 돌아가야 순환이 돕니다
+  //  검이 지치면 부러지기 전에 돌아갑니다 — 고쳐 쓸 수 있을 때 돌아가야 순환이 돕니다.
+  //
+  //  ★ **고칠 수 있을 때만** 돌아갑니다. needsTown 이 쓰는 것과 같은 방어인데
+  //    (거기 231~242 줄) 여기에만 빠져 있었습니다. 그래서 검이 지쳤는데 고칠 돈도
+  //    쇠도 없으면, 사냥은 마을로 보내고 마을은 할 일이 없어 다시 내보내며
+  //    haul→work→hunt→haul 를 영원히 돌았습니다.
+  //    벌러 나가야 할 때 나가지 못하는 것이 이 고장의 전부입니다.
   const noPotion = countOf(me, 'potion-heal') === 0 && me.hp / stats.maxHp < 0.4;
-  if (weaponSpent(world) || noPotion || stats.load > stats.carry * 0.9) {
+  if ((weaponSpent(world) && canFixWeapon(world)) || noPotion || stats.load > stats.carry * 0.9) {
     pilot.goal = 'haul';
     return;
   }
