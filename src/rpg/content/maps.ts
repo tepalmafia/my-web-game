@@ -116,8 +116,44 @@ const LIST: MapDef[] = [
         tx: 40, ty: 20,
         to: 'mine-deep', toTx: 4, toTy: 20,
         label: '내려가는 길',
-        needs: { sealed: true, closed: '굳게 닫혀 있습니다.' },
+        //  ★ A0 때는 봉인이었습니다 — 아직 아무도 못 열었으니 말할 것도 없었습니다.
+        //    이제 진짜 조건이 생겼으므로 왜 안 되는지 숫자로 말합니다 (전체설계 4.3).
+        //    한 칸을 지정하지 않고 합산으로 겁니다 — 긴 칼을 고른 사람은 무기로,
+        //    갑옷을 고른 사람은 갑옷으로 채웁니다 (7.3 불변식).
+        needs: { gear: 35, closed: '아래에서 찬 바람이 올라옵니다. 이대로는 못 내려갑니다.' },
       },
+    ],
+  },
+  {
+    //  ★ 광산 2층. 성격은 "길다" 가 아니라 **무겁다** 입니다 (전체설계 7.2).
+    //    검은쇠 광석 한 덩이가 25 스톤이라, 광맥 앞에서 매번
+    //    "철광석을 버리고 이걸 담을까" 가 생깁니다.
+    //
+    //  ★ 1층과 크기를 비슷하게 둡니다. 넓히면 findPath(BFS)가 맵 넓이에 비례해
+    //    비싸지는데, 그 대가로 얻는 것은 걷는 시간뿐입니다.
+    id: 'mine-deep',
+    name: '광산 2층',
+    subtitle: '한 덩이가 팔뚝만 합니다. 다 가져갈 수는 없습니다',
+    theme: 'cave',
+    width: 42, height: 38,
+    safe: false,
+    seed: 5005,
+    clutter: 0.26,
+    entryTx: 4, entryTy: 20,
+    spawns: [
+      { monsterId: 'cave-spider', count: 5, minDepth: 8 },
+      { monsterId: 'deep-lurker', count: 5, minDepth: 18 },
+    ],
+    veins: [
+      //  앞쪽에도 구리가 조금 납니다 — 빈손으로 돌아가는 판을 만들지 않으려는 것입니다
+      { veinId: 'copper-deep', count: 4, minDepth: 6 },
+      { veinId: 'dark-iron', count: 6, minDepth: 16 },
+    ],
+    npcs: [],
+    portals: [
+      //  ★ 도착 칸을 내려가는 문(40,20)에서 떼어 놓습니다. 겹치면 올라오자마자
+      //    그 문을 다시 밟아 무한 왕복이 됩니다 — maps.test.ts 가 그것을 지킵니다.
+      { tx: 4, ty: 16, to: 'mine', toTx: 36, toTy: 20, label: '위층' },
     ],
   },
   {

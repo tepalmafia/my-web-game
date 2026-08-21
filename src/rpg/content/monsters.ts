@@ -56,6 +56,19 @@ const LIST: MonsterDef[] = [
     ],
   },
   {
+    //  ★ 2층에서만 나옵니다. 난이도 82 는 지금까지의 천장(거미 65)을 넘습니다 —
+    //    검술이 85 에서 멈추던 것이 여기서 풀립니다 (전체설계 6.2.2).
+    id: 'deep-lurker', name: '굴 밑의 것', difficulty: 82,
+    hp: 300, minDamage: 22, maxDamage: 36, defense: 20,
+    attackRange: 36, attackInterval: 1.5, moveSpeed: 88, aggroRange: 230,
+    shape: 'spider', color: '#3a3040', size: 19,
+    goldMin: 40, goldMax: 95, respawn: 140,
+    drops: [
+      { defId: 'potion-heal-big', chance: 0.18 },
+      { defId: 'dark-iron-ore', chance: 0.15 },
+    ],
+  },
+  {
     id: 'cave-spider', name: '동굴 거미', difficulty: 65,
     hp: 210, minDamage: 16, maxDamage: 26, defense: 14,
     attackRange: 34, attackInterval: 1.4, moveSpeed: 92, aggroRange: 210,

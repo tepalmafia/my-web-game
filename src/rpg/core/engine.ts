@@ -22,7 +22,7 @@ import { log, toast, vfx } from './feedback';
 import { pickUpNearby } from './loot';
 import { nextRandom, randRange } from './rng';
 import { derive } from './stats';
-import { blockedAt, enterMap, findPath, portalProblem, slideMove, tileCenter } from './world';
+import { blockedAt, enterMap, findPath, markOpened, portalId, portalProblem, slideMove, tileCenter } from './world';
 import type { Monster, Seconds, World } from '../types';
 
 export function step(world: World, rawDt: number): void {
@@ -390,8 +390,8 @@ function checkPortals(world: World): void {
     const py = tileCenter(portal.ty);
     if (Math.hypot(px - me.pos.x, py - me.pos.y) > TILE * 0.7) continue;
 
-    //  ★ 조건이 걸린 문은 여기서 막힙니다. 조용히 막지 않습니다 —
-    //    다만 무엇이 부족한지는 말하지 않습니다 (전체설계 3.4).
+    //  ★ 조건이 걸린 문은 여기서 막힙니다. 조용히 막지 않고,
+    //    무엇이 얼마나 모자란지 숫자로 말합니다 (전체설계 4.3 · 6장).
     const problem = portalProblem(world, portal);
     if (problem) {
       const last = knockedAt.get(world);
@@ -404,9 +404,17 @@ function checkPortals(world: World): void {
       continue;
     }
 
+    //  ★ 한 번 연 문은 다시 안 닫힙니다 (목적지-기획안 3.2).
+    //    enterMap 이 world.mapId 를 바꾸므로 그 전에 적어야 합니다.
+    const first = portal.needs !== undefined && !world.me.opened.includes(portalId(world.mapId, portal));
+    markOpened(world, portal);
+
     enterMap(world, portal.to, portal.toTx, portal.toTy);
     log(world, `${world.map.def.name} 진입`, 'normal');
     toast(world, world.map.def.name, 'good');
+    if (first) {
+      log(world, `${portal.label} 이 열렸습니다. 이 길은 다시 닫히지 않습니다`, 'epic');
+    }
     return;
   }
 }

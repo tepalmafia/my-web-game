@@ -25,6 +25,13 @@ const LIST: VeinDef[] = [
     capacity: 10, respawn: 150, color: '#c47a4a',
   },
   {
+    //  ★ 2층에서만 납니다. capacity 가 낮은 것은 인색해서가 아니라,
+    //    한 덩이가 25 스톤이라 여섯 번만 캐도 짐이 넘치기 때문입니다.
+    id: 'dark-iron', name: '검은쇠 광맥', difficulty: 88,
+    yields: 'dark-iron-ore', amountMin: 1, amountMax: 1,
+    capacity: 8, respawn: 200, color: '#5a5560',
+  },
+  {
     id: 'copper-deep', name: '깊은 구리 광맥', difficulty: 80,
     yields: 'copper-ore', amountMin: 2, amountMax: 3,
     capacity: 12, respawn: 180, color: '#e08a4a',
