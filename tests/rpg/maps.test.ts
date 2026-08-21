@@ -256,7 +256,7 @@ describe('강가', () => {
 
 describe('지역마다 갈 이유가 다르다', () => {
   it('지역 목록과 순서가 정해져 있다', () => {
-    expect(MAP_ORDER).toEqual(['town', 'forest', 'mine', 'mine-deep', 'river']);
+    expect(MAP_ORDER).toEqual(['town', 'forest', 'mine', 'mine-deep', 'mine-third', 'river']);
   });
 
   it('싸울 곳마다 가장 좋은 광맥이 서로 다르다', () => {

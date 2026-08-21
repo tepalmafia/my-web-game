@@ -71,6 +71,17 @@ const LIST: ItemDef[] = [
     price: 0, sell: 42, desc: '녹이고 나면 손바닥만 합니다. 그래도 철보다 무겁습니다.',
   },
   {
+    id: 'frost-iron-ingot', name: '서릿쇠 주괴', kind: 'resource', weight: 1, stackable: true,
+    price: 0, sell: 60, desc: '쥐면 손이 시립니다. 녹인 뒤에도 그렇습니다.',
+  },
+  {
+    //  ★ 3층 재료. 2층처럼 무겁지 않습니다 — 3층의 성격은 무게가 아니라
+    //    **연장**입니다 (veins.ts 의 frost-iron.toolWear). 축을 겹치지 않게 둡니다.
+    //    18 은 철광석(10)보다 무겁고 검은쇠(25)보다 가볍습니다.
+    id: 'frost-iron-ore', name: '서릿쇠 광석', kind: 'resource', weight: 18, stackable: true,
+    price: 0, sell: 48, desc: '돌째로 얼어 있습니다. 곡괭이가 먼저 상합니다.',
+  },
+  {
     //  ★ 2층의 성격이 이 숫자 하나에 걸려 있습니다 (전체설계 7.2).
     //    25 스톤이면 힘 20 의 여유(92)로 세 덩이가 한계입니다. 철광석이라면
     //    아홉 덩이를 담던 자리라, 광맥 앞에서 매번 "무엇을 버릴까" 가 생깁니다.

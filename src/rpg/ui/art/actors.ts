@@ -725,6 +725,16 @@ function drawMonsterBody(
       ctx.fill();
       break;
     }
+  
+    /*
+     *  ★ default 가 없었습니다. MonsterShape 에 값을 더하고 여기를 잊으면
+     *    그 몬스터는 **아무것도 안 그려집니다** — 보이지 않는 것에게 맞습니다.
+     *    never 로 받으면 컴파일이 잡습니다 (CLAUDE.md 6장).
+     */
+    default: {
+      const missing: never = shape;
+      throw new Error(`그리는 법이 없는 몬스터 모양입니다: ${String(missing)}`);
+    }
   }
 }
 

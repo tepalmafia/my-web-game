@@ -49,15 +49,20 @@ export function toolOf(me: Character, kind: ToolKind): ItemStack | null {
 /**
  *  손에 든 연장을 한 번 씁니다. 연장이 없거나 부서졌으면 null.
  *
+ *  ★ amount 는 광맥마다 다릅니다 (VeinDef.toolWear). 3층 광맥은 한 번에 3 을 먹습니다.
  *  ★ **쓴 연장을 돌려줍니다.** 부르는 쪽이 그 연장의 벼림을 봐야 하기 때문입니다
  *    (연장의 벼림은 성공률에 걸립니다 — stats.ts 의 toolTemperMul).
  *    이 한 번으로 부러졌더라도 그 휘두름은 이 연장으로 한 것이라 그대로 돌려줍니다.
  */
-export function useTool(world: World, kind: ToolKind): ItemStack | null {
+export function useTool(
+  world: World,
+  kind: ToolKind,
+  amount: number = DURABILITY.toolPerUse,
+): ItemStack | null {
   const tool = toolOf(world.me, kind);
   if (!tool) return null;
 
-  wear(world, tool, DURABILITY.toolPerUse, null);
+  wear(world, tool, amount, null);
   return tool;
 }
 

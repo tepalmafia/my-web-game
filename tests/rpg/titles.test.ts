@@ -13,7 +13,7 @@ import { TITLES, TITLE_ORDER, titleDef } from '../../src/rpg/content/titles';
 import { wear } from '../../src/rpg/core/commands';
 import { createWorld } from '../../src/rpg/core/create';
 import { step } from '../../src/rpg/core/engine';
-import { checkTitles, displayName, wornTitle } from '../../src/rpg/core/titles';
+import { TITLE_RULES, checkTitles, displayName, wornTitle } from '../../src/rpg/core/titles';
 import { enterMap, openRegions } from '../../src/rpg/core/world';
 import type { World } from '../../src/rpg/types';
 
@@ -36,6 +36,21 @@ function goBelow(world: World): void {
 }
 
 describe('표 자체', () => {
+  /*
+   *  ★ core/titles.ts 가 switch 였고 `default: return false` 가 있었습니다.
+   *    표에 칭호를 더하고 조건을 잊으면 **화면에는 있는데 영영 안 붙는 칭호**가
+   *    됩니다 — 조용한 실패입니다 (CLAUDE.md 6장). 표로 바꿔서 여기서 맞춰봅니다.
+   */
+  it('★ 칭호마다 조건이 있다 — 표에만 있고 조건이 없는 것이 없다', () => {
+    const noRule = TITLE_ORDER.filter((id) => !(id in TITLE_RULES));
+    expect(noRule, `조건이 없는 칭호: ${noRule.join(' · ')}`).toEqual([]);
+  });
+
+  it('★ 조건만 있고 표에 없는 것도 없다 — 반대쪽도 어긋날 수 있다', () => {
+    const noDef = Object.keys(TITLE_RULES).filter((id) => !TITLE_ORDER.includes(id));
+    expect(noDef, `표에 없는 조건: ${noDef.join(' · ')}`).toEqual([]);
+  });
+
   it('id 와 표의 키가 맞는다', () => {
     expect(Object.keys(TITLES).sort()).toEqual([...TITLE_ORDER].sort());
     for (const id of TITLE_ORDER) expect(titleDef(id).id).toBe(id);

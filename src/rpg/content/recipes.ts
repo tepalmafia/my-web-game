@@ -32,6 +32,16 @@ const LIST: RecipeDef[] = [
     id: 'smelt-dark-iron', name: '검은쇠 제련', makes: 'dark-iron-ingot', makesCount: 1,
     needs: [{ defId: 'dark-iron-ore', count: 1 }], difficulty: 65, seconds: 2.5, needsForge: true,
   },
+  {
+    //  ★ 난이도 68 의 근거: 앞선 제련들이 광맥 최저 난이도의 0.50 · 0.75 · 0.74 배였습니다.
+    //    서릿쇠 광맥은 92 하나뿐이라 같은 비율이면 68 입니다.
+    //  ★ 처음부터 열어둡니다 — 구리·검은쇠 때 배운 그대로입니다.
+    //    잠그면 서릿쇠 광석이 "녹일 수 없는 돌" 이 되고, 파는 것 말고 할 게 없으면
+    //    선택이 아닙니다.
+    id: 'smelt-frost-iron', name: '서릿쇠 제련', makes: 'frost-iron-ingot', makesCount: 1,
+    needs: [{ defId: 'frost-iron-ore', count: 1 }], difficulty: 68, seconds: 3, needsForge: true,
+  },
+
   /* --- 무기 --- */
   {
     id: 'make-iron-dagger', name: '철 단검', makes: 'iron-dagger', makesCount: 1,

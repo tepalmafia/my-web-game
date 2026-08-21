@@ -25,6 +25,18 @@ const LIST: VeinDef[] = [
     capacity: 10, respawn: 150, color: '#c47a4a',
   },
   {
+    //  ★ 3층에서만 납니다. **이 광맥이 3층의 성격입니다** (전체설계 7.2).
+    //    toolWear 3 — 한 번 휘두를 때 곡괭이가 3 씩 닳습니다.
+    //    철 곡괭이(내구 150)가 50 번, 상점 곡괭이(60)는 스무 번이면 부러집니다.
+    //
+    //  ★ 그래서 판단이 셋 생깁니다. 몇 자루 지고 갈까(짐) · 어느 벼림으로
+    //    벼릴까(단단하게가 처음으로 정답이 되는 자리) · 언제 돌아설까.
+    //  ★ 무게로 걸지 않았습니다. 2층이 이미 무게라 축이 겹칩니다.
+    id: 'frost-iron', name: '서릿쇠 광맥', difficulty: 92,
+    yields: 'frost-iron-ore', amountMin: 1, amountMax: 2,
+    capacity: 10, respawn: 220, toolWear: 3, color: '#9fb3bd',
+  },
+  {
     //  ★ 2층에서만 납니다. capacity 가 낮은 것은 인색해서가 아니라,
     //    한 덩이가 25 스톤이라 여섯 번만 캐도 짐이 넘치기 때문입니다.
     id: 'dark-iron', name: '검은쇠 광맥', difficulty: 88,

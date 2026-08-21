@@ -167,6 +167,15 @@ export interface VeinDef {
   capacity: number;
   /** 고갈된 뒤 다시 차오르기까지 */
   respawn: Seconds;
+  /**
+   *  한 번 휘두를 때 곡괭이가 닳는 양. 없으면 DURABILITY.toolPerUse (=1).
+   *
+   *  ★ 3층의 성격이 이 숫자입니다 (전체설계 7.2). 2층이 **무겁다** 였고
+   *    3층은 **연장이 남아나지 않는다** 입니다 — 축이 짐이 아니라 소모품입니다.
+   *  ★ 그래서 곡괭이를 몇 자루 지고 갈지, 어느 벼림으로 벼릴지가 판단이 됩니다.
+   *    「단단하게」가 처음으로 정답이 되는 자리입니다.
+   */
+  toolWear?: number;
   color: string;
 }
 
