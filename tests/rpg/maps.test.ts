@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { GAIN, PLAYER_RADIUS, TILE } from '../../src/rpg/balance';
 import { MAPS, MAP_ORDER, mapDef } from '../../src/rpg/content/maps';
+import { TOWN_STAGES } from '../../src/rpg/content/town';
 import { ITEMS, itemDef } from '../../src/rpg/content/items';
 import { MONSTERS } from '../../src/rpg/content/monsters';
 import { VEINS } from '../../src/rpg/content/veins';
@@ -382,7 +383,14 @@ describe('봇 길찾기', () => {
  * ======================================================================== */
 
 describe('마을이 자랄 때', () => {
-  const STAGES = [0, 1, 2, 3, 4];
+  /*
+   *  ★ 단계 수를 여기 적지 않습니다 — 표에서 끌어옵니다.
+   *    박아 두면 사다리를 늘렸을 때 이 시험이 **옛 단계까지만 보고 통과**합니다.
+   *    core/world.ts 의 townBuildings 는 stage 마다 손으로 쓴 사다리라,
+   *    새 단계를 더하고 거기를 잊으면 마을이 안 자랍니다 — 시험 없는 조용한 실패입니다.
+   *  ★ chosen.length 가 곧 단계라 0 부터 TOWN_STAGES.length 까지가 실제로 나옵니다.
+   */
+  const STAGES = Array.from({ length: TOWN_STAGES.length + 1 }, (_, i) => i);
   const town = mapDef('town');
 
   /** 입구에서 걸어서 닿을 수 있는 칸들 */
