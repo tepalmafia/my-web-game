@@ -312,22 +312,16 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
           그래서 남는 곳은 여백으로 둡니다.
       */}
       {/*
-        ★ 넓은 화면에서는 캔버스를 **8:9** 로 잡습니다.
-          view.ts 가 보여주는 세계를 800×900 으로 못 박고 있어서, 캔버스 비율이
-          그것과 다르면 상자를 다 못 채웁니다 — 예전에는 1060×820(≈13:10)이라
-          세로로 619px 밖에 못 봤습니다(상자는 900). 비율만 맞추면 늘 다 봅니다.
+        ★ 비율을 고정하지 않습니다. 8:9 로 못 박아 봤더니 창이 넓을 때 화면이
+          가운데 작게 뜨고 양옆이 검은 여백이 됐습니다. 상자(800×900)를 세로까지
+          꽉 채우는 것보다 큰 화면을 쓰는 쪽이 낫습니다.
 
-        ★ 그래서 남는 가로는 여백입니다. 캔버스를 넓혀봐야 확대율만 오르고
-          보이는 세계는 그대로입니다 (오히려 세로로 덜 보입니다).
-
-        ★ 접으면 세로 상한(820)을 풉니다. 보이는 세계가 넓어지지는 않지만
-          같은 세계가 더 크게 보입니다.
+        ★ 오른쪽 창을 접어도 이 상자는 안 바뀝니다. 접기는 화면을 넓히려는 것이
+          아니라 안 볼 때 치우는 것입니다.
       */}
       <div
         ref={wrapRef}
-        className={`relative min-h-0 flex-1 overflow-hidden lg:aspect-[8/9] lg:h-full lg:w-auto lg:flex-none ${
-          sheetOpen ? 'lg:max-h-[820px]' : 'lg:max-h-none'
-        }`}
+        className="relative min-h-0 flex-1 overflow-hidden lg:h-full lg:max-h-[820px] lg:w-full lg:max-w-[1100px] lg:flex-1"
       >
         <canvas ref={canvasRef}
           className="absolute inset-0 h-full w-full touch-none select-none"
@@ -374,8 +368,8 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
       {/* ----------------------------------------------------- 오른쪽 창 */}
       <aside
         // 넓은 화면에서는 게임 화면과 같은 높이로 나란히 섭니다 (혼자만 천장까지 뻗지 않게)
-        className={`flex min-h-0 shrink-0 flex-col border-ink-600 bg-ink-800 lg:h-full lg:flex-none lg:border-l ${
-          sheetOpen ? 'h-[54dvh] lg:max-h-[820px] lg:w-[380px]' : 'lg:max-h-none lg:w-[64px]'
+        className={`flex min-h-0 shrink-0 flex-col border-ink-600 bg-ink-800 lg:h-full lg:max-h-[820px] lg:flex-none lg:border-l ${
+          sheetOpen ? 'h-[54dvh] lg:w-[380px]' : 'lg:w-[64px]'
         }`}
       >
         <div className="flex min-h-0 flex-1 flex-col">
