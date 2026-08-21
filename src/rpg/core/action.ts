@@ -12,7 +12,7 @@
  *  다만 지금 실력보다 한참 쉬운 일에서는 아무것도 배우지 못합니다(core/skillgain.ts).
  */
 
-import { CRAFT, GATHER } from '../balance';
+import { CRAFT, DURABILITY, GATHER } from '../balance';
 import { itemDef } from '../content/items';
 import { recipeDef } from '../content/recipes';
 import { temperDef } from '../content/tempers';
@@ -21,9 +21,9 @@ import { veinDef } from '../content/veins';
 import { floater, log, toast } from './feedback';
 import { addItem, consume, countOf } from './inventory';
 import { chance, randInt } from './rng';
-import { hasTool, repairQuote, useTool } from './durability';
+import { hasTool, repairQuote, toolOf, useTool } from './durability';
 import { trySkillGain } from './skillgain';
-import { itemName } from './stats';
+import { itemName, toolTemperMul } from './stats';
 import type { Quality, Vein, World } from '../types';
 import type { TemperId } from '../balance';
 
@@ -31,8 +31,17 @@ import type { TemperId } from '../balance';
  *  성공 확률
  * ======================================================================== */
 
-function successChance(skill: number, difficulty: number, table: typeof GATHER | typeof CRAFT): number {
-  const raw = table.baseSuccess + (skill - difficulty) * table.successPerPoint;
+/**
+ *  ★ 연장의 벼림이 여기 걸립니다 (toolMul). 상·하한 **전에** 곱합니다 —
+ *    나중에 곱하면 0.95 를 넘겨버려 상한이 상한이 아니게 됩니다.
+ */
+function successChance(
+  skill: number,
+  difficulty: number,
+  table: typeof GATHER | typeof CRAFT,
+  toolMul = 1,
+): number {
+  const raw = (table.baseSuccess + (skill - difficulty) * table.successPerPoint) * toolMul;
   return Math.max(table.minSuccess, Math.min(table.maxSuccess, raw));
 }
 
@@ -43,10 +52,14 @@ function fineChance(skill: number, difficulty: number): number {
   return Math.min(CRAFT.fineMax, (margin / 50) * CRAFT.fineMax);
 }
 
-/** 이 제작법의 지금 성공 확률 (화면에 보여주기 위해) */
+/**
+ *  이 제작법의 지금 성공 확률 (화면에 보여주기 위해).
+ *  ★ 든 망치의 벼림까지 셉니다. 화면과 실제가 다르면 그것이 조용한 실패입니다.
+ */
 export function craftChance(world: World, recipeId: string): number {
   const recipe = recipeDef(recipeId);
-  return successChance(world.me.skills.blacksmithing, recipe.difficulty, CRAFT);
+  const mul = toolTemperMul(toolOf(world.me, 'hammer'));
+  return successChance(world.me.skills.blacksmithing, recipe.difficulty, CRAFT, mul);
 }
 
 /** 우수품이 나올 확률 */
@@ -71,7 +84,8 @@ export function craftLoss(recipeId: string): Array<{ defId: string; lost: number
 
 /** 이 광맥의 지금 성공 확률 */
 export function mineChance(world: World, veinDefId: string): number {
-  return successChance(world.me.skills.mining, veinDef(veinDefId).difficulty, GATHER);
+  const mul = toolTemperMul(toolOf(world.me, 'pickaxe'));
+  return successChance(world.me.skills.mining, veinDef(veinDefId).difficulty, GATHER, mul);
 }
 
 /* ===========================================================================
@@ -137,9 +151,12 @@ export function startMining(world: World, veinId: number, repeat = true): boolea
  *
  *  ★ 제련은 못 고릅니다. 주괴는 재료지 물건이 아니고, 겹치는 물건이라
  *    개별 값을 달 자리가 없습니다 (ItemStack 이 더미 단위입니다).
+ *  ★ 착용하는 것과 **연장**이 대상입니다. 연장에서는 벼림의 damage 가
+ *    성공률로 읽힙니다 (balance.ts 의 TOOL_TEMPER).
  */
 export function canTemper(recipeId: string): boolean {
-  return itemDef(recipeDef(recipeId).makes).slot !== undefined;
+  const made = itemDef(recipeDef(recipeId).makes);
+  return made.slot !== undefined || made.tool !== undefined;
 }
 
 export function startCraft(
@@ -246,7 +263,8 @@ function finishMining(world: World, veinId: number, repeat: boolean): void {
 
   const def = veinDef(vein.defId);
 
-  if (!useTool(world, 'pickaxe')) {
+  const pick = useTool(world, 'pickaxe');
+  if (!pick) {
     toast(world, '곡괭이가 부러졌습니다.', 'bad');
     return;
   }
@@ -255,7 +273,11 @@ function finishMining(world: World, veinId: number, repeat: boolean): void {
   // 성공하든 실패하든 배웁니다
   trySkillGain(world, 'mining', def.difficulty);
 
-  const ok = chance(world, successChance(me.skills.mining, def.difficulty, GATHER));
+  // ★ 이 휘두름을 한 곡괭이의 벼림이 성공률에 걸립니다
+  const ok = chance(
+    world,
+    successChance(me.skills.mining, def.difficulty, GATHER, toolTemperMul(pick)),
+  );
   if (ok) {
     const amount = randInt(world, def.amountMin, def.amountMax);
     // ★ 넣어보고 나서 셉니다. 못 넣었는데 광맥만 줄어들면 광석이 허공으로 갑니다.
@@ -287,7 +309,8 @@ function finishCraft(world: World, recipeId: string, repeat: boolean, temper?: T
   const recipe = recipeDef(recipeId);
 
   if (recipe.needsForge && !nearForge(world)) return;
-  if (!useTool(world, 'hammer')) {
+  const hammer = useTool(world, 'hammer');
+  if (!hammer) {
     toast(world, '망치가 부러졌습니다.', 'bad');
     return;
   }
@@ -304,7 +327,12 @@ function finishCraft(world: World, recipeId: string, repeat: boolean, temper?: T
 
   trySkillGain(world, 'blacksmithing', recipe.difficulty);
 
-  if (!chance(world, successChance(me.skills.blacksmithing, recipe.difficulty, CRAFT))) {
+  if (
+    !chance(
+      world,
+      successChance(me.skills.blacksmithing, recipe.difficulty, CRAFT, toolTemperMul(hammer)),
+    )
+  ) {
     //  ★ 돌려주지 않습니다. 재료는 위에서 이미 consume 되었고 그대로 사라집니다.
     const burnt = craftLoss(recipeId)
       .map((l) => `${itemDef(l.defId).name} ${l.lost}개`)
@@ -367,7 +395,7 @@ function finishRepair(world: World, uid: number): void {
   if (quote.problem) return;
   if (!consume(me, quote.ingotId, quote.ingots)) return;
 
-  trySkillGain(world, 'blacksmithing', 30);
+  trySkillGain(world, 'blacksmithing', DURABILITY.repairDifficulty);
 
   stack.maxDurability = quote.newMax;
   stack.durability = quote.newMax;

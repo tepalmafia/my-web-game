@@ -12,7 +12,7 @@ import { DURABILITY } from '../balance';
 import { itemDef } from '../content/items';
 import { log, toast } from './feedback';
 import { itemName } from './stats';
-import type { Character, EquipSlot, ItemStack, World } from '../types';
+import type { Character, EquipSlot, ItemStack, ToolKind, World } from '../types';
 
 /** 이 물건이 닳는 물건인가 */
 export function wears(stack: ItemStack): boolean {
@@ -36,20 +36,33 @@ export function wear(world: World, stack: ItemStack, amount: number, slot: Equip
   toast(world, `${itemName(stack)}\n부러짐`, 'bad');
 }
 
-/** 손에 든 연장을 한 번 씁니다. 연장이 없거나 부서졌으면 false */
-export function useTool(world: World, kind: 'pickaxe' | 'hammer'): boolean {
-  const me = world.me;
-
-  // 연장은 가방에 있어도 됩니다 — 손에 드는 칸을 따로 두지 않습니다
-  const tool = me.backpack.find((s) => itemDef(s.defId).tool === kind && (s.durability ?? 1) > 0);
-  if (!tool) return false;
-
-  wear(world, tool, DURABILITY.toolPerUse, null);
-  return true;
+/**
+ *  지금 쓸 수 있는 연장 하나. 없으면 null.
+ *
+ *  ★ 연장은 가방에 있어도 됩니다 — 손에 드는 칸을 따로 두지 않습니다.
+ *  ★ 여럿이면 가방 순서로 먼저 것을 씁니다. 고르게 하지 않습니다.
+ */
+export function toolOf(me: Character, kind: ToolKind): ItemStack | null {
+  return me.backpack.find((s) => itemDef(s.defId).tool === kind && (s.durability ?? 1) > 0) ?? null;
 }
 
-export function hasTool(me: Character, kind: 'pickaxe' | 'hammer'): boolean {
-  return me.backpack.some((s) => itemDef(s.defId).tool === kind && (s.durability ?? 1) > 0);
+/**
+ *  손에 든 연장을 한 번 씁니다. 연장이 없거나 부서졌으면 null.
+ *
+ *  ★ **쓴 연장을 돌려줍니다.** 부르는 쪽이 그 연장의 벼림을 봐야 하기 때문입니다
+ *    (연장의 벼림은 성공률에 걸립니다 — stats.ts 의 toolTemperMul).
+ *    이 한 번으로 부러졌더라도 그 휘두름은 이 연장으로 한 것이라 그대로 돌려줍니다.
+ */
+export function useTool(world: World, kind: ToolKind): ItemStack | null {
+  const tool = toolOf(world.me, kind);
+  if (!tool) return null;
+
+  wear(world, tool, DURABILITY.toolPerUse, null);
+  return tool;
+}
+
+export function hasTool(me: Character, kind: ToolKind): boolean {
+  return toolOf(me, kind) !== null;
 }
 
 /* ===========================================================================
