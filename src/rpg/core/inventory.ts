@@ -11,7 +11,7 @@ import { stageReady } from '../content/town';
 import { log, toast } from './feedback';
 import { derive, equipProblem, itemName, stackWeight, totalWeight } from './stats';
 import { townDidGrow } from './town';
-import type { Character, EquipSlot, ItemStack, Stones, World } from '../types';
+import type { Character, EquipSlot, Gold, ItemStack, Stones, World } from '../types';
 import type { TemperId } from '../balance';
 
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'helmet'];
@@ -177,16 +177,28 @@ export function unequip(world: World, slot: EquipSlot): void {
 }
 
 /** 상점에 팔기 — 닳은 물건은 값이 깎입니다 */
+/**
+ *  이 물건 하나를 팔면 받는 값.
+ *
+ *  ★ 밖으로 뺀 이유: 화면이 팔기 전에 값을 보여줘야 하는데, 식이 sellItem 안에만
+ *    있으면 화면이 같은 계산을 다시 하게 되고 규칙이 두 벌이 됩니다.
+ *    실제로 그렇게 되어 있었습니다 — 화면은 def.sell(기본값)을 찍고 있었고,
+ *    닳은 무기는 최대 70% 싸게, 우수품은 40% 비싸게 팔렸습니다 (6장).
+ */
+export function sellUnitPrice(stack: ItemStack): Gold {
+  const def = itemDef(stack.defId);
+  const worn = stack.maxDurability ? Math.max(0.3, (stack.durability ?? 0) / stack.maxDurability) : 1;
+  const fine = stack.quality === 'fine' ? 1.4 : 1;
+  return Math.max(1, Math.round(def.sell * worn * fine));
+}
+
 export function sellItem(world: World, uid: number, count = 1): void {
   const me = world.me;
   const stack = findStack(me, uid);
   if (!stack) return;
-  const def = itemDef(stack.defId);
 
   const sold = Math.min(count, stack.count);
-  const worn = stack.maxDurability ? Math.max(0.3, (stack.durability ?? 0) / stack.maxDurability) : 1;
-  const fine = stack.quality === 'fine' ? 1.4 : 1;
-  const total = Math.max(1, Math.round(def.sell * worn * fine)) * sold;
+  const total = sellUnitPrice(stack) * sold;
 
   removeItem(me, uid, sold);
   me.gold += total;

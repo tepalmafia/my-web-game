@@ -16,6 +16,7 @@ import { clickWorld, drinkBestPotion, moveTo, stopAction, takeGround, takeMyPack
 import { startMining, veinAt } from '../core/action';
 import { GATHER } from '../balance';
 import { step } from '../core/engine';
+import { toast } from '../core/feedback';
 import { saveWorld } from '../core/save';
 import type { World } from '../types';
 import { ActionBar, DeathOverlay, SkillPop, StatusBlock, Toast } from './Hud';
@@ -26,7 +27,33 @@ import { attachFlinch, tickFlinch } from './flinch';
 import { attachImpact, frozen, kick, tickImpact } from './impact';
 import { SoundControl } from './SoundControl';
 import { attachAudio } from '../audio';
-import { DevTools } from '../dev/DevTools'; // 지울 때: 이 줄과 아래 <DevTools/> 한 줄, 그리고 dev/ 폴더
+import { DevTools, devSpeed, reportSpeed } from '../dev/DevTools'; // 지울 때: 이 줄과 아래 <DevTools/> 한 줄, 그리고 dev/ 폴더
+
+/**
+ *  한 프레임에 흘릴 수 있는 세계 시간의 천장.
+ *
+ *  ★ 이 값이 하는 일이 둘입니다.
+ *      · 탭에서 돌아왔을 때 밀린 시간이 한꺼번에 쏟아지는 것을 막습니다
+ *      · 배속이 아무리 높아도 한 프레임이 이보다 더 흐르지 못하게 합니다
+ *    둘은 같은 문제입니다 — 한 프레임에 시간을 몰아 흘리는 것.
+ *
+ *  ★ 0.25초면 MAX_STEP(0.05) 다섯 조각입니다. 그보다 크게 잡으면 한 프레임에
+ *    몬스터가 여러 번 때리고, 작게 잡으면 8배속이 낮은 프레임에서 안 나옵니다.
+ */
+const FRAME_MAX = 0.25;
+
+/**
+ *  얼마나 자리를 비웠나 — 사람이 읽는 말로.
+ *  ★ format.ts 의 duration() 은 1분 미만을 "0분" 이라고 하는데,
+ *    여기서는 "잠깐 다녀온 것" 이 대부분이라 초까지 말해야 합니다.
+ */
+function awayText(seconds: number): string {
+  const total = Math.round(seconds);
+  if (total < 60) return `${total}초`;
+  const m = Math.floor(total / 60);
+  if (m < 60) return `${m}분 ${total % 60}초`;
+  return `${Math.floor(m / 60)}시간 ${m % 60}분`;
+}
 
 export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,13 +65,16 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
   const refresh = useCallback(() => bump(), []);
 
   /**
-   *  폰 세로에서 아래 창을 접어둡니다.
+   *  창을 접어둡니다 — 폰은 아래로, 넓은 화면은 오른쪽으로.
    *
-   *  ★ 접혀 있으면 게임 화면이 88% 가 됩니다 (펼치면 46%). 폰에서 이 창은
-   *    늘 보고 있을 것이 아니라 필요할 때 여는 것입니다.
-   *  ★ 넓은 화면은 이 값과 무관합니다 — 창이 오른쪽에 붙어 있어 게임 화면을 먹지 않습니다.
+   *  ★ 폰에서 접혀 있으면 게임 화면이 88% 가 됩니다 (펼치면 46%).
+   *  ★ 넓은 화면에서도 접힙니다. 예전에는 380px 를 늘 먹었는데,
+   *    거기 있는 숫자(스킬·가방)는 초 단위로 변하는 것이 아니라
+   *    늘 보고 있을 것이 아닙니다.
+   *  ★ 처음에는 펼쳐 둡니다. 마을에서는 대장간과 상점이 저 창이라
+   *    접힌 채로 시작하면 무엇을 눌러야 할지가 한 겹 더 숨습니다.
    */
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(true);
   const lastPanel = useRef(world.panel);
 
   // 대장장이에게 다가가거나(engine), I·S·C·Esc 를 누르면(아래 키보드) world.panel 이 바뀝니다.
@@ -54,6 +84,14 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     lastPanel.current = world.panel;
     setSheetOpen(world.panel !== null);
   });
+
+  //  ★ 폰 세로는 접힌 채로 시작합니다. 넓은 화면과 값이 다른 이유는
+  //    화면에서 창이 차지하는 몫이 다르기 때문입니다 (폰 54dvh vs 넓은 화면 380px).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setSheetOpen(false);
+    }
+  }, []);
 
   /* ---------------------------------------------------------- 소리와 타격감 */
   // 판단은 전부 audio/ 와 ui/impact.ts 가 합니다. 여기서는 잇기만 합니다.
@@ -67,25 +105,77 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     let last = performance.now();
     let uiTimer = 0;
     let saveTimer = 0;
+    /** 탭이 뒤로 갔는가. 그동안 세계는 멈춥니다 */
+    let hidden = false;
+    /** 숨은 시각 (실제 시간) — 돌아왔을 때 얼마나 멈춰 있었는지 말해주려고 */
+    let hiddenAt = 0;
+
+    /*
+     *  ★ 탭을 벗어나면 세계를 멈춥니다.
+     *
+     *    예전에는 브라우저가 rAF 를 초당 2회로 늦출 뿐이라 세계가 **26% 속도로
+     *    계속 흘렀습니다**(실측: 숨어 있던 30초에 세계 8초). 그건 셋 다 나쁩니다 —
+     *      · 브라우저·기기마다 값이 달라 재현이 안 됩니다 (씨앗 RNG 를 지키는 것과 어긋남)
+     *      · 안 보이는 채로 몬스터에게 맞아 죽을 수 있습니다.
+     *        왜 잃었는지 안 보이는 것은 무게가 아니라 결함입니다 (CLAUDE.md 0장)
+     *      · 소리는 이미 여기서 쉽니다(audio/bus.ts). 소리와 게임이 다른 판단을 했습니다
+     *
+     *    ★ 멈출 때 저장합니다. 그러지 않으면 탭을 그냥 닫았을 때 최대 5초를 잃습니다.
+     */
+    const doc = (globalThis as { document?: Document }).document;
+    const onVisibility = () => {
+      if (!doc) return;
+      if (doc.visibilityState === 'hidden') {
+        if (hidden) return;
+        hidden = true;
+        hiddenAt = performance.now();
+        saveWorld(world);
+      } else {
+        if (!hidden) return;
+        hidden = false;
+        //  ★ 시계를 다시 맞춥니다. 안 그러면 돌아온 첫 프레임의 dt 가
+        //    떠나 있던 시간만큼 커집니다 (FRAME_MAX 가 자르긴 하지만, 자르는 것과
+        //    처음부터 안 재는 것은 다릅니다).
+        const away = (performance.now() - hiddenAt) / 1000;
+        last = performance.now();
+        //  왜 시간이 안 갔는지 말해줍니다. 조용히 멈추면 고장으로 보입니다 (6장)
+        if (away >= 3) toast(world, `${awayText(away)} 멈춰 있었습니다\n그동안 세계도 멈췄습니다`, 'good');
+      }
+    };
+    doc?.addEventListener?.('visibilitychange', onVisibility);
 
     const loop = (now: number) => {
       frame = requestAnimationFrame(loop);
-      const dt = Math.min(0.25, (now - last) / 1000);
+      //  숨어 있는 동안에도 프레임이 몇 장 오는 브라우저가 있습니다.
+      //  시각만 따라가고 세계는 굴리지 않습니다.
+      if (hidden) { last = now; return; }
+      const dt = Math.min(FRAME_MAX, (now - last) / 1000);
       last = now;
 
       // 히트스톱과 움찔거림은 실제 시간으로 흐릅니다 — 멈춰 있는 동안에도 재워야 풀립니다
       tickImpact(dt);
       tickFlinch(dt);
 
-      // 한 번에 크게 뛰지 않도록 잘게 나눠 계산합니다 (탭을 다시 켰을 때 순간이동을 막습니다)
+      //  한 번에 크게 뛰지 않도록 잘게 나눠 계산합니다.
+      //
+      //  ★ 상한이 두 겹입니다. 위의 dt 상한(0.25초)이 **한 프레임에 흘릴 수 있는
+      //    세계 시간의 천장**이고, 여기 MAX_STEP(0.05초) 은 그것을 다시 썹니다.
+      //    상한이 없으면 탭에서 돌아온 순간이나 배속에서 캐릭터가 순간이동하고
+      //    몬스터에게 몰매를 맞습니다 — 한 프레임에 몰아 흐르는 것은 둘 다 같은 문제입니다.
+      //
+      //  ★ 배속(dev/)은 흘릴 시간을 곱할 뿐입니다. core/ 는 배속을 모릅니다.
+      //    상한에 걸리면 요청한 배수보다 덜 흐르는데, 그것을 그대로 알려줍니다 —
+      //    조용히 느려지면 왜 이상한지 알 수가 없습니다 (CLAUDE.md 6장).
       if (!frozen()) {
-        let remaining = dt;
-        let guard = 0;
-        while (remaining > 0 && guard++ < 6) {
+        const want = dt * devSpeed();
+        let remaining = Math.min(FRAME_MAX, want);
+        const willFlow = remaining;
+        while (remaining > 0) {
           const slice = Math.min(MAX_STEP, remaining);
           step(world, slice);
           remaining -= slice;
         }
+        reportSpeed(dt > 0 ? willFlow / dt : devSpeed());
       }
 
       const canvas = canvasRef.current;
@@ -134,6 +224,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
 
     frame = requestAnimationFrame(loop);
     return () => {
+      doc?.removeEventListener?.('visibilitychange', onVisibility);
       cancelAnimationFrame(frame);
       saveWorld(world);
     };
@@ -220,9 +311,23 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
           치솟아 지형이 흐려지고, 남는 자리를 시야로 채우면 다시 "너무 넓게 보임" 이 됩니다.
           그래서 남는 곳은 여백으로 둡니다.
       */}
+      {/*
+        ★ 넓은 화면에서는 캔버스를 **8:9** 로 잡습니다.
+          view.ts 가 보여주는 세계를 800×900 으로 못 박고 있어서, 캔버스 비율이
+          그것과 다르면 상자를 다 못 채웁니다 — 예전에는 1060×820(≈13:10)이라
+          세로로 619px 밖에 못 봤습니다(상자는 900). 비율만 맞추면 늘 다 봅니다.
+
+        ★ 그래서 남는 가로는 여백입니다. 캔버스를 넓혀봐야 확대율만 오르고
+          보이는 세계는 그대로입니다 (오히려 세로로 덜 보입니다).
+
+        ★ 접으면 세로 상한(820)을 풉니다. 보이는 세계가 넓어지지는 않지만
+          같은 세계가 더 크게 보입니다.
+      */}
       <div
         ref={wrapRef}
-        className="relative min-h-0 flex-1 overflow-hidden lg:h-full lg:max-h-[820px] lg:w-full lg:max-w-[1100px] lg:flex-1"
+        className={`relative min-h-0 flex-1 overflow-hidden lg:aspect-[8/9] lg:h-full lg:w-auto lg:flex-none ${
+          sheetOpen ? 'lg:max-h-[820px]' : 'lg:max-h-none'
+        }`}
       >
         <canvas ref={canvasRef}
           className="absolute inset-0 h-full w-full touch-none select-none"
@@ -269,8 +374,8 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
       {/* ----------------------------------------------------- 오른쪽 창 */}
       <aside
         // 넓은 화면에서는 게임 화면과 같은 높이로 나란히 섭니다 (혼자만 천장까지 뻗지 않게)
-        className={`flex min-h-0 shrink-0 flex-col border-ink-600 bg-ink-800 lg:h-full lg:max-h-[820px] lg:w-[380px] lg:flex-none lg:border-l ${
-          sheetOpen ? 'h-[54dvh]' : ''
+        className={`flex min-h-0 shrink-0 flex-col border-ink-600 bg-ink-800 lg:h-full lg:flex-none lg:border-l ${
+          sheetOpen ? 'h-[54dvh] lg:max-h-[820px] lg:w-[380px]' : 'lg:max-h-none lg:w-[64px]'
         }`}
       >
         <div className="flex min-h-0 flex-1 flex-col">
@@ -282,7 +387,10 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
             onClose={() => setSheetOpen(false)}
           />
         </div>
-        <LogPanel world={world} />
+        {/* 접으면 기록창도 함께 접힙니다 — 가느다란 기둥에 들어갈 자리가 없습니다 */}
+        <div className={sheetOpen ? 'contents' : 'contents lg:hidden'}>
+          <LogPanel world={world} />
+        </div>
       </aside>
     </div>
   );

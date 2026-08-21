@@ -51,6 +51,10 @@ const LIST: ItemDef[] = [
     price: 0, sell: 16, desc: '녹이는 것부터가 쉽지 않습니다.',
   },
   {
+    id: 'dark-iron-ingot', name: '검은쇠 주괴', kind: 'resource', weight: 1, stackable: true,
+    price: 0, sell: 42, desc: '녹이고 나면 손바닥만 합니다. 그래도 철보다 무겁습니다.',
+  },
+  {
     //  ★ 2층의 성격이 이 숫자 하나에 걸려 있습니다 (전체설계 7.2).
     //    25 스톤이면 힘 20 의 여유(92)로 세 덩이가 한계입니다. 철광석이라면
     //    아홉 덩이를 담던 자리라, 광맥 앞에서 매번 "무엇을 버릴까" 가 생깁니다.
@@ -96,6 +100,20 @@ const LIST: ItemDef[] = [
     id: 'iron-mail', name: '철 사슬갑옷', kind: 'armor', slot: 'armor',
     defense: 16, weight: 30, durability: 130, price: 0, sell: 180,
     desc: '무겁습니다. 이걸 입고 광석까지 지고 오기는 어렵습니다.',
+  },
+  {
+    //  ★ 3단계 갈림길. 구리검(29)의 다음 자리입니다.
+    id: 'dark-iron-sword', name: '검은쇠 검', kind: 'weapon', slot: 'weapon',
+    weight: 15, durability: 210, minDamage: 25, maxDamage: 40, swing: 1.4,
+    price: 0, sell: 620,
+    desc: '빛을 거의 되쏘지 않습니다. 무겁고, 그만큼 깊이 들어갑니다.',
+  },
+  {
+    //  ★ 3단계 갈림길의 다른 쪽. 합산 기여가 검(40)과 비슷해야 합니다 (7.3 불변식).
+    id: 'dark-iron-plate', name: '검은쇠 판금', kind: 'armor', slot: 'armor',
+    weight: 42, durability: 240, defense: 37,
+    price: 0, sell: 900,
+    desc: '입으면 소리가 납니다. 그 소리가 나쁘지만은 않습니다.',
   },
   {
     id: 'copper-mail', name: '구리 사슬갑옷', kind: 'armor', slot: 'armor',

@@ -219,3 +219,86 @@ describe('2층의 성격은 무게다', () => {
     expect(mapDef('mine').veins.some((v) => v.veinId === 'dark-iron')).toBe(false);
   });
 });
+
+/* ===========================================================================
+ *  3단계 — 검은쇠 대장간 (C2b)
+ *
+ *  ★ 갈림길이 셋이 되면 경로가 여덟입니다. 벼림 셋을 곱해 스물넷.
+ *    하나라도 못 넘으면 그것은 갈림길이 아니라 함정입니다.
+ * ======================================================================== */
+
+const DARK = ['dark-blade', 'dark-plate'] as const;
+const ROUTES3: { name: string; chosen: string[] }[] = [];
+for (const a of ['forge-blade', 'forge-mail']) {
+  for (const b of ['copper-blade', 'copper-mail']) {
+    for (const c of DARK) ROUTES3.push({ name: `${a}/${b}/${c}`, chosen: [FIRST, a, b, c] });
+  }
+}
+
+describe('★ 3단계도 함정이 아니다', () => {
+  it('경로 여덟 × 벼림 셋 — 스물넷이 다 2층 문을 넘는다', () => {
+    const failed: string[] = [];
+    for (const route of ROUTES3) {
+      for (const temper of TEMPERS) {
+        const world = createWorld('시험', 'miner');
+        world.me.equipped = { weapon: null, armor: null, helmet: null };
+        dressBest(world, route.chosen, temper);
+        const have = gearScore(world.me);
+        if (have < GATE) failed.push(`${route.name} · ${temper} = ${have}`);
+      }
+    }
+    expect(failed, `이 조합은 못 넘습니다:\n${failed.join('\n')}`).toEqual([]);
+  });
+
+  it('★ 3단계 장비가 2층 문보다 확실히 위다 — 다음 문을 걸 자리가 있다', () => {
+    let floor = Infinity;
+    for (const route of ROUTES3) {
+      for (const temper of TEMPERS) {
+        const world = createWorld('시험', 'miner');
+        world.me.equipped = { weapon: null, armor: null, helmet: null };
+        dressBest(world, route.chosen, temper);
+        floor = Math.min(floor, gearScore(world.me));
+      }
+    }
+    //  3층 문은 아직 없습니다. 걸 수 있는 폭이 남아 있는지만 봅니다.
+    expect(floor, `가장 낮은 천장이 ${floor} 인데 2층 문이 ${GATE} 입니다`).toBeGreaterThan(GATE + 5);
+  });
+
+  it('갈림길 둘이 합산을 비슷하게 올린다 — 한쪽만 답이면 갈림길이 아니다', () => {
+    const of = (choice: string) => {
+      const world = createWorld('시험', 'miner');
+      world.me.equipped = { weapon: null, armor: null, helmet: null };
+      dressBest(world, [FIRST, 'forge-blade', 'copper-mail', choice], 'tough');
+      return gearScore(world.me);
+    };
+    const blade = of('dark-blade');
+    const plate = of('dark-plate');
+    //  같은 앞길에서 어느 쪽을 골라도 비슷해야 합니다
+    expect(Math.abs(blade - plate) / Math.max(blade, plate)).toBeLessThan(0.15);
+  });
+});
+
+describe('검은쇠에 쓸 데가 생겼다', () => {
+  it('★ 녹일 수 있다 — 파는 것 말고 할 게 있다', () => {
+    const world = createWorld('시험', 'miner');
+    const open = openRecipes(world.me.town);
+    expect(open.has('smelt-dark-iron'), '검은쇠 제련이 처음부터 열려 있지 않습니다').toBe(true);
+  });
+
+  it('★ 조건은 광석이 아니라 주괴다 — 구리 때 배운 것', () => {
+    const stage = TOWN_STAGES.find((s) => s.id === 'dark-forge')!;
+    expect(stage, '검은쇠 단계가 없습니다').toBeTruthy();
+    for (const need of stage.needs) {
+      expect(itemDef(need.defId).name, `${need.defId} 가 광석입니다`).toContain('주괴');
+    }
+  });
+
+  it('제련 난이도가 그 광맥보다 낮다 — 캘 수 있으면 녹일 수 있어야 한다', () => {
+    expect(RECIPES['smelt-dark-iron']!.difficulty).toBeLessThan(veinDef('dark-iron').difficulty);
+  });
+
+  it('검은쇠 주괴가 실제로 무언가의 재료다', () => {
+    const used = RECIPE_ORDER.filter((id) => RECIPES[id]!.needs.some((n) => n.defId === 'dark-iron-ingot'));
+    expect(used.length, '검은쇠 주괴를 쓰는 제작법이 없습니다').toBeGreaterThan(0);
+  });
+});

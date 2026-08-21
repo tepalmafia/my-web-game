@@ -44,6 +44,45 @@ export const GIVE_BUTTONS: ReadonlyArray<readonly [defId: string, count: number]
   ['potion-heal', 20],
 ];
 
+/* ===========================================================================
+ *  배속
+ *  ---------------------------------------------------------------------------
+ *  ★ 게임 규칙에는 배속이라는 것이 없습니다. core/ 는 이것이 있는지 모릅니다.
+ *    tools/sim.ts 가 하는 것과 똑같이, **밖에서 step(world, dt) 를 더 부를 뿐**입니다.
+ *    그래서 봇 실측은 이 값과 무관합니다.
+ *
+ *  ★ fast() 와 다릅니다. fast 는 시간을 한 번에 건너뛰어서 그 사이에 조작을
+ *    못 하고, 배속은 놀면서 빨리 보는 것입니다.
+ *
+ *  ★ 저장하지 않습니다. 나가거나 새로 시작하면 1배로 돌아갑니다.
+ * ======================================================================== */
+
+export const SPEEDS = [1, 2, 4, 8] as const;
+
+let speed = 1;
+/** 지난 프레임에 실제로 몇 배가 흘렀는가 — 상한에 걸리면 요청보다 작습니다 */
+let achieved = 1;
+
+/** 게임 루프가 읽습니다 */
+export function devSpeed(): number {
+  return speed;
+}
+
+/** 게임 루프가 알려줍니다 — 조용히 느려지지 않게 화면에 그대로 보여줍니다 */
+export function reportSpeed(actual: number): void {
+  achieved = actual;
+}
+
+/** 지난 프레임에 실제로 흐른 배수 */
+export function achievedSpeed(): number {
+  return achieved;
+}
+
+export function setDevSpeed(next: number): void {
+  speed = next;
+  achieved = next;
+}
+
 /** 봇과 빨리감기가 한 번에 굴리는 시간 — tools/sim.ts 와 같은 값입니다 */
 const DT = 1 / 20;
 /** 한 번에 굴릴 수 있는 최대 시간 (초). 실수로 fast(999999) 를 쳐서 탭이 굳는 것을 막습니다 */
@@ -260,6 +299,12 @@ export function DevTools({ world, refresh }: { world: World; refresh: () => void
   // 콘솔 명령은 패널을 열지 않아도 늘 붙어 있습니다
   useEffect(() => attach(world, refresh), [world, refresh]);
 
+  //  ★ 나가거나 새로 시작하면 1배로 돌아갑니다. 저장하지 않습니다.
+  useEffect(() => () => setDevSpeed(1), []);
+
+  const speedNow = devSpeed();
+  const actualNow = achievedSpeed();
+
   const api = createApi(world, refresh);
   const run = (where: string, fn: () => string) => {
     try {
@@ -285,13 +330,29 @@ export function DevTools({ world, refresh }: { world: World; refresh: () => void
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="btn absolute right-2 top-32 z-30 h-9 rounded-sm px-2 text-[11px] text-parch-400"
-      >
-        시험
-      </button>
+      <div className="absolute right-2 top-32 z-30 flex items-center gap-1.5">
+        {/* ★ 패널을 닫아도 몇 배인지 보여야 합니다. 안 보이면 왜 이상한지 모릅니다 */}
+        {speedNow !== 1 && (
+          <button
+            type="button"
+            onClick={() => { setDevSpeed(1); refresh(); }}
+            className="btn h-9 rounded-sm px-2 text-[11px] font-bold text-brass-300"
+            title="눌러서 1배로"
+          >
+            <span>×{speedNow}</span>
+            {actualNow < speedNow - 0.15 && (
+              <span className="ml-1.5 font-normal text-[#e88a86]">실제 ×{actualNow.toFixed(1)}</span>
+            )}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="btn h-9 rounded-sm px-2 text-[11px] text-parch-400"
+        >
+          시험
+        </button>
+      </div>
     );
   }
 
@@ -374,6 +435,27 @@ export function DevTools({ world, refresh }: { world: World; refresh: () => void
           ))}
         </Row>
         {note('give')}
+
+        <Row title="배속">
+          {SPEEDS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={`${BTN} ${speed === n ? 'text-brass-300' : 'text-parch-400'}`}
+              onClick={() => { setDevSpeed(n); refresh(); }}
+            >
+              {n}배
+            </button>
+          ))}
+        </Row>
+        <p className="-mt-1.5 text-[11px] leading-snug text-parch-400/80">
+          놀면서 빨리 봅니다. 아래 '시간' 은 한 번에 건너뛰는 것이라 그 사이에 아무것도 못 합니다.
+          {actualNow < speedNow - 0.15 && (
+            <b className="text-[#e88a86]">
+              {' '}지금은 화면이 못 따라가서 실제로 ×{actualNow.toFixed(1)} 만 흐릅니다.
+            </b>
+          )}
+        </p>
 
         <Row title="시간">
           <button type="button" className={BTN} onClick={() => run('fast', () => api.fast(30))}>
