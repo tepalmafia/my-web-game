@@ -255,8 +255,8 @@ describe('강가', () => {
 });
 
 describe('지역마다 갈 이유가 다르다', () => {
-  it('네 지역이 있고 순서가 정해져 있다', () => {
-    expect(MAP_ORDER).toEqual(['town', 'forest', 'mine', 'river']);
+  it('지역 목록과 순서가 정해져 있다', () => {
+    expect(MAP_ORDER).toEqual(['town', 'forest', 'mine', 'mine-deep', 'river']);
   });
 
   it('싸울 곳마다 가장 좋은 광맥이 서로 다르다', () => {
@@ -279,15 +279,36 @@ describe('지역마다 갈 이유가 다르다', () => {
  *    이제 문 그래프를 그대로 훑습니다.
  */
 describe('봇 길찾기', () => {
-  it('어느 지역에서 어느 지역으로든 길을 찾는다', () => {
-    for (const from of MAP_ORDER) {
-      for (const to of MAP_ORDER) {
+  /**
+   *  ★ 봇은 조건이 걸린 문을 못 지납니다 (autopilot 의 nextHop 이 걸러냅니다).
+   *    그래서 그 문 너머에만 있는 지역은 봇에게 길이 없는 것이 맞습니다 —
+   *    없다고 답하는 것이 고장이 아니라, 있다고 답하면 문 앞에 영원히 서 있게 됩니다.
+   */
+  const walkable = new Set<string>(['town']);
+  for (let pass = 0; pass < MAP_ORDER.length; pass++) {
+    for (const id of MAP_ORDER) {
+      if (!walkable.has(id)) continue;
+      for (const portal of openPortals(mapDef(id))) walkable.add(portal.to);
+    }
+  }
+
+  it('조건 없는 문으로 이어진 지역끼리는 어디서 어디로든 길을 찾는다', () => {
+    for (const from of walkable) {
+      for (const to of walkable) {
         if (from === to) {
           expect(nextHop(from, to)).toBeNull();
           continue;
         }
         expect(nextHop(from, to), `${from} → ${to} 길이 없습니다`).not.toBeNull();
       }
+    }
+  });
+
+  it('★ 조건이 걸린 문 너머는 봇에게 길이 없다 — 문 앞에 서 있지 않게', () => {
+    const gated = MAP_ORDER.filter((id) => !walkable.has(id));
+    expect(gated, '조건 뒤에 있는 지역이 하나도 없습니다').toContain('mine-deep');
+    for (const id of gated) {
+      expect(nextHop('town', id), `봇이 ${id} 로 가는 길을 짰습니다`).toBeNull();
     }
   });
 

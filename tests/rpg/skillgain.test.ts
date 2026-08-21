@@ -283,13 +283,24 @@ describe('배울 수 있는 것', () => {
   });
 
   it('난이도 천장에 막히면 ceiling 이라고 말한다', () => {
+    //  ★ 값을 박지 않습니다. 콘텐츠가 늘면 천장이 올라가는데, 박아두면
+    //    그때 이 시험이 "고장" 처럼 깨집니다. 지금 열려 있는 것에서 끌어옵니다.
+    //
+    //  ★ 여기서 쓰는 것이 대장기술인 이유: 2층이 들어오면서 몬스터와 광맥의
+    //    천장이 100 을 넘었습니다. 그쪽은 이제 ceiling 이 아니라 maxed 로 끝납니다.
+    //    제작법은 갈림길에 잠긴 것이 있어서(구리 판금갑옷 88) 고른 길에 따라
+    //    천장이 100 아래에 남습니다 — 그 자리를 지킵니다.
     const world = fresh(3);
     world.me.skills.mining = 0;
-    world.me.skills.blacksmithing = 0;
-    world.me.skills.swordsmanship = 85.2; // 동굴 거미(65)보다 20 이상 높습니다
+    world.me.skills.swordsmanship = 0;
 
-    expect(lessonsFor(world, 'swordsmanship').every((l) => l.chance <= 0)).toBe(true);
-    expect(learnBlock(world, 'swordsmanship')).toBe('ceiling');
+    const hardest = Math.max(...lessonsFor(world, 'blacksmithing').map((l) => l.difficulty));
+    const ceiling = hardest + GAIN.easyCutoff + 0.2;
+    expect(ceiling, '지금 열린 제작법으로도 100 까지 갑니다 — 이 시험이 뜻을 잃었습니다').toBeLessThan(MAX_SKILL);
+    world.me.skills.blacksmithing = ceiling;
+
+    expect(lessonsFor(world, 'blacksmithing').every((l) => l.chance <= 0)).toBe(true);
+    expect(learnBlock(world, 'blacksmithing')).toBe('ceiling');
   });
 
   it('★ 예산이 막는 것과 천장이 막는 것을 가른다', () => {

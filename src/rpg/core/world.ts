@@ -14,6 +14,7 @@ import { MAPS, mapDef } from '../content/maps';
 import { stageOf } from '../content/town';
 import { monsterDef } from '../content/monsters';
 import { hash2, nextRandom, randInt } from './rng';
+import { gearScore } from './stats';
 import { veinDef } from '../content/veins';
 import type { GroundItem, MapDef, MapId, MapRuntime, Monster, Portal, Vec2, World } from '../types';
 
@@ -420,14 +421,45 @@ function takeStashed(world: World, mapId: MapId): GroundItem[] {
  *  돌려주는 값: 못 지나가는 이유 한 줄, 지날 수 있으면 null.
  *  ★ 이유에는 무엇이 부족한지 적지 않습니다. 궁금한 채로 두는 것이 목적입니다.
  */
+/**
+ *  이 문에 이름을 붙입니다 — 한 번 연 문을 기억하려고.
+ *  ★ 문에 id 를 새로 달지 않습니다. 자리가 곧 이름입니다.
+ */
+export function portalId(mapId: MapId, portal: Portal): string {
+  return `${mapId}:${portal.tx},${portal.ty}`;
+}
+
+/**
+ *  이 문이 왜 안 열리는가. null 이면 열린다.
+ *
+ *  ★ 한 번 연 문은 다시 안 닫힙니다 (목적지-기획안 3.2 "층을 뚫으면 그 길이
+ *    열린 채로 남는다"). 매번 검사하면 조건을 채운 장비를 팔았을 때 도로 닫히고,
+ *    그러면 "뚫었다" 가 아니라 "지금 마침 되는 것" 이 됩니다.
+ */
 export function portalProblem(world: World, portal: Portal): string | null {
   const needs = portal.needs;
   if (!needs) return null;
-  //  층이 생기면(전체설계 8절 C) 여기에 갈래가 늡니다 — 갖춘 장비를 보는 검사 같은 것.
-  //  그때도 부르는 쪽은 이 함수 하나만 알면 됩니다.
-  void world;
+  if (world.me.opened.includes(portalId(world.mapId, portal))) return null;
+
+  // 봉인 — 조건이 없으니 말할 것도 없습니다 (전체설계 4.3)
   if (needs.sealed) return needs.closed;
+
+  if (needs.gear !== undefined) {
+    const have = gearScore(world.me);
+    if (have < needs.gear) {
+      //  ★ 왜 안 되는지 숫자로 말합니다 (6장). 감출 것은 문 너머에 무엇이 있는가지,
+      //    문이 왜 안 열리는가가 아닙니다.
+      return `${needs.closed} 입은 것이 모자랍니다 (지금 ${have.toFixed(1)} / 필요 ${needs.gear})`;
+    }
+  }
   return null;
+}
+
+/** 이 문을 연 것으로 남깁니다 — 두 번 적지 않습니다 */
+export function markOpened(world: World, portal: Portal): void {
+  if (!portal.needs) return;
+  const id = portalId(world.mapId, portal);
+  if (!world.me.opened.includes(id)) world.me.opened.push(id);
 }
 
 /** 다른 지역으로 옮겨갑니다 */

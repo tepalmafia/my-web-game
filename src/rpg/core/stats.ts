@@ -160,9 +160,34 @@ export function wearRatio(stack: ItemStack): Ratio | null {
 }
 
 /** 화면에 한 줄로 보여줄 성능 요약 */
+/**
+ *  입은 것의 합산 — 층 문이 보는 값 (전체설계 7.3).
+ *
+ *  ★ 무기의 공격과 갑옷의 방어를 그냥 더합니다. 한 칸을 지정하면
+ *    갈림길에서 한쪽을 고른 사람이 못 넘습니다 — 그것은 함정입니다.
+ *    서로 대신할 수 있어야 해서 합산입니다.
+ *
+ *  ★ 힘도 스킬도 안 셉니다. 장비로 걸기로 했기 때문입니다 (7.3).
+ *    배율은 derive() 와 같은 것을 씁니다 — 갑옷도 temperMul.damage 를 탑니다.
+ */
+export function gearScore(me: Character): number {
+  let sum = 0;
+  for (const slot of SLOTS) {
+    const worn = me.equipped[slot];
+    if (!worn) continue;
+    const def = itemDef(worn.defId);
+    const mul = qualityMul(worn) * temperMul(worn).damage;
+    sum += ((def.maxDamage ?? 0) + (def.defense ?? 0)) * mul;
+  }
+  return Math.round(sum * 10) / 10;
+}
+
 export function itemSummary(stack: ItemStack): string {
   const def = itemDef(stack.defId);
-  const mul = qualityMul(stack);
+  //  ★ derive() 와 같은 배율을 씁니다. 예전에는 품질만 보고 벼림을 빼먹어서
+  //    날 선 검이 화면에는 '공격 9~16' 인데 실제로는 19.2 로 때렸습니다.
+  //    화면 숫자와 계산이 다르면 그것으로 아무것도 판단할 수 없습니다 (6장).
+  const mul = qualityMul(stack) * temperMul(stack).damage;
   const parts: string[] = [];
 
   if (def.minDamage !== undefined) {
@@ -176,7 +201,8 @@ export function itemSummary(stack: ItemStack): string {
   if (stack.durability !== undefined && stack.maxDurability) {
     parts.push(`내구 ${Math.ceil(stack.durability)}/${Math.round(stack.maxDurability)}`);
   }
-  parts.push(`${def.weight * stack.count} 스톤`);
+  //  '가볍게' 벼린 것은 실제로 가볍습니다 — stackWeight 가 그 배율을 씁니다
+  parts.push(`${stackWeight(stack)} 스톤`);
   return parts.join(' · ');
 }
 
