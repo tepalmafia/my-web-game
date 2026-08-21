@@ -10,6 +10,7 @@
 
 import { GATHER, POTION_COOLDOWN, TILE } from '../balance';
 import { itemDef } from '../content/items';
+import { DURIN } from '../content/lines';
 import { monsterDef } from '../content/monsters';
 import { titleDef } from '../content/titles';
 import { nextStage, stageReady } from '../content/town';
@@ -17,8 +18,9 @@ import { veinDef } from '../content/veins';
 import { cancelAction, startCraft, startMining, startRepair } from './action';
 import { revive, takeCorpse } from './death';
 import { floater, log, toast } from './feedback';
-import { findStack, removeItem } from './inventory';
+import { addItem, findStack, removeItem } from './inventory';
 import { pickUpAt, placeItem } from './loot';
+import { LOAN_PICKAXE, pickaxeLoanProblem } from './npc';
 import { advanceTown } from './town';
 import { derive } from './stats';
 import { wearTitle } from './titles';
@@ -341,6 +343,27 @@ export function craft(world: World, recipeId: string, repeat = false, temper?: T
 
 export function repair(world: World, uid: number): void {
   startRepair(world, uid);
+}
+
+/**
+ *  두린에게 곡괭이를 빌립니다.
+ *
+ *  ★ 될까/왜 안 될까는 core 가 답합니다 (pickaxeLoanProblem). ui 는 그 말을 그립니다.
+ *  ★ 못 넣으면 조용히 넘기지 않습니다 — 가방이 꽉 찼다면 그것도 이유입니다.
+ */
+export function borrowPickaxe(world: World): boolean {
+  const problem = pickaxeLoanProblem(world);
+  if (problem) {
+    toast(world, problem, 'bad');
+    return false;
+  }
+  if (!addItem(world, LOAN_PICKAXE, 1)) {
+    toast(world, '가방에 넣을 자리가 없습니다.', 'bad');
+    return false;
+  }
+  log(world, `두린이 ${itemDef(LOAN_PICKAXE).name} 를 내주었습니다`, 'good');
+  toast(world, DURIN.lend, 'good');
+  return true;
 }
 
 export function respawnInTown(world: World): void {
