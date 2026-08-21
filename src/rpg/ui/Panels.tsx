@@ -18,7 +18,7 @@ import { canTemper, craftChance, craftFineChance, craftLoss, nearForge } from '.
 import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem, wear } from '../core/commands';
 import { repairQuote } from '../core/durability';
 import { durinSays } from '../core/npc';
-import { buyItem, countOf, equip, sellItem, unequip } from '../core/inventory';
+import { buyItem, countOf, equip, sellItem, sellUnitPrice, unequip } from '../core/inventory';
 import { axisSpent, budgetLeft, learnBlock, lessonsFor, skillTotal } from '../core/skillgain';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
 import type { EquipSlot, ItemKind, ItemStack, PanelId, SkillId, World } from '../types';
@@ -830,6 +830,92 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
  *  상점
  * ======================================================================== */
 
+/**
+ *  파는 줄 하나.
+ *
+ *  ★ 개수를 고를 수 있어야 합니다. 마을 성장이 "판 누계" 로 걸려 있어서
+ *    **얼마를 팔지가 이 게임의 갈림**인데, 1개 아니면 전부뿐이면 그 갈림을
+ *    실행할 수단이 없습니다 — 47개 중 20개를 팔려고 스무 번 누를 수는 없습니다.
+ *
+ *  ★ 값을 팔기 전에 보여줍니다. 예전에는 def.sell(기본값)을 찍어서
+ *    닳은 무기는 최대 70% 싸게, 우수품은 40% 비싸게 팔렸는데 화면은 몰랐습니다.
+ *    단가는 core 의 sellUnitPrice 가 냅니다 — 규칙을 여기서 다시 만들지 않습니다.
+ *
+ *  ★ 이만큼 팔면 마을이 몇까지 가는지도 보여줍니다. 그것이 보여야
+ *    "팔아서 세계를 키울까, 써서 나를 키울까" 가 실제 판단이 됩니다.
+ */
+function SellRow({ world, stack, refresh }: { world: World; stack: ItemStack; refresh: () => void }) {
+  const def = itemDef(stack.defId);
+  const [count, setCount] = useState(1);
+  const n = Math.max(1, Math.min(count, stack.count));
+  const unit = sellUnitPrice(stack);
+
+  //  이 물건이 다음 단계의 조건에 걸려 있나 (걸려 있을 때만 진행을 보여줍니다)
+  const row = progressOf(world.me.town).find((r) => r.defId === stack.defId);
+  const after = row ? Math.min(row.need, row.have + n) : 0;
+
+  const step = (by: number) => setCount(() => Math.max(1, Math.min(stack.count, n + by)));
+
+  return (
+    <div className="rounded-sm border border-ink-600 bg-ink-700/60 px-2 py-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="flex-1 truncate text-xs text-parch-100">
+          {KIND_ICON[def.kind]} {itemName(stack)}
+          {stack.count > 1 && <span className="text-parch-400"> ×{stack.count}</span>}
+        </span>
+        <span className="tabular shrink-0 text-[11px] text-parch-400">한 개 {fmt(unit)}골드</span>
+      </div>
+
+      {stack.count > 1 && (
+        <div className="mt-1 flex items-center gap-1">
+          <button type="button" onClick={() => step(-10)} className="btn h-8 w-9 rounded-sm text-[11px]">−10</button>
+          <button type="button" onClick={() => step(-1)} className="btn h-8 w-8 rounded-sm text-[13px]">−</button>
+          <span className="tabular min-w-10 text-center text-sm font-bold text-parch-100">{n}</span>
+          <button type="button" onClick={() => step(1)} className="btn h-8 w-8 rounded-sm text-[13px]">+</button>
+          <button type="button" onClick={() => step(10)} className="btn h-8 w-9 rounded-sm text-[11px]">+10</button>
+          <button
+            type="button"
+            onClick={() => setCount(Math.floor(stack.count / 2))}
+            className="btn h-8 shrink-0 rounded-sm px-2 text-[11px] text-parch-300"
+          >
+            절반
+          </button>
+          <button
+            type="button"
+            onClick={() => setCount(stack.count)}
+            className="btn h-8 shrink-0 rounded-sm px-2 text-[11px] text-parch-300"
+          >
+            전부
+          </button>
+        </div>
+      )}
+
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] leading-snug text-parch-400">
+          {row ? (
+            <>
+              두린에게 <b className="tabular text-parch-200">{row.have}</b>
+              <span className="text-parch-400/70"> → </span>
+              <b className={`tabular ${after >= row.need ? 'text-[#8fcf8a]' : 'text-brass-300'}`}>{after}</b>
+              <span className="text-parch-400"> / {row.need}</span>
+              {after >= row.need && <b className="text-[#8fcf8a]"> 조건이 찹니다</b>}
+            </>
+          ) : (
+            <span className="text-parch-400/70">지금 단계와는 상관없는 물건입니다</span>
+          )}
+        </span>
+        <button
+          type="button"
+          onClick={() => { sellItem(world, stack.uid, n); setCount(1); refresh(); }}
+          className="btn btn-brass h-9 shrink-0 rounded-sm px-3 text-[12px] font-bold"
+        >
+          {n}개 팔기 · {fmt(unit * n)}골드
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ShopPanel({ world, refresh }: { world: World; refresh: () => void }) {
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
   const me = world.me;
@@ -869,14 +955,19 @@ function ShopPanel({ world, refresh }: { world: World; refresh: () => void }) {
                     <span className="truncate text-[11px] text-parch-400">{def.desc}</span>
                     <div className="flex shrink-0 items-center gap-1">
                       {owned > 0 && <span className="tabular text-[10px] text-parch-400">보유 {owned}</span>}
-                      <button type="button" disabled={me.gold < def.price}
-                        onClick={() => { buyItem(world, defId, 1); refresh(); }}
-                        className="btn rounded-sm px-2 py-0.5 text-[11px]">1개</button>
-                      {def.stackable && (
-                        <button type="button" disabled={me.gold < def.price * 5}
-                          onClick={() => { buyItem(world, defId, 5); refresh(); }}
-                          className="btn rounded-sm px-2 py-0.5 text-[11px]">5개</button>
-                      )}
+                      {/* 살 때도 개수를 고릅니다. 다만 파는 쪽만큼 갈림이 아니라 미리 정해둔 몇 개로 둡니다 */}
+                      {(def.stackable ? [1, 5, 10] : [1]).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          disabled={me.gold < def.price * n}
+                          onClick={() => { buyItem(world, defId, n); refresh(); }}
+                          className="btn rounded-sm px-2 py-0.5 text-[11px]"
+                          title={`${fmt(def.price * n)} 골드`}
+                        >
+                          {n}개
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -887,24 +978,11 @@ function ShopPanel({ world, refresh }: { world: World; refresh: () => void }) {
       ) : (
         <div className="space-y-1">
           {me.backpack.filter((s) => itemDef(s.defId).sell > 0).map((s) => {
-            const def = itemDef(s.defId);
-            return (
-              <div key={s.uid} className="flex items-center gap-2 rounded-sm border border-ink-600 bg-ink-700/60 px-2 py-1">
-                <span className="flex-1 truncate text-xs text-parch-100">
-                  {KIND_ICON[def.kind]} {itemName(s)} {s.count > 1 && <span className="text-parch-400">×{s.count}</span>}
-                </span>
-                <button type="button" onClick={() => { sellItem(world, s.uid, 1); refresh(); }}
-                  className="btn shrink-0 rounded-sm px-2 py-0.5 text-[11px]">
-                  {fmt(def.sell)}골드
-                </button>
-                {s.count > 1 && (
-                  <button type="button" onClick={() => { sellItem(world, s.uid, s.count); refresh(); }}
-                    className="btn shrink-0 rounded-sm px-2 py-0.5 text-[11px]">전부</button>
-                )}
-              </div>
-            );
+            return <SellRow key={s.uid} world={world} stack={s} refresh={refresh} />;
           })}
-          {me.backpack.length === 0 && <p className="py-4 text-center text-xs text-parch-400/70">팔 물건이 없습니다</p>}
+          {me.backpack.filter((s) => itemDef(s.defId).sell > 0).length === 0 && (
+            <p className="text-[11px] text-parch-400">팔 것이 없습니다.</p>
+          )}
         </div>
       )}
     </div>
