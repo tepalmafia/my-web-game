@@ -31,6 +31,7 @@ import { monsterDef } from '../../content/monsters';
 import { veinDef } from '../../content/veins';
 import { stageOf } from '../../content/town';
 import { nearForge } from '../../core/action';
+import { displayName } from '../../core/titles';
 import { tileCenter } from '../../core/world';
 import type { GroundItem, ItemKind, Monster, Npc, NpcKind, Seconds, Vein, World } from '../../types';
 import { LIGHT, alpha, darken, lighten } from './palette';
@@ -166,9 +167,11 @@ export function drawNameplates(ctx: CanvasRenderingContext2D, world: World): voi
   }
 
   const me = world.me;
+  //  ★ 칭호가 붙으면 이름표부터 달라집니다 — 세계가 알아본 것이 눈에 보이는 자리입니다
+  const shown = displayName(me);
   label(
     ctx,
-    me.dead ? `${me.name} — 쓰러짐` : me.name,
+    me.dead ? `${shown} — 쓰러짐` : shown,
     me.pos.x,
     me.pos.y - 34,
     me.dead ? '#e88a86' : '#efe6d2',

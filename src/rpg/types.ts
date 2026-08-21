@@ -48,6 +48,9 @@ export type SkillId = 'mining' | 'blacksmithing' | 'swordsmanship' | 'defense';
 /** 세 길 — 전체설계 6.1. 총합 상한은 이 축들 위에서 걸립니다 */
 export type AxisId = 'gather' | 'craft' | 'combat';
 
+/** 칭호 — content/titles.ts 의 id */
+export type TitleId = string;
+
 /** 0.0 ~ 100.0 (소수 첫째 자리까지). 100 = 최고 경지 */
 export type SkillValue = number;
 
@@ -472,6 +475,21 @@ export interface Character {
   dead: boolean;
   deadFor: Seconds;
   discovered: MapId[];
+  /**
+   *  얻은 칭호 전부. 한 번 얻은 것은 사라지지 않습니다.
+   *  ★ 지금 단 것은 하나뿐입니다 (wearing) — 목적지-기획안 2.3.
+   */
+  titles: TitleId[];
+  /** 이름 옆에 붙는 칭호. 없으면 null */
+  wearing: TitleId | null;
+  /**
+   *  한 번 연 문.
+   *
+   *  ★ 문을 매번 검사하면 조건을 채운 장비를 팔았을 때 도로 닫힙니다.
+   *    "층을 뚫으면 그 길이 열린 채로 남는다" (목적지-기획안 3.2) 가 그것을 금합니다.
+   *    문 id 는 `${mapId}:${tx},${ty}` 입니다 — 문에 이름을 새로 붙이지 않습니다.
+   */
+  opened: string[];
   playSeconds: Seconds;
   deaths: number;
   /** 무엇을 몇 개 캐고 만들고 잡았는가 (봇 지표와 기록창) */

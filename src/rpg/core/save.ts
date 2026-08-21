@@ -140,6 +140,12 @@ function rebuild(data: SaveData): World | null {
   me.town = me.town ?? emptyTown();
   // 시체를 넣기 전의 기록에는 이 값이 없습니다
   me.corpse = me.corpse ?? null;
+  //  칭호와 열어둔 문을 넣기 전의 기록에는 이 값들이 없습니다.
+  //  ★ 칭호는 조건이 이미 찬 사람이라면 다음 걸음에 저절로 붙습니다 —
+  //    checkTitles 가 discovered 를 보고 재기 때문에, 빈 배열로 시작해도 잃는 것이 없습니다.
+  me.titles = me.titles ?? [];
+  me.wearing = me.wearing ?? null;
+  me.opened = me.opened ?? [];
   const carried = migrateTown(me.town);
 
   const world: World = {

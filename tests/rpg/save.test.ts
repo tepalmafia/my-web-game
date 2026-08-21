@@ -164,3 +164,47 @@ describe('텍스트로 내보내고 불러오기', () => {
     expect(importSave('')).toBeNull();
   });
 });
+
+/* ===========================================================================
+ *  칭호와 열어둔 문 — 저장에 새로 들어온 셋
+ *
+ *  ★ 셋을 한 번에 넣은 이유가 이것입니다. 나중에 하나씩 붙이면
+ *    마이그레이션을 그때마다 다시 해야 합니다.
+ * ======================================================================== */
+
+describe('칭호와 열어둔 문이 저장된다', () => {
+  it('얻은 칭호와 단 것과 연 문이 그대로 돌아온다', () => {
+    const world = createWorld('아무개', 'miner');
+    world.me.titles = ['walked-all'];
+    world.me.wearing = 'walked-all';
+    world.me.opened = ['mine:40,20'];
+    saveWorld(world);
+
+    const back = loadWorld()!;
+    expect(back, '기록을 못 읽었습니다').not.toBeNull();
+    expect(back.me.titles).toEqual(['walked-all']);
+    expect(back.me.wearing).toBe('walked-all');
+    expect(back.me.opened).toEqual(['mine:40,20']);
+  });
+
+  it('★ 이 값들이 없던 옛 기록도 읽힌다', () => {
+    const world = createWorld('아무개', 'miner');
+    saveWorld(world);
+
+    // 칭호를 넣기 전의 기록을 흉내냅니다
+    const box = globalThis.localStorage;
+    const key = [...Array(box.length).keys()].map((i) => box.key(i)!).find((k) => k.endsWith(':state'))!;
+    expect(key, '저장 칸을 못 찾았습니다').toBeTruthy();
+    const raw = JSON.parse(box.getItem(key)!);
+    delete raw.me.titles;
+    delete raw.me.wearing;
+    delete raw.me.opened;
+    box.setItem(key, JSON.stringify(raw));
+
+    const back = loadWorld();
+    expect(back, '옛 기록을 못 읽었습니다').not.toBeNull();
+    expect(back!.me.titles).toEqual([]);
+    expect(back!.me.wearing).toBeNull();
+    expect(back!.me.opened).toEqual([]);
+  });
+});

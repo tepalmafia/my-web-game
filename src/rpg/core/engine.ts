@@ -17,6 +17,7 @@ import { veinDef } from '../content/veins';
 import { currentTarget, distanceTo, monsterStrike, swingAtMonster, tickRespawn } from './combat';
 import { cancelAction, tickAction } from './action';
 import { decayCorpse, die } from './death';
+import { checkTitles } from './titles';
 import { log, toast, vfx } from './feedback';
 import { pickUpNearby } from './loot';
 import { nextRandom, randRange } from './rng';
@@ -48,6 +49,10 @@ export function step(world: World, rawDt: number): void {
   pickUpNearby(world);
   regenerate(world, dt);
   checkPortals(world);
+  //  ★ 한 자리에서만 봅니다. 도달은 네 종류(장소·물건·실력·행위)라 어디서
+  //    조건이 차는지 미리 알 수 없습니다 — 흩어 두면 어느 하나는 반드시 빠집니다.
+  //    다 얻은 뒤에는 첫 줄에서 곧장 돌아옵니다.
+  checkTitles(world);
   checkNpc(world);
   decay(world, dt);
   followCamera(world, dt);
