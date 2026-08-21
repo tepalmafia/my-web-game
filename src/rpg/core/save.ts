@@ -173,8 +173,15 @@ function rebuild(data: SaveData): World | null {
     meMoving: false,
     meSwing: 0,
   };
-  //  ★ 놓아둔 것을 되살립니다. 그사이 수명이 다한 것은 버립니다 —
-  //    저장하고 하루 뒤에 열어도 밖에 둔 것은 없어져 있어야 합니다.
+  //  놓아둔 것을 되살립니다. 저장 시점에 이미 수명이 다했던 것은 버립니다.
+  //
+  //  ★ 여기 world.time 은 **저장 당시의 세계 시간**이고 until 도 같은 축입니다.
+  //    그래서 이 검사는 껐다 켠 사이에 흐른 실제 시간을 세지 못합니다 —
+  //    하루 뒤에 열어도 밖에 둔 것은 그대로 있습니다.
+  //    실제 시각을 저장에 안 남기므로 알 방법 자체가 없습니다.
+  //    고치려면 저장에 실제 시각을 넣어야 하고, 그때 광맥·몬스터 재생도
+  //    같이 봐야 합니다 (지금은 populate() 가 통째로 초기화합니다).
+  //    전체설계 10절 C 뒤 '③ 땅의 변화' 가 그 자리입니다.
   const saved = data.ground ?? {};
   for (const [id, items] of Object.entries(saved)) {
     const kept = items.filter((item) => item.until === null || world.time < item.until);

@@ -16,6 +16,7 @@ import { clickWorld, drinkBestPotion, moveTo, stopAction, takeGround, takeMyPack
 import { startMining, veinAt } from '../core/action';
 import { GATHER } from '../balance';
 import { step } from '../core/engine';
+import { toast } from '../core/feedback';
 import { saveWorld } from '../core/save';
 import type { World } from '../types';
 import { ActionBar, DeathOverlay, SkillPop, StatusBlock, Toast } from './Hud';
@@ -40,6 +41,19 @@ import { DevTools, devSpeed, reportSpeed } from '../dev/DevTools'; // 지울 때
  *    몬스터가 여러 번 때리고, 작게 잡으면 8배속이 낮은 프레임에서 안 나옵니다.
  */
 const FRAME_MAX = 0.25;
+
+/**
+ *  얼마나 자리를 비웠나 — 사람이 읽는 말로.
+ *  ★ format.ts 의 duration() 은 1분 미만을 "0분" 이라고 하는데,
+ *    여기서는 "잠깐 다녀온 것" 이 대부분이라 초까지 말해야 합니다.
+ */
+function awayText(seconds: number): string {
+  const total = Math.round(seconds);
+  if (total < 60) return `${total}초`;
+  const m = Math.floor(total / 60);
+  if (m < 60) return `${m}분 ${total % 60}초`;
+  return `${Math.floor(m / 60)}시간 ${m % 60}분`;
+}
 
 export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -91,9 +105,50 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
     let last = performance.now();
     let uiTimer = 0;
     let saveTimer = 0;
+    /** 탭이 뒤로 갔는가. 그동안 세계는 멈춥니다 */
+    let hidden = false;
+    /** 숨은 시각 (실제 시간) — 돌아왔을 때 얼마나 멈춰 있었는지 말해주려고 */
+    let hiddenAt = 0;
+
+    /*
+     *  ★ 탭을 벗어나면 세계를 멈춥니다.
+     *
+     *    예전에는 브라우저가 rAF 를 초당 2회로 늦출 뿐이라 세계가 **26% 속도로
+     *    계속 흘렀습니다**(실측: 숨어 있던 30초에 세계 8초). 그건 셋 다 나쁩니다 —
+     *      · 브라우저·기기마다 값이 달라 재현이 안 됩니다 (씨앗 RNG 를 지키는 것과 어긋남)
+     *      · 안 보이는 채로 몬스터에게 맞아 죽을 수 있습니다.
+     *        왜 잃었는지 안 보이는 것은 무게가 아니라 결함입니다 (CLAUDE.md 0장)
+     *      · 소리는 이미 여기서 쉽니다(audio/bus.ts). 소리와 게임이 다른 판단을 했습니다
+     *
+     *    ★ 멈출 때 저장합니다. 그러지 않으면 탭을 그냥 닫았을 때 최대 5초를 잃습니다.
+     */
+    const doc = (globalThis as { document?: Document }).document;
+    const onVisibility = () => {
+      if (!doc) return;
+      if (doc.visibilityState === 'hidden') {
+        if (hidden) return;
+        hidden = true;
+        hiddenAt = performance.now();
+        saveWorld(world);
+      } else {
+        if (!hidden) return;
+        hidden = false;
+        //  ★ 시계를 다시 맞춥니다. 안 그러면 돌아온 첫 프레임의 dt 가
+        //    떠나 있던 시간만큼 커집니다 (FRAME_MAX 가 자르긴 하지만, 자르는 것과
+        //    처음부터 안 재는 것은 다릅니다).
+        const away = (performance.now() - hiddenAt) / 1000;
+        last = performance.now();
+        //  왜 시간이 안 갔는지 말해줍니다. 조용히 멈추면 고장으로 보입니다 (6장)
+        if (away >= 3) toast(world, `${awayText(away)} 멈춰 있었습니다\n그동안 세계도 멈췄습니다`, 'good');
+      }
+    };
+    doc?.addEventListener?.('visibilitychange', onVisibility);
 
     const loop = (now: number) => {
       frame = requestAnimationFrame(loop);
+      //  숨어 있는 동안에도 프레임이 몇 장 오는 브라우저가 있습니다.
+      //  시각만 따라가고 세계는 굴리지 않습니다.
+      if (hidden) { last = now; return; }
       const dt = Math.min(FRAME_MAX, (now - last) / 1000);
       last = now;
 
@@ -169,6 +224,7 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
 
     frame = requestAnimationFrame(loop);
     return () => {
+      doc?.removeEventListener?.('visibilitychange', onVisibility);
       cancelAnimationFrame(frame);
       saveWorld(world);
     };

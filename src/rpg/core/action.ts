@@ -292,7 +292,8 @@ function finishCraft(world: World, recipeId: string, repeat: boolean, temper?: T
     return;
   }
 
-  // 재료는 시도할 때 들어갑니다 — 실패하면 절반만 돌아옵니다
+  //  재료는 시도할 때 들어갑니다. ★ 실패해도 돌려주지 않습니다 (아래 참조) —
+  //    가방이 꽉 차서 물건을 못 받은 경우에만 통째로 돌아옵니다.
   for (const need of recipe.needs) {
     if (countOf(me, need.defId) < need.count) {
       toast(world, '재료가 모자랍니다.', 'bad');

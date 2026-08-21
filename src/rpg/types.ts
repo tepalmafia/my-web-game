@@ -247,7 +247,7 @@ export interface Corpse {
  *  5. 몬스터
  * ======================================================================== */
 
-export type MonsterShape = 'beast' | 'bat' | 'spider' | 'humanoid';
+export type MonsterShape = 'beast' | 'bat' | 'spider';
 
 export interface MonsterDef {
   id: string;
