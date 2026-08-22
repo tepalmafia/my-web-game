@@ -50,6 +50,14 @@ export const SPRITES: Record<string, string> = {
   //  ★ 몬스터는 모양 단위로 겁니다. 들개·늑대·얼어붙은 것 셋이 이 한 장을 씁니다
   //    — 색과 크기는 코드가 입힙니다 (아래 SPRITE_TONES 와 def.size).
   'shape/beast': 'monster-beast.png',
+
+  //  ★ 화로 둘. **어느 것을 그릴지는 effects.ts 의 `forgeLook` 하나가 정합니다** —
+  //    지금은 마을 단계로 고르지만 그 단계는 폐기 예정이라(전체설계 8.1),
+  //    고르는 규칙을 이 표에 넣지 않고 그쪽 한 함수에 몰아뒀습니다.
+  //  ★ 둘 다 월드 1px = 그림 3px 입니다. 그래서 캔버스 가로가 곧 월드 폭 ×3 이고
+  //    (96 → 32 · 132 → 44), 그리는 쪽이 naturalWidth / 3 으로 폭을 냅니다.
+  forge: 'forge.png',
+  'forge-large': 'forge-large.png',
 };
 
 /**

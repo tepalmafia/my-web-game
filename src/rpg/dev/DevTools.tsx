@@ -27,6 +27,7 @@ import { addItem, freeWeight, hasRoom } from '../core/inventory';
 import { saveWorld } from '../core/save';
 import { derive, totalWeight } from '../core/stats';
 import { enterMap } from '../core/world';
+import { showForges } from './forge-preview';
 import { inspect } from './inspect';
 import { autopilot, newPilot } from '../../../tools/autopilot';
 import type { Focus } from '../../../tools/autopilot';
@@ -279,6 +280,9 @@ export function attach(world: World, refresh: () => void): () => void {
   //    자세한 것은 dev/inspect.ts 머리말과 .claude/rules/rendering.md.
   if (import.meta.env.DEV) {
     api.inspect = () => inspect(world);
+    //  ★ 화로 두 장을 나란히 보는 자리. 큰 화로는 마을 2단계에 서므로
+    //    새 게임에서는 화면에 안 나옵니다 (dev/forge-preview.ts).
+    (api as { forges?: () => string }).forges = () => showForges(world);
   }
 
   holder.aden = api;

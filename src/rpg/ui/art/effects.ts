@@ -623,6 +623,57 @@ const FORGE_LABEL_RANGE = 220;
  */
 export const FORGE_GROWN = [1, 1.22, 1.44, 1.56, 1.66];
 
+/**
+ *  화로 그림 — **어느 것을 그릴지 여기 한 곳에서만 정합니다.**
+ *
+ *  ★★ **이 함수의 입력은 통째로 바뀝니다.** 지금은 마을 단계(`stageOf`)로 고르는데,
+ *    마을 성장 사다리는 폐기 예정입니다 (전체설계 8.1 — 「마을 5단계 표는 폐기한다」).
+ *    그래서 **마을 단계를 스프라이트 계약 안에 넣지 않았습니다** — 계약은 아래
+ *    `ForgeLook` 이고, 단계는 그것을 고르는 이 함수 안에만 있습니다.
+ *    사다리가 없어지면 이 함수의 몸만 갈아끼우면 되고, 부르는 쪽은 안 바뀝니다.
+ *
+ *  ★ 이것은 ③(세계가 변한다)을 구현하는 것이 아닙니다.
+ *    나중에 ③을 시각으로 보여줄 **자리를 미리 만드는 것**입니다.
+ */
+interface ForgeLook {
+  /** SPRITES 의 키. 없으면 도형으로 떨어집니다 */
+  key: string;
+  /** 아궁이 불이 있는 자리 — **그림에서 재서 넣은 값**입니다 (화로 원점 기준 월드 오프셋) */
+  fire: { x: number; y: number };
+  /** 굴뚝 꼭대기 — 불티가 나오는 자리 */
+  chimney: { x: number; y: number };
+}
+
+/**
+ *  도형으로 떨어졌을 때의 자리 — 아래 `drawForge` 가 그리는 도형의 실제 좌표입니다.
+ *  그림이 빠져도 불과 불티가 엉뚱한 데서 나지 않게 하려고 따로 둡니다.
+ */
+const FORGE_SHAPE = { fire: { x: 0, y: 1 }, chimney: { x: 8, y: -36 } };
+
+/**  불·굴뚝 자리는 상상하지 않고 파일에서 쟀습니다 (팔레트의 숯불색 픽셀 무게중심) */
+const FORGE_SMALL: ForgeLook = {
+  key: 'forge',
+  fire: { x: -0.4, y: 1.0 },
+  chimney: { x: 6.3, y: -28.3 },
+};
+const FORGE_LARGE: ForgeLook = {
+  key: 'forge-large',
+  fire: { x: 0, y: -5.1 },
+  chimney: { x: -0.2, y: -38.0 },
+};
+
+export function forgeLook(world: World): ForgeLook {
+  //  ★ 여기가 바뀔 한 줄입니다. 지금은 「구리 대장간이 선 뒤」가 큰 화로입니다 —
+  //    아래 모루가 하나 더 서는 조건(stage >= 2)과 같은 자리에 맞췄습니다.
+  return stageOf(world.me.town) >= 2 ? FORGE_LARGE : FORGE_SMALL;
+}
+
+/**  그림은 월드 1px = 그림 3px 로 뽑습니다 (.claude/rules/sprites.md 4절) */
+const FORGE_PX_PER_WORLD = 3;
+
+/**  도형 화로의 몸통 폭 — 월드 32 (아래 도형이 x-16..+16 을 그립니다) */
+const FORGE_SHAPE_WIDTH = 32;
+
 export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: number, ty: number): void {
   const x = tileCenter(tx);
   const y = tileCenter(ty);
@@ -639,7 +690,17 @@ export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: numbe
   const stage = stageOf(world.me.town);
   const grown = FORGE_GROWN[Math.min(stage, FORGE_GROWN.length - 1)]!;
 
-  drawShadow(ctx, x, y + 9 * grown, 17 * grown);
+  //  ★ 그림이 있으면 그림으로. 없으면 아래 도형이 그대로 나옵니다 (CLAUDE.md 5장).
+  //  ★ 그리는 폭을 **파일에서 냅니다** — 숫자를 코드에 박으면 그림을 다시 뽑을 때
+  //    조용히 어긋납니다. 월드 1px = 그림 3px 이므로 naturalWidth / 3 입니다.
+  const look = forgeLook(world);
+  const forgeImg = spriteFor(look.key);
+  const bodyW = forgeImg ? forgeImg.naturalWidth / FORGE_PX_PER_WORLD : FORGE_SHAPE_WIDTH;
+  //  불과 불티는 **실제로 그려진 것**의 자리를 따라갑니다. 도형으로 떨어지면 도형 자리로.
+  const spot = forgeImg ? look : FORGE_SHAPE;
+
+  //  그림자도 몸통 폭을 따릅니다 — 32 × 0.53 = 17 로 예전 값과 같습니다
+  drawShadow(ctx, x, y + 9 * grown, bodyW * 0.53 * grown);
 
   ctx.save();
   ctx.translate(x, y);
@@ -650,67 +711,79 @@ export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: numbe
 
   ctx.save();
 
-  // 굴뚝 — 화덕보다 뒤에 있으므로 먼저
-  ctx.fillStyle = darken(stone, 0.35);
-  ctx.fillRect(x + 5, y - 34, 9, 18);
-  ctx.fillStyle = darken(stone, 0.55);
-  ctx.fillRect(x + 5, y - 36, 9, 3);
+  if (forgeImg) {
+    //  ★ 발밑은 **그림의 아래 끝**입니다. 화로의 밑동이 y+9 에 닿습니다 —
+    //    바로 위 drawShadow 가 쓰는 것과 같은 값입니다.
+    drawSprite(ctx, forgeImg, x, y + 9, bodyW);
+  } else {
+    // 굴뚝 — 화덕보다 뒤에 있으므로 먼저
+    ctx.fillStyle = darken(stone, 0.35);
+    ctx.fillRect(x + 5, y - 34, 9, 18);
+    ctx.fillStyle = darken(stone, 0.55);
+    ctx.fillRect(x + 5, y - 36, 9, 3);
 
-  // 화덕 몸통
-  ctx.fillStyle = darken(stone, 0.2);
-  ctx.beginPath();
-  ctx.moveTo(x - 16, y + 9);
-  ctx.lineTo(x - 14, y - 16);
-  ctx.lineTo(x + 14, y - 16);
-  ctx.lineTo(x + 16, y + 9);
-  ctx.closePath();
-  ctx.fill();
-  // 빛 받는 윗면
-  ctx.fillStyle = lighten(stone, 0.16);
-  ctx.beginPath();
-  ctx.ellipse(x, y - 16, 14, 4.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // 돌 이음매 — 몇 줄이면 벽돌로 읽힙니다
-  ctx.strokeStyle = alpha('#1b1613', 0.5);
-  ctx.lineWidth = 1;
-  for (const dy of [-8, 0]) {
+    // 화덕 몸통
+    ctx.fillStyle = darken(stone, 0.2);
     ctx.beginPath();
-    ctx.moveTo(x - 15, y + dy);
-    ctx.lineTo(x + 15, y + dy);
-    ctx.stroke();
+    ctx.moveTo(x - 16, y + 9);
+    ctx.lineTo(x - 14, y - 16);
+    ctx.lineTo(x + 14, y - 16);
+    ctx.lineTo(x + 16, y + 9);
+    ctx.closePath();
+    ctx.fill();
+    // 빛 받는 윗면
+    ctx.fillStyle = lighten(stone, 0.16);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 16, 14, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 돌 이음매 — 몇 줄이면 벽돌로 읽힙니다
+    ctx.strokeStyle = alpha('#1b1613', 0.5);
+    ctx.lineWidth = 1;
+    for (const dy of [-8, 0]) {
+      ctx.beginPath();
+      ctx.moveTo(x - 15, y + dy);
+      ctx.lineTo(x + 15, y + dy);
+      ctx.stroke();
+    }
+
+    // 아궁이 — 안쪽이 뚫린 아치
+    ctx.fillStyle = '#140d09';
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 7);
+    ctx.lineTo(x - 8, y - 5);
+    ctx.arc(x, y - 5, 8, Math.PI, 0);
+    ctx.lineTo(x + 8, y + 7);
+    ctx.closePath();
+    ctx.fill();
   }
 
-  // 아궁이 — 안쪽이 뚫린 아치
-  ctx.fillStyle = '#140d09';
-  ctx.beginPath();
-  ctx.moveTo(x - 8, y + 7);
-  ctx.lineTo(x - 8, y - 5);
-  ctx.arc(x, y - 5, 8, Math.PI, 0);
-  ctx.lineTo(x + 8, y + 7);
-  ctx.closePath();
-  ctx.fill();
+  //  ★ 불은 **언제나 코드가 그립니다.** 그림에 구우면 안 흔들립니다 —
+  //    아궁이는 이 게임에서 유일하게 살아 움직이는 빛입니다.
+  //    자리는 `spot` 이 정합니다 (그림이면 재서 넣은 값, 도형이면 도형의 자리).
+  const fx = x + spot.fire.x;
+  const fy = y + spot.fire.y;
 
   // 숯불
   ctx.globalCompositeOperation = 'lighter';
   ctx.globalAlpha = 0.55 + glow * 0.4;
   ctx.fillStyle = '#ff7a2a';
   ctx.beginPath();
-  ctx.ellipse(x, y + 1, 6.5, 4.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(fx, fy, 6.5, 4.4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 0.5 + glow * 0.5;
   ctx.fillStyle = '#ffd487';
   ctx.beginPath();
-  ctx.ellipse(x, y + 1.5, 3.4, 2.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(fx, fy + 0.5, 3.4, 2.2, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // 아궁이가 바깥으로 흘리는 빛
   ctx.globalAlpha = 0.18 + glow * 0.22;
-  const spill = ctx.createRadialGradient(x, y, 2, x, y, 34);
+  const spill = ctx.createRadialGradient(fx, fy - 1, 2, fx, fy - 1, 34);
   spill.addColorStop(0, 'rgba(255,150,60,0.85)');
   spill.addColorStop(1, 'rgba(255,120,40,0)');
   ctx.fillStyle = spill;
   ctx.beginPath();
-  ctx.ellipse(x, y + 2, 34, 22, 0, 0, Math.PI * 2);
+  ctx.ellipse(fx, fy + 1, 34, 22, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // 굴뚝에서 오르는 불티 — 움직이는 것이 있어야 눈에 걸립니다
@@ -718,7 +791,11 @@ export function drawForge(ctx: CanvasRenderingContext2D, world: World, tx: numbe
     const phase = (world.time * 0.55 + i * 0.25) % 1;
     ctx.globalAlpha = (1 - phase) * 0.6;
     ctx.fillStyle = i % 2 === 0 ? '#ffb35c' : '#ff8a3d';
-    ctx.fillRect(x + 8 + Math.sin(i * 2.3 + world.time * 1.7) * 3, y - 36 - phase * 22, 2, 2);
+    ctx.fillRect(
+      x + spot.chimney.x + Math.sin(i * 2.3 + world.time * 1.7) * 3,
+      y + spot.chimney.y - phase * 22,
+      2, 2,
+    );
   }
   ctx.restore();
 

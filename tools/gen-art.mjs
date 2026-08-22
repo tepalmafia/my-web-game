@@ -175,6 +175,20 @@ const REST = [
     prompt: 'a single small stone boulder made of cold purple-grey cave rock, ' +
       'bare rock only, nothing under it and nothing around it' + MIRROR },
 
+  //  ★ 큰 화로 — 마을이 자라면 화로가 **커지는 것이 아니라 좋아집니다.**
+  //    지금은 같은 도형을 FORGE_GROWN 으로 늘리기만 해서, 자란 것이
+  //    「더 크게 그린 같은 것」입니다 (effects.ts drawForge).
+  //  ★ 작은 것과 같은 배율입니다 — 월드 1px = 그림 3px. 월드 44 × 54.
+  //    그래서 캔버스가 132 × 162 입니다. 이 비가 곧 화면 크기가 됩니다
+  //    (effects.ts 가 naturalWidth / 3 을 폭으로 씁니다).
+  { key: 'forge-large', size: [132, 162], view: 'low top-down',
+    // ★ 문서 3장 2절의 유일한 예외 — 빛이 왼쪽 위가 아니라 아궁이에서 옵니다
+    palette: [...shades(C.stone), C.ember, C.firebox, OUTLINE],
+    prompt: 'a large stone blacksmith forge: a wide grey stone block furnace with a ' +
+      'heavy stone hood and a tall chimney above it, a broad dark arched firebox opening ' +
+      'at the front glowing orange from the coals inside, the glow lighting the stone ' +
+      'around the opening, thicker stonework than a small forge' },
+
   { key: 'forge', size: [96, 136], view: 'low top-down',
     // effects.ts drawForge — 굴뚝 y-36 부터 바닥 y+9, x -16..14 → 월드 32 × 45
     // ★ 문서 3장 2절의 유일한 예외 — 빛이 왼쪽 위가 아니라 아궁이에서 옵니다
