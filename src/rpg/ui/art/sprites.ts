@@ -18,7 +18,7 @@
  */
 
 /** 그림이 놓이는 곳 — vite 의 base 를 타므로 GitHub Pages 에서도 맞습니다 */
-const ROOT = `${import.meta.env.BASE_URL}sprites/`;
+const ROOT = `${import.meta.env.BASE_URL}props/`;
 
 /**
  *  무엇을 어느 파일로 그리는가.
@@ -30,7 +30,7 @@ const ROOT = `${import.meta.env.BASE_URL}sprites/`;
  */
 export const SPRITES: Record<string, string> = {
   //  여기에 줄을 넣는 순간 그 물건이 그림으로 바뀝니다. 비어 있으면 전부 도형입니다.
-  //  파일 이름과 키는 public/sprites/README.md 에 적혀 있습니다.
+  //  파일 이름과 키는 public/props/README.md 에 적혀 있습니다.
   //  예: 'forest/tree': 'forest-tree.png',
 };
 

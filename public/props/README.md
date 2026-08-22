@@ -1,4 +1,4 @@
-# 그림 파일
+# 그림 파일 (public/props/)
 
 여기에 png 를 넣고 `src/rpg/ui/art/sprites.ts` 의 `SPRITES` 표에 줄을 더하면
 그 물건이 도형 대신 그림으로 그려집니다. **한 장씩 켜고 끌 수 있습니다** —
