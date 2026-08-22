@@ -27,6 +27,7 @@ import { addItem, freeWeight, hasRoom } from '../core/inventory';
 import { saveWorld } from '../core/save';
 import { derive, totalWeight } from '../core/stats';
 import { enterMap } from '../core/world';
+import { inspect } from './inspect';
 import { autopilot, newPilot } from '../../../tools/autopilot';
 import type { Focus } from '../../../tools/autopilot';
 import type { ItemStack, MapId, SkillId, World } from '../types';
@@ -267,8 +268,20 @@ export type DevApi = ReturnType<typeof createApi>;
 
 /** 콘솔에서도 쓸 수 있게 window.aden 에 걸어둡니다 */
 export function attach(world: World, refresh: () => void): () => void {
-  const holder = globalThis as unknown as { aden?: DevApi };
-  holder.aden = createApi(world, refresh);
+  const holder = globalThis as unknown as { aden?: DevApi & { inspect?: () => unknown } };
+  const api = createApi(world, refresh) as DevApi & { inspect?: () => unknown };
+
+  //  ★ 검증용 읽기 창구. **개발 중에만 붙습니다.**
+  //    vite 가 빌드 때 `import.meta.env.DEV` 를 false 로 박으므로 이 가지째 사라지고,
+  //    inspect 모듈도 따라 들어가지 않습니다 (dist 를 뒤져 확인했습니다).
+  //
+  //  ★ 있는 이유는 하나입니다 — **화면 픽셀로 위치를 역추적하지 않기 위해서**입니다.
+  //    자세한 것은 dev/inspect.ts 머리말과 .claude/rules/rendering.md.
+  if (import.meta.env.DEV) {
+    api.inspect = () => inspect(world);
+  }
+
+  holder.aden = api;
   return () => {
     delete holder.aden;
   };
