@@ -212,6 +212,29 @@ const REST = [
       'brown leather grip on the left, small brass pommel and straight brass crossguard, ' +
       'the blade lighter along its top edge and darker along its bottom edge' },
 
+  /* ------------------------------------------------------------ 몬스터 둘
+   *  ★ 크기: `actors.ts` 가 `drawSprite(..., size*3.4)` 로 그린다. 그 모양을 쓰는
+   *    가장 큰 몬스터를 기준으로 3배를 잡는다 —
+   *    박쥐 size 11 → 3.4×11=37.4 월드 → 112px · 거미 size 19 → 64.6 → 194px.
+   *  ★ 세로는 그 도형의 비율을 따른다 (bat 1.65/3.80 · spider 1.36/3.85).
+   *  ★★ **색을 굽지 않는다.** 거미 모양 하나를 큰게·동굴거미·굴밑의것 셋이
+   *    나눠 쓴다. 그래서 한 색으로 구워 넣고 `SPRITE_TONES` 에 그 셋을 적어두면
+   *    `tintedSprite` 가 `def.color` 로 갈아끼운다 (.claude/rules/sprites.md 3절).
+   *    여기 넣는 팔레트와 그 표가 **같은 값이어야** 한다.
+   */
+  { key: 'monster-bat', size: [112, 48], view: 'low top-down',
+    // content/monsters.ts 광산 박쥐 color '#8a7aa8'
+    palette: [...shades('#8a7aa8'), OUTLINE],
+    prompt: 'a small bat seen from above with both leathery wings spread wide and flat, ' +
+      'a small furry body in the middle, two pointed ears, symmetric' + MIRROR },
+
+  { key: 'monster-spider', size: [194, 68], view: 'low top-down',
+    // content/monsters.ts 동굴 거미 color '#4a5a3a'
+    palette: [...shades('#4a5a3a'), OUTLINE],
+    prompt: 'a spider seen from directly above with eight legs spread evenly to both ' +
+      'sides, a small round head end and a larger round abdomen, the body much narrower ' +
+      'than the leg span, symmetric' + MIRROR },
+
   { key: 'monster-beast', size: [200, 200], view: 'low top-down',
     // actors.ts drawMonster — 월드 66.8 × 46.2. 쓰러질 때 84.8도 도므로 정사각 여백
     palette: [...shades(C.wolf), C.boot, OUTLINE],
@@ -245,6 +268,32 @@ const REST = [
   //  ★ 작은 것과 같은 배율입니다 — 월드 1px = 그림 3px. 월드 44 × 54.
   //    그래서 캔버스가 132 × 162 입니다. 이 비가 곧 화면 크기가 됩니다
   //    (effects.ts 가 naturalWidth / 3 을 폭으로 씁니다).
+  /* ------------------------------------------------------------ 광맥 여덟
+   *  ★★ **광맥은 바위와 반대다.** 바위는 배경에 섞여야 하는 장애물이고,
+   *    광맥은 **찾아서 캐는 것**이라 눈에 걸려야 한다. 그래서 지역 팔레트를
+   *    걸지 않고 **광석 색을 밝게 세워** 바닥에서 튀게 뽑는다 —
+   *    특히 광산 보라 바닥(#3a3442)에서.
+   *  ★ 광석 색은 상상하지 않는다. `content/veins.ts` 의 `def.color` 그대로다.
+   *    지금 화면이 그 색으로 알갱이를 찍으므로 그림도 같아야 종류가 안 바뀐다.
+   *  ★ 크기: `effects.ts drawVein` 이 `drawSprite(..., y+12, 32)` 로 그린다.
+   *    월드 32 × 24 → 96 × 72.
+   */
+  ...Object.entries(VEIN).map(([id, ore]) => ({
+    key: `vein-${id}`, size: [96, 72], view: 'low top-down',
+    //  ★ 바탕 바위는 어둡게, 광석은 밝게. 바탕이 밝으면 알갱이가 안 걸린다
+    palette: [darken(C.veinRock, 0.3), C.veinRock, ...shades(ore), lighten(ore, 0.55), OUTLINE],
+    prompt: 'a low dark grey rock outcrop with bright metallic ore chunks embedded in it, ' +
+      'the ore lumps clearly brighter than the rock and catching the light, ' +
+      'the rock sitting flat on the bottom edge of the image' + MIRROR,
+  })),
+
+  { key: 'vein-empty', size: [96, 72], view: 'low top-down',
+    //  ★ 바닥난 광맥 — 돌만 남는다. 종류를 안 가리고 한 장을 같이 쓴다
+    //    (effects.ts drawVein 이 spriteFor('vein/empty') 하나만 본다)
+    palette: [darken(C.veinRock, 0.3), C.veinRock, lighten(C.veinRock, 0.25), OUTLINE],
+    prompt: 'a low plain dark grey rock outcrop with empty hollow pits where ore was ' +
+      'chipped out, no metal left in it, sitting flat on the bottom edge of the image' + MIRROR },
+
   { key: 'forge-large', size: [132, 162], view: 'low top-down',
     // ★ 문서 3장 2절의 유일한 예외 — 빛이 왼쪽 위가 아니라 아궁이에서 옵니다
     palette: [...shades(C.stone), C.ember, C.firebox, OUTLINE],
@@ -257,9 +306,10 @@ const REST = [
     // effects.ts drawForge — 굴뚝 y-36 부터 바닥 y+9, x -16..14 → 월드 32 × 45
     // ★ 문서 3장 2절의 유일한 예외 — 빛이 왼쪽 위가 아니라 아궁이에서 옵니다
     palette: [...shades(C.stone), C.ember, C.firebox, OUTLINE],
-    prompt: 'a stone blacksmith forge: a grey stone block furnace with a tall chimney on ' +
-      'its right and a dark arched firebox opening at the front glowing orange from the ' +
-      'coals inside, the glow lighting the stone around the opening' },
+    prompt: 'a stone blacksmith forge: a grey stone block furnace with a tall chimney rising from ' +
+      'the right hand side of the block, clearly on the right, and a dark arched ' +
+      'firebox opening at the front glowing orange from the coals inside, ' +
+      'the glow lighting the stone around the opening' },
 ];
 
 /* ======================================================================== */

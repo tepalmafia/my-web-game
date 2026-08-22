@@ -59,6 +59,23 @@ export const SPRITES: Record<string, string> = {
   //    — 띄워서 보고 안 값입니다. 광산 세 톤으로 다시 뽑은 한 장입니다.
   'cave/rock': 'cave-rock.png',
 
+  //  ★ 광맥 여덟. 키는 `vein/<id>` 이고 `effects.ts drawVein` 이 그렇게 찾습니다
+  //    (없으면 맨 키 'vein', 그것도 없으면 도형).
+  //  ★★ **광맥은 바위와 반대입니다.** 바위는 배경에 섞여야 하는 장애물이고
+  //    광맥은 찾아서 캐는 것이라 눈에 걸려야 합니다. 그래서 지역 팔레트를 안 걸고
+  //    `content/veins.ts` 의 `def.color` 를 밝게 세워 바닥에서 튀게 뽑았습니다.
+  //  ★ 종류마다 한 장인 이유 — 지금 도형이 `def.color` 로 알갱이를 찍어서
+  //    깊은 것과 얕은 것이 색으로 갈립니다. 한 장을 나눠 쓰면 그 구분이 사라집니다.
+  'vein/iron-shallow': 'vein-iron-shallow.png',
+  'vein/iron-deep': 'vein-iron-deep.png',
+  'vein/copper-shallow': 'vein-copper-shallow.png',
+  'vein/copper-deep': 'vein-copper-deep.png',
+  'vein/dark-iron': 'vein-dark-iron.png',
+  'vein/frost-iron': 'vein-frost-iron.png',
+  'vein/ember-iron': 'vein-ember-iron.png',
+  //  ★ 바닥나면 돌만 남습니다. 종류를 안 가리고 이 한 장입니다
+  'vein/empty': 'vein-empty.png',
+
   //  ★ 몬스터는 모양 단위로 겁니다. 들개·늑대·얼어붙은 것 셋이 이 한 장을 씁니다
   //    — 색과 크기는 코드가 입힙니다 (아래 SPRITE_TONES 와 def.size).
   'shape/beast': 'monster-beast.png',
