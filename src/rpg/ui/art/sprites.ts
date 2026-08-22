@@ -31,7 +31,20 @@ const ROOT = `${import.meta.env.BASE_URL}props/`;
 export const SPRITES: Record<string, string> = {
   //  여기에 줄을 넣는 순간 그 물건이 그림으로 바뀝니다. 비어 있으면 전부 도형입니다.
   //  파일 이름과 키는 public/props/README.md 에 적혀 있습니다.
-  //  예: 'forest/tree': 'forest-tree.png',
+  //
+  //  ★ 지금 켜둔 것은 셋뿐입니다. 나머지(덤불·소나무·첨탑·갱목 등)는 일부러
+  //    도형으로 둡니다 — 그림과 도형이 한 화면에 같이 섰을 때 어떻게 보이는지가
+  //    지금 판단해야 하는 것이기 때문입니다 (docs/그림-작업.md 4장).
+  //
+  //  ★ 테마를 안 붙인 맨 키('tree')로 넣습니다. 그러면 마을·숲·강가·광산
+  //    어디서 나오든 같은 그림이 걸립니다. 지역마다 다른 그림은 나중에
+  //    'forest/tree' 처럼 앞에 테마를 붙여 덮어씁니다.
+  tree: 'forest-tree.png',
+  rock: 'forest-rock.png',
+
+  //  ★ 몬스터는 모양 단위로 겁니다. 들개·늑대·얼어붙은 것 셋이 이 한 장을 씁니다
+  //    — 색과 크기는 코드가 입힙니다 (actors.ts 의 shades 와 def.size).
+  'shape/beast': 'monster-beast.png',
 };
 
 /** 한 번 부르면 받아오기 시작하고, 준비되면 그때부터 그림을 돌려줍니다 */
