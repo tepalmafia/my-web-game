@@ -10,6 +10,8 @@
  *    그런 표는 이렇게 밖에서 맞춰봐 주는 수밖에 없습니다.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { GATHER, TILE } from '../../src/rpg/balance';
@@ -18,7 +20,7 @@ import { MAPS, mapDef } from '../../src/rpg/content/maps';
 import { TOWN_STAGES } from '../../src/rpg/content/town';
 import { monsterDef } from '../../src/rpg/content/monsters';
 import { darken, lighten } from '../../src/rpg/ui/art/palette';
-import { SPRITES, SPRITE_TONES, packColor } from '../../src/rpg/ui/art/sprites';
+import { SPRITES, SPRITE_TONES, SPRITE_WALK, packColor } from '../../src/rpg/ui/art/sprites';
 import { nearForge } from '../../src/rpg/core/action';
 import { swingAtMonster } from '../../src/rpg/core/combat';
 import { createWorld } from '../../src/rpg/core/create';
@@ -744,6 +746,42 @@ describe('그림에 색 입히기', () => {
     const colors = ['stray-dog', 'wolf', 'frozen-thing'].map((id) => monsterDef(id).color);
     expect(new Set(colors).size).toBe(3);
     for (const c of colors) expect(c).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+});
+
+/**
+ *  ★ 이 묶음이 생긴 이유: 걷기는 그림 여러 장인데 `drawSprite` 는 **가로만 받고
+ *    세로를 그림 비율로** 냅니다. 그래서 프레임마다 크기가 다르면 짐승이 걷는 것이
+ *    아니라 **커졌다 작아졌다** 합니다. 눈으로는 「좀 이상한데」로 끝나기 쉬워서
+ *    파일에서 직접 재 둡니다.
+ */
+describe('걷기 프레임', () => {
+  /** PNG 머리에서 크기만 읽습니다 — 이것 때문에 해독기를 부를 것까지는 없습니다 */
+  const sizeOf = (file: string) => {
+    const buf = readFileSync(`public/props/${file}`);
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  };
+
+  it('걷기 표의 키가 전부 그림 표에 있다', () => {
+    for (const key of Object.keys(SPRITE_WALK)) {
+      expect(SPRITES[key], `SPRITE_WALK 에 '${key}' 가 있는데 SPRITES 에는 없습니다`).toBeTruthy();
+    }
+  });
+
+  it('한 키의 프레임들이 같은 크기다', () => {
+    for (const [key, files] of Object.entries(SPRITE_WALK)) {
+      expect(files.length, `${key} 의 프레임이 모자랍니다`).toBeGreaterThanOrEqual(2);
+      const sizes = files.map(sizeOf);
+      for (const s of sizes) {
+        expect(s, `${key} 의 프레임 크기가 서로 다릅니다: ${JSON.stringify(sizes)}`).toEqual(sizes[0]);
+      }
+    }
+  });
+
+  it('프레임 파일이 실제로 있다', () => {
+    for (const files of Object.values(SPRITE_WALK)) {
+      for (const f of files) expect(existsSync(`public/props/${f}`), `없는 파일: ${f}`).toBe(true);
+    }
   });
 });
 

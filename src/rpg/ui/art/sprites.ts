@@ -53,6 +53,28 @@ export const SPRITES: Record<string, string> = {
 };
 
 /**
+ *  걷는 그림 — **키 하나에 여러 장**입니다.
+ *
+ *  ★ 여기 없는 키는 SPRITES 의 정지 한 장으로 그대로 떨어집니다.
+ *    프레임이 있는 것만 걷고, 나머지는 지금과 똑같습니다.
+ *
+ *  ★ **왜 세 장인가.** PixelLab 의 골격 애니메이션은 한 창이 정확히 3프레임이고,
+ *    창을 이어붙일 수 없습니다 — 같은 관절을 두 창에 줘도 29.8% 다르게 나오고
+ *    발밑이 4px 어긋납니다 (docs/그림-작업.md 5.1.1). 그래서 세 장으로
+ *    **0 → 1 → 2 → 1 되짚기**를 해서 네 박자를 만듭니다.
+ *
+ *  ★ 세 장은 크기가 같아야 합니다. drawSprite 가 가로만 받고 세로를 비율로 내므로
+ *    장마다 높이가 다르면 걷는 것이 아니라 커졌다 작아졌다 합니다.
+ *    tools/align-frames.mjs 가 그것을 맞춰 굽습니다.
+ */
+export const SPRITE_WALK: Record<string, readonly string[]> = {
+  'shape/beast': ['beast-walk0.png', 'beast-walk1.png', 'beast-walk2.png'],
+};
+
+/**  0 → 1 → 2 → 1. 세 장으로 네 박자 */
+const WALK_ORDER = [0, 1, 2, 1] as const;
+
+/**
  *  그림에 구워진 세 톤 — **코드가 다른 색으로 갈아끼우라고 적어두는 값입니다.**
  *
  *  ★ 왜 필요한가. 7종이 모양 3개에 얹혀 있어서, 색을 그림에 구우면
@@ -89,39 +111,66 @@ export function spriteFailures(): string[] {
  *    `naturalWidth` 는 0 입니다. 그걸 그리면 아무것도 안 나옵니다.
  */
 export function spriteFor(...keys: string[]): HTMLImageElement | null {
-  return spriteEntry(...keys)?.img ?? null;
+  return spriteEntry(keys)?.img ?? null;
 }
 
 /**
- *  같은 것을 돌려주되 **어느 키가 맞았는지도** 알려줍니다.
+ *  파일 한 장. 받아오기 시작하고, **정말 그릴 수 있을 때만** 돌려줍니다.
+ *
+ *  @param id  캐시와 오류 메시지에 쓰는 이름. 프레임은 `키#번호` 입니다
+ */
+function imageOf(id: string, file: string): HTMLImageElement | null {
+  const found = loaded.get(id);
+  if (found) return found.complete && found.naturalWidth > 0 ? found : null;
+
+  // 브라우저가 아니면(시험은 environment:'node') 언제나 도형입니다
+  if (typeof Image === 'undefined') return null;
+
+  const img = new Image();
+  img.onerror = () => {
+    if (failed.has(id)) return;
+    failed.add(id);
+    //  ★ 표에 있는데 파일이 없는 것은 조용히 넘길 일이 아닙니다.
+    console.error(`그림을 못 찾았습니다: ${id} → ${ROOT}${file}`);
+  };
+  img.src = `${ROOT}${file}`;
+  loaded.set(id, img);
+  return null;
+}
+
+/**
+ *  그릴 그림과 **어느 키가 맞았는지**.
  *
  *  ★ 왜 키가 필요한가. 색을 갈아끼울지 말지가 키에 달렸습니다 —
  *    `shape/beast`(여럿이 나눠 쓰는 그림)는 물들이고,
  *    `monster/<id>`(그 몬스터 전용 그림)는 이미 제 색이라 그대로 둡니다.
+ *
+ *  @param phase  걸음 위상(라디안). 주면 걷는 그림에서 프레임을 고릅니다.
+ *                안 주면 정지 한 장입니다.
+ *
+ *  ★ 걷는 그림이 아직 안 받아졌으면 **정지 한 장으로 떨어집니다** —
+ *    받는 동안 도형과 그림 사이를 오가며 깜빡이지 않게.
  */
 export function spriteEntry(
-  ...keys: string[]
+  keys: string[],
+  phase?: number,
 ): { img: HTMLImageElement; key: string } | null {
   for (const key of keys) {
-    const file = SPRITES[key];
-    if (!file) continue;
+    const still = SPRITES[key];
+    if (!still) continue;
 
-    const found = loaded.get(key);
-    if (found) return found.complete && found.naturalWidth > 0 ? { img: found, key } : null;
+    const walk = phase === undefined ? undefined : SPRITE_WALK[key];
+    if (walk) {
+      //  네 박자 중 어디인가. 사인 한 바퀴(2π)에 네 박자라
+      //  도형으로 걷던 것과 걸음 빠르기가 같습니다.
+      const beat = Math.floor(phase! / (Math.PI / 2));
+      const step = WALK_ORDER[((beat % WALK_ORDER.length) + WALK_ORDER.length) % WALK_ORDER.length]!;
+      const frame = imageOf(`${key}#${step}`, walk[step]!);
+      if (frame) return { img: frame, key };
+    }
 
-    // 브라우저가 아니면(시험은 environment:'node') 언제나 도형입니다
-    if (typeof Image === 'undefined') return null;
-
-    const img = new Image();
-    img.onerror = () => {
-      if (failed.has(key)) return;
-      failed.add(key);
-      //  ★ 표에 있는데 파일이 없는 것은 조용히 넘길 일이 아닙니다.
-      console.error(`그림을 못 찾았습니다: ${key} → ${ROOT}${file}`);
-    };
-    img.src = `${ROOT}${file}`;
-    loaded.set(key, img);
-    return null;
+    const img = imageOf(key, still);
+    return img ? { img, key } : null;
   }
   return null;
 }

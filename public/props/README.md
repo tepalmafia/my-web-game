@@ -26,6 +26,31 @@
 | 몬스터 | `monster/<몬스터id>` — 예 `monster/wolf` | `shape/<모양>` (beast·bat·spider) 를 찾고, 없으면 도형 |
 
 테마는 `town` · `forest` · `cave` · `river` 넷입니다.
+
+## 걷는 그림
+
+`sprites.ts` 의 `SPRITE_WALK` 에 **키 하나 : 파일 여럿**으로 겁니다.
+여기 없는 키는 위의 정지 한 장으로 그대로 떨어집니다 —
+**프레임이 있는 것만 걷고 나머지는 지금과 똑같습니다.**
+
+| | |
+|---|---|
+| 장수 | **세 장.** PixelLab 골격 애니메이션의 한 창이 정확히 3프레임입니다 |
+| 순서 | **0 → 1 → 2 → 1** 되짚기. 세 장으로 네 박자 |
+| 왜 이어붙이지 않나 | 창을 이어붙일 수 없습니다. 같은 관절을 두 창에 줘도 29.8% 다르게 나오고 발밑이 4px 어긋납니다 (docs/그림-작업.md 5.1.1) |
+| **크기** | **세 장이 같아야 합니다.** `drawSprite` 가 가로만 받고 세로를 비율로 내므로, 장마다 높이가 다르면 걷는 것이 아니라 커졌다 작아졌다 합니다 |
+| 아래 끝 | 세 장 다 붙어 있어야 합니다. 한 장이라도 뜨면 그 프레임에서 발이 뜹니다 |
+
+뽑고 맞추는 법:
+
+```
+node tools/gen-frames.mjs beast     # 관절을 뽑고 걷기 3장
+node tools/outline-art.mjs beast-walk
+node tools/align-frames.mjs beast   # 발밑을 맞추고 같은 사각형으로 자른다
+```
+
+`align-frames.mjs` 를 꼭 지나가야 합니다. `trim-art.mjs` 는 장마다 따로 자르므로
+프레임에는 쓰면 안 됩니다. 크기가 같은지는 `tests/rpg/art.test.ts` 가 지킵니다.
 장애물 종류 중 실제로 화면에 나오는 것은 여덟뿐입니다 —
 `tree` `pine` `bush` `rock` `spire` `beam` `deadbush` `crystal`.
 

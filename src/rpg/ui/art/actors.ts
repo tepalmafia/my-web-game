@@ -500,7 +500,14 @@ export function drawMonster(ctx: CanvasRenderingContext2D, world: World, monster
   const tone = shades(def.color);
   //  ★ 그림이 있으면 그림으로. 뒤집기·쓰러짐·번쩍임은 바깥에서 걸리므로
   //    그림으로 바꿔도 연출이 그대로 삽니다.
-  const found = spriteEntry(`monster/${monster.defId}`, `shape/${def.shape}`);
+  //  ★ 걸음 위상을 같이 넘깁니다. 걷는 그림이 있으면 프레임을 고르고,
+  //    없으면 지금처럼 정지 한 장입니다. 서 있으면 0 번(대기 자세)입니다.
+  //
+  //    ★ 쓰러지는 중에는 걷지 않습니다 — 도형 갈래가 walk=0 을 넘기는 것과 같습니다.
+  const found = spriteEntry(
+    [`monster/${monster.defId}`, `shape/${def.shape}`],
+    dying === null && monster.moving ? monster.anim : 0,
+  );
   if (found) {
     //  ★★ **색은 여기서 입힙니다.** 모양 하나를 여럿이 나눠 쓰기 때문입니다 —
     //    들개·늑대·얼어붙은 것이 다 beast 인데, 그림에 색을 구우면 셋이
