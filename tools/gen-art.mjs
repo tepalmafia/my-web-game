@@ -61,6 +61,24 @@ const C = {
   stone:     '#584f47',  // effects.ts drawForge 의 stone — 이 저장소에 있는 유일한 돌색
   ember:     '#ff7a2a',  // effects.ts 숯불
   firebox:   '#140d09',  // effects.ts 아궁이 안쪽
+  wood:      '#6b4f32',  // gen-art 자체값 없음 → actors.ts grip(#3a2c20)을 밝힌 값. 갱목
+  crystal:   '#5ee0ff',  // palette.ts cave.liquidGlow — 빛나는 수정
+  veinRock:  '#463f38',  // effects.ts drawVein 의 바탕 바위
+};
+
+/**
+ *  광맥 색 — **content/veins.ts 의 def.color 그대로입니다.**
+ *  ★ 지금 화면이 이 색으로 광석 알갱이를 찍습니다. 그림도 같은 색이어야
+ *    그림을 껐다 켰을 때 광맥 종류가 안 바뀝니다.
+ */
+const VEIN = {
+  'iron-shallow': '#8a7d6b',
+  'iron-deep':    '#a08a6a',
+  'copper-shallow': '#c47a4a',
+  'copper-deep':  '#e08a4a',
+  'dark-iron':    '#5a5560',
+  'frost-iron':   '#9fb3bd',
+  'ember-iron':   '#c96a3a',
 };
 
 /**
@@ -136,6 +154,52 @@ const TORSO_VARIANTS = [
  * ======================================================================== */
 
 const REST = [
+  /* ------------------------------------------------------------ 프롭 여섯
+   *  ★ 크기는 상상하지 않습니다. `terrain.ts` 의 `PROP_WIDTH` × 3 이 가로이고,
+   *    세로는 그 도형이 실제로 덮는 높이 × 3 입니다 (접지선 = 타일 위 0.72,
+   *    TILE 32 이므로 타일 가운데에서 7.04 아래).
+   *  ★ 화면에 실제로 나오는 여덟 중 나무·바위는 이미 있어서 여섯만 뽑습니다.
+   */
+  { key: 'prop-pine', size: [90, 114], view: 'low top-down',
+    // PROP_WIDTH.pine 30 · 도형 y -31..+7 → 월드 30 × 38
+    palette: [...ZONE.forest, C.grip, darken(C.grip, 0.3), OUTLINE],
+    prompt: 'a tall narrow evergreen pine tree with three stacked triangular tiers of ' +
+      'dark green needles and a short brown trunk, the trunk bottom touching the very ' +
+      'bottom edge of the image' + MIRROR },
+
+  { key: 'prop-bush', size: [86, 60], view: 'low top-down',
+    // PROP_WIDTH.bush 29 · 도형 y -13..+7 → 월드 29 × 20
+    palette: [...ZONE.forest, OUTLINE],
+    prompt: 'a low round green leafy shrub, three overlapping clumps of foliage, ' +
+      'no trunk visible, sitting flat on the bottom edge of the image' + MIRROR },
+
+  { key: 'prop-deadbush', size: [60, 42], view: 'low top-down',
+    //  ★ 강가에만 납니다 (PROP_SETS.river). 그래서 강가 팔레트입니다
+    palette: [...ZONE.river, OUTLINE],
+    prompt: 'a small dry leafless shrub of thin bare twigs fanning upward and outward, ' +
+      'dry olive brown, sitting on the bottom edge of the image' + MIRROR },
+
+  { key: 'prop-spire', size: [54, 80], view: 'low top-down',
+    //  ★ 광산 보라. 초록 이끼 금지 (.claude/rules/sprites.md 3절)
+    palette: [...ZONE.cave, OUTLINE],
+    prompt: 'a single narrow pointed rock spire rising from the ground, a sharp stone ' +
+      'cone of cold purple-grey cave rock, nothing around it' + MIRROR },
+
+  { key: 'prop-beam', size: [90, 102], view: 'low top-down',
+    //  ★ 갱목. 나무지만 광산 팔레트에 나무색 둘을 더합니다 — 보라 바닥에서
+    //    혼자 초록빛이 되지 않게 하면서도 「나무」로 읽혀야 합니다
+    palette: [...ZONE.cave, C.wood, darken(C.wood, 0.35), OUTLINE],
+    prompt: 'a wooden mine shaft support frame: two upright timber posts with one ' +
+      'horizontal beam across the top, rough dark timber, nothing between the posts' + MIRROR },
+
+  { key: 'prop-crystal', size: [74, 90], view: 'low top-down',
+    //  ★ 빛나는 것 — 코드가 위에 빛을 더 얹습니다 (terrain.ts drawLights).
+    //    그림에는 몸만 있고 번짐은 굽지 않습니다
+    palette: [...ZONE.cave, C.crystal, lighten(C.crystal, 0.5), OUTLINE],
+    prompt: 'a cluster of three glowing cyan crystal shards of different heights growing ' +
+      'straight up from a small dark rock base, the crystals bright and translucent, ' +
+      'no light halo or glow bloom around them' + MIRROR },
+
   { key: 'char-helm', size: [40, 28], view: 'low top-down',
     // actors.ts — 투구 arc r6.4, 챙 12.8 wide → 월드 13.3 × 9.3
     palette: [...shades(C.ironHelm), OUTLINE],

@@ -42,6 +42,18 @@ export const SPRITES: Record<string, string> = {
   tree: 'forest-tree.png',
   rock: 'forest-rock.png',
 
+  //  ★ 화면에 실제로 나오는 장애물 여덟 중 나머지 여섯입니다
+  //    (`terrain.ts` 의 PROP_SETS — tree · pine · bush · rock · spire · beam ·
+  //     deadbush · crystal). 테마를 안 붙인 맨 키라 어느 지역에서든 같은 그림입니다.
+  //  ★ 지역 팔레트는 그 물건이 **실제로 나는 곳**의 것으로 뽑았습니다 —
+  //    마른덤불은 강가에만, 첨탑·갱목·수정은 광산에만 납니다.
+  pine: 'prop-pine.png',
+  bush: 'prop-bush.png',
+  deadbush: 'prop-deadbush.png',
+  spire: 'prop-spire.png',
+  beam: 'prop-beam.png',
+  crystal: 'prop-crystal.png',
+
   //  ★ 광산만 따로 겁니다. 'cave/rock' 이 'rock' 을 덮습니다.
   //    회색 바위를 보라 바닥(#3a3442)에 놓으면 혼자 다른 데서 온 것처럼 보였습니다
   //    — 띄워서 보고 안 값입니다. 광산 세 톤으로 다시 뽑은 한 장입니다.
