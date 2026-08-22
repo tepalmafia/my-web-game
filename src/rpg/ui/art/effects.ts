@@ -653,8 +653,11 @@ const FORGE_SHAPE = { fire: { x: 0, y: 1 }, chimney: { x: 8, y: -36 } };
 /**  불·굴뚝 자리는 상상하지 않고 파일에서 쟀습니다 (팔레트의 숯불색 픽셀 무게중심) */
 const FORGE_SMALL: ForgeLook = {
   key: 'forge',
-  fire: { x: -0.4, y: 1.0 },
-  chimney: { x: 6.3, y: -28.3 },
+  //  ★ 굴뚝을 오른쪽으로 다시 뽑고 재잰 값입니다. 도형도 x+5 에 굴뚝이 있어서
+  //    이제 그림과 도형이 같은 쪽입니다 — 빛이 왼쪽 위에서 오는데 굴뚝만
+  //    반대편에 있으면 어색합니다.
+  fire: { x: 2.1, y: 0.6 },
+  chimney: { x: 5.3, y: -28.0 },
 };
 const FORGE_LARGE: ForgeLook = {
   key: 'forge-large',

@@ -80,6 +80,14 @@ export const SPRITES: Record<string, string> = {
   //    — 색과 크기는 코드가 입힙니다 (아래 SPRITE_TONES 와 def.size).
   'shape/beast': 'monster-beast.png',
 
+  //  ★ 박쥐. 광산 박쥐 하나만 이 모양을 씁니다.
+  //  ★★ **거미는 일부러 비워 뒀습니다.** 두 번 뽑았는데 프레임을 48% · 58% 만
+  //    채워서 화면 실루엣이 1.65s · 1.98s 였습니다 (도형은 3.85s).
+  //    `drawSprite` 가 **캔버스 가로**를 크기로 쓰기 때문에 프레임을 안 채우면
+  //    그만큼 작게 그려집니다. 세 번째를 시도하지 않고 도형으로 둡니다
+  //    (docs/그림-작업.md 0.4).
+  'shape/bat': 'monster-bat.png',
+
   //  ★ 화로 둘. **어느 것을 그릴지는 effects.ts 의 `forgeLook` 하나가 정합니다** —
   //    지금은 마을 단계로 고르지만 그 단계는 폐기 예정이라(전체설계 8.1),
   //    고르는 규칙을 이 표에 넣지 않고 그쪽 한 함수에 몰아뒀습니다.
@@ -127,6 +135,10 @@ const WALK_ORDER = [0, 1, 2, 1] as const;
  */
 export const SPRITE_TONES: Record<string, readonly [light: string, base: string, dark: string]> = {
   'shape/beast': ['#a4aab1', '#7d8590', '#494d54'],
+  //  ★ 박쥐는 지금 한 종만 쓰지만 표에 넣어 둡니다 — 종이 늘 때 색을 코드가
+  //    입히는 구조가 그대로 서 있어야 합니다. 값은 `shades('#8a7aa8')` 그대로이고
+  //    `tools/gen-art.mjs` 가 `color_image` 로 넣은 팔레트와 같은 셋입니다.
+  'shape/bat': ['#ada2c2', '#8a7aa8', '#504761'],
 };
 
 /** 한 번 부르면 받아오기 시작하고, 준비되면 그때부터 그림을 돌려줍니다 */

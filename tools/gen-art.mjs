@@ -231,9 +231,13 @@ const REST = [
   { key: 'monster-spider', size: [194, 68], view: 'low top-down',
     // content/monsters.ts 동굴 거미 color '#4a5a3a'
     palette: [...shades('#4a5a3a'), OUTLINE],
-    prompt: 'a spider seen from directly above with eight legs spread evenly to both ' +
-      'sides, a small round head end and a larger round abdomen, the body much narrower ' +
-      'than the leg span, symmetric' + MIRROR },
+    //  ★ 첫 판이 프레임의 48% 만 채워서 화면 실루엣이 1.65s 였습니다 (도형 3.85s).
+    //    가장자리를 물라고 못박습니다 — `drawSprite` 가 **캔버스 가로**를 크기로
+    //    쓰므로, 프레임을 안 채우면 그만큼 작게 그려집니다.
+    prompt: 'a spider seen from directly above, filling the entire frame edge to edge, ' +
+      'eight long legs spread evenly to both sides with the leftmost and rightmost leg ' +
+      'tips touching the left and right edges of the image, a small round head end and a ' +
+      'larger round abdomen, the body much narrower than the leg span, symmetric' + MIRROR },
 
   { key: 'monster-beast', size: [200, 200], view: 'low top-down',
     // actors.ts drawMonster — 월드 66.8 × 46.2. 쓰러질 때 84.8도 도므로 정사각 여백
