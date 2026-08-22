@@ -12,6 +12,8 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 
+import { decodePNG } from '../../tools/png.mjs';
+
 import { describe, expect, it } from 'vitest';
 
 import { GATHER, TILE } from '../../src/rpg/balance';
@@ -781,6 +783,99 @@ describe('걷기 프레임', () => {
   it('프레임 파일이 실제로 있다', () => {
     for (const files of Object.values(SPRITE_WALK)) {
       for (const f of files) expect(existsSync(`public/props/${f}`), `없는 파일: ${f}`).toBe(true);
+    }
+  });
+});
+
+/**
+ *  ★★ 이 묶음이 생긴 이유 — 위의 '같은 크기다' 가 **걷는 장들끼리만** 봤습니다.
+ *    그래서 정지 한 장이 따로 잘려 있는 것을 아무도 못 잡았고, 짐승이 걸음을
+ *    떼는 순간 **폭 1.31배 · 높이 1.33배로 튀었습니다** (docs/크기-체계.md 2.3).
+ *    맞추는 단위가 「한 묶음」이지 「그 몬스터 전부」가 아니었던 것입니다.
+ *
+ *  ★★ **경계가 아니라 배율을 봅니다.**
+ *    걷는 동안 다리가 벌어지고 꼬리·머리가 움직이면 불투명 경계(폭·높이)는
+ *    변합니다. 그것이 정상입니다 — 경계를 같게 만들려고 프레임마다 따로
+ *    확대·축소하면 몸이 숨 쉬듯 커졌다 작아졌다 하고, 그것이 지금보다 나쁩니다.
+ *
+ *  ★★ 그래서 자가 **넓이**입니다. 다리가 벌어져도 다리의 넓이는 그대로고
+ *    꼬리를 흔들어도 그대로입니다. 배율은 √(넓이비) 로 나옵니다.
+ *    실측으로 걷는 세 장의 흩어짐이 1% 였고, 고치기 전 정지↔걷기는 27.9% 였습니다.
+ *    그래서 3% 를 문턱으로 둡니다 — 자세는 통과하고 규격 어긋남은 걸립니다.
+ */
+describe('한 몬스터의 프레임 규격', () => {
+  /** 불투명 칸의 넓이·무게중심·아래끝 — 경계 상자가 아니라 질량으로 잽니다 */
+  const measure = (file: string) => {
+    const img = decodePNG(readFileSync(`public/props/${file}`));
+    const { width, height, data } = img;
+    let area = 0;
+    let sumX = 0;
+    let lowest = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3]! <= 16) continue;
+        area++;
+        sumX += x;
+        lowest = y;
+      }
+    }
+    expect(area, `${file} 이 전부 투명합니다`).toBeGreaterThan(0);
+    return { width, height, area, centerX: sumX / area, lowest };
+  };
+
+  /** 그 키의 모든 장 — 정지 한 장 + 걷는 장들 */
+  const setsOf = () =>
+    Object.entries(SPRITE_WALK).map(([key, walk]) => {
+      const still = SPRITES[key];
+      expect(still, `SPRITE_WALK 에 '${key}' 가 있는데 SPRITES 에는 없습니다`).toBeTruthy();
+      return { key, files: [still!, ...walk] };
+    });
+
+  it('정지와 걷기가 같은 캔버스를 쓴다', () => {
+    for (const { key, files } of setsOf()) {
+      const sizes = files.map((f) => {
+        const m = measure(f);
+        return `${m.width}x${m.height}`;
+      });
+      for (const s of sizes) {
+        expect(s, `${key}: 정지와 걷기의 캔버스가 다릅니다 — ${files.join(', ')} → ${sizes.join(' / ')}`)
+          .toBe(sizes[0]);
+      }
+    }
+  });
+
+  it('모든 장의 발밑이 그림의 아래 끝이다', () => {
+    for (const { key, files } of setsOf()) {
+      for (const f of files) {
+        const m = measure(f);
+        expect(m.lowest, `${key}: ${f} 의 아래에 여백이 ${m.height - 1 - m.lowest}칸 남아 있습니다`)
+          .toBe(m.height - 1);
+      }
+    }
+  });
+
+  it('모든 장의 몸통 배율이 같다 — 경계가 아니라 넓이로 잰다', () => {
+    for (const { key, files } of setsOf()) {
+      const areas = files.map((f) => measure(f).area);
+      const scales = areas.map((a) => Math.sqrt(a / areas[0]!));
+      const spread = Math.max(...scales) / Math.min(...scales) - 1;
+      expect(
+        spread,
+        `${key}: 장마다 몸통 배율이 다릅니다 — ${files.map((f, i) => `${f} ${scales[i]!.toFixed(3)}`).join(' / ')}`,
+      ).toBeLessThan(0.03);
+    }
+  });
+
+  it('모든 장의 가로 중심이 같다', () => {
+    for (const { key, files } of setsOf()) {
+      const ms = files.map(measure);
+      const mean = ms.reduce((a, m) => a + m.centerX, 0) / ms.length;
+      for (const [i, m] of ms.entries()) {
+        expect(
+          Math.abs(m.centerX - mean) / m.width,
+          `${key}: ${files[i]} 의 가로 중심이 ${(m.centerX - mean).toFixed(1)}px 어긋납니다`,
+        ).toBeLessThan(0.02);
+      }
     }
   });
 });
