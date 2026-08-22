@@ -19,7 +19,7 @@ import { monsterDef } from '../../content/monsters';
 import type { Monster, MonsterShape, World } from '../../types';
 import { flinchFlash, flinchOffset } from '../flinch';
 import { MATERIAL, alpha, darken, lighten } from './palette';
-import { drawSprite, spriteFor } from './sprites';
+import { SPRITE_TONES, drawSprite, spriteEntry, tintedSprite } from './sprites';
 
 /** 한 색에서 밝은 면·기본·어두운 면을 만듭니다 */
 function shades(color: string): { light: string; base: string; dark: string } {
@@ -500,8 +500,18 @@ export function drawMonster(ctx: CanvasRenderingContext2D, world: World, monster
   const tone = shades(def.color);
   //  ★ 그림이 있으면 그림으로. 뒤집기·쓰러짐·번쩍임은 바깥에서 걸리므로
   //    그림으로 바꿔도 연출이 그대로 삽니다.
-  const img = spriteFor(`monster/${monster.defId}`, `shape/${def.shape}`);
-  if (img) {
+  const found = spriteEntry(`monster/${monster.defId}`, `shape/${def.shape}`);
+  if (found) {
+    //  ★★ **색은 여기서 입힙니다.** 모양 하나를 여럿이 나눠 쓰기 때문입니다 —
+    //    들개·늑대·얼어붙은 것이 다 beast 인데, 그림에 색을 구우면 셋이
+    //    같은 짐승이 되고 무엇과 싸우는지 크기로만 구분해야 합니다.
+    //    그림이 쓰는 세 톤이 SPRITE_TONES 에 적혀 있으므로 def.color 가 만드는
+    //    셋으로 1:1 로 갈아끼웁니다. 윤곽선은 그 표에 없어서 그대로 남습니다.
+    //
+    //    그 몬스터 전용 그림(monster/<id>)은 이미 제 색이라 안 건드립니다 —
+    //    표에 있는 키일 때만 물들입니다.
+    const baked = SPRITE_TONES[found.key];
+    const img = baked ? tintedSprite(found.img, baked, [tone.light, tone.base, tone.dark]) : found.img;
     //  발밑이 y + size*0.78 입니다 (바로 위 drawShadow 와 같은 값).
     //  여기서는 이미 몸 기준으로 옮겨와 있으므로 그 만큼만 내려 그립니다.
     drawSprite(ctx, img, 0, size * 0.78, size * 3.4);

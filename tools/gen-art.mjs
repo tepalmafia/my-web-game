@@ -166,6 +166,15 @@ const REST = [
     prompt: 'a single small grey stone boulder, bare rock only, ' +
       'nothing under it and nothing around it' + MIRROR },
 
+  { key: 'cave-rock', size: [72, 60], view: 'low top-down',
+    //  ★ 광산 전용 바위. 숲 바위(forest-rock)를 그대로 쓰면 회색이 보라 바닥에서
+    //    따로 놉니다 — 실제로 띄워 보고 그랬습니다. sprites.ts 주석대로
+    //    'cave/rock' 이 'rock' 을 덮으므로 이 한 장만 더하면 갈립니다.
+    //    지역색은 README 의 광산 세 톤 그대로입니다.
+    palette: [...ZONE.cave, OUTLINE],
+    prompt: 'a single small stone boulder made of cold purple-grey cave rock, ' +
+      'bare rock only, nothing under it and nothing around it' + MIRROR },
+
   { key: 'forge', size: [96, 136], view: 'low top-down',
     // effects.ts drawForge — 굴뚝 y-36 부터 바닥 y+9, x -16..14 → 월드 32 × 45
     // ★ 문서 3장 2절의 유일한 예외 — 빛이 왼쪽 위가 아니라 아궁이에서 옵니다

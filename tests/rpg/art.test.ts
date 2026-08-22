@@ -17,6 +17,8 @@ import { ITEMS } from '../../src/rpg/content/items';
 import { MAPS, mapDef } from '../../src/rpg/content/maps';
 import { TOWN_STAGES } from '../../src/rpg/content/town';
 import { monsterDef } from '../../src/rpg/content/monsters';
+import { darken, lighten } from '../../src/rpg/ui/art/palette';
+import { SPRITES, SPRITE_TONES, packColor } from '../../src/rpg/ui/art/sprites';
 import { nearForge } from '../../src/rpg/core/action';
 import { swingAtMonster } from '../../src/rpg/core/combat';
 import { createWorld } from '../../src/rpg/core/create';
@@ -713,3 +715,63 @@ describe('죽으면 쓰러진다', () => {
     expect(ctx.strokes.filter((c) => c === '#fff2e0').length, '시체가 계속 번쩍입니다').toBe(0);
   });
 });
+
+/**
+ *  ★ 이 묶음이 생긴 이유: 그림 한 장을 여럿이 나눠 쓰면서 **색만 코드가 입힙니다.**
+ *    그 연결이 표 두 개(SPRITES · SPRITE_TONES)의 키가 같다는 것에만 기대고 있는데,
+ *    어긋나도 아무 일이 안 일어납니다 — 그냥 안 물들고 회색 그대로 나옵니다.
+ *    들개·늑대·얼어붙은 것이 같은 짐승으로 보이던 것이 정확히 그 고장이었습니다.
+ */
+describe('그림에 색 입히기', () => {
+  it('톤 표의 키가 전부 그림 표에 있다', () => {
+    for (const key of Object.keys(SPRITE_TONES)) {
+      expect(SPRITES[key], `SPRITE_TONES 에 '${key}' 가 있는데 SPRITES 에는 없습니다`).toBeTruthy();
+    }
+  });
+
+  it('구워진 톤이 실제로 shades() 가 만드는 값이다', () => {
+    //  ★ 그림은 늑대색으로 구웠습니다. 그 값이 아니면 1:1 대응이 깨지고,
+    //    깨져도 화면은 조용합니다 — 안 맞는 색은 그냥 안 바뀝니다.
+    const wolf = monsterDef('wolf');
+    const [light, base, dark] = SPRITE_TONES['shape/beast']!;
+    expect(base).toBe(wolf.color);
+    expect(light).toBe(hexOf(lighten(wolf.color, 0.3)));
+    expect(dark).toBe(hexOf(darken(wolf.color, 0.42)));
+  });
+
+  it('모양을 나눠 쓰는 짐승들이 서로 다른 색을 받는다', () => {
+    //  셋 다 beast 라 그림이 같습니다. 색이 갈리지 않으면 크기로만 구분됩니다
+    const colors = ['stray-dog', 'wolf', 'frozen-thing'].map((id) => monsterDef(id).color);
+    expect(new Set(colors).size).toBe(3);
+    for (const c of colors) expect(c).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+});
+
+/**
+ *  ★ 재현 케이스입니다 (CLAUDE.md 7장). 실제로 났던 고장을 그대로 남깁니다 —
+ *    lighten/darken 이 'rgb(r,g,b)' 를 돌려주는데 '#rrggbb' 인 줄 알고 읽어서
+ *    NaN → 0 이 되었고, **짐승이 전부 새까맣게** 그려졌습니다.
+ *    화면도 콘솔도 아무 말을 안 했습니다.
+ */
+describe('색 문자열 읽기', () => {
+  it("lighten/darken 이 돌려주는 rgb() 꼴을 읽는다", () => {
+    const wolf = monsterDef('wolf').color;
+    expect(packColor(lighten(wolf, 0.3))).toBe(packColor(SPRITE_TONES['shape/beast']![0]));
+    expect(packColor(darken(wolf, 0.42))).toBe(packColor(SPRITE_TONES['shape/beast']![2]));
+  });
+
+  it("'#rrggbb' 꼴도 같은 값으로 읽는다", () => {
+    expect(packColor('#7d8590')).toBe(packColor('rgb(125,133,144)'));
+  });
+
+  it('못 읽는 색은 조용히 검정으로 떨어지지 않고 던진다', () => {
+    expect(() => packColor('없는색')).toThrow();
+    expect(() => packColor('#zzzzzz')).toThrow();
+  });
+});
+
+/** 'rgb(r,g,b)' → '#rrggbb'. lighten/darken 이 rgb() 문자열을 돌려줍니다 */
+function hexOf(rgb: string): string {
+  const [r, g, b] = rgb.match(/\d+/g)!.map(Number);
+  return '#' + [r, g, b].map((v) => v!.toString(16).padStart(2, '0')).join('');
+}
