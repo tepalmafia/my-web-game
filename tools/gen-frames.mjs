@@ -48,6 +48,10 @@ if (!SECRET) { console.error('PIXELLAB_SECRET 이 없습니다.'); process.exit(
 
 const argv = process.argv.slice(2);
 const force = argv.includes('--force');
+//  ★ 달성률을 재려고 둡니다 — 같은 조건에서 swing 만 바꿔 뽑고, 실제 프레임을
+//    덮지 않게 다른 이름으로 씁니다. --swing 을 안 주면 표의 값을 씁니다.
+const swingArg = Number(argv.find((a) => a.startsWith('--swing='))?.split('=')[1] ?? NaN);
+const tag = argv.find((a) => a.startsWith('--tag='))?.split('=')[1] ?? '';
 const name = argv.find((a) => !a.startsWith('--'));
 const subject = SUBJECTS[name];
 if (!subject) { console.error(`쓰는 법: node tools/gen-frames.mjs ${Object.keys(SUBJECTS).join('|')}`); process.exit(1); }
@@ -105,10 +109,12 @@ const poseOf = (phase) =>
     const limb = subject.limbs.find((L) => L[1] === k.label || L[2] === k.label);
     if (!limb) return { ...k, z_index: z };
     const foot = limb[2] === k.label;
-    return { ...k, z_index: z, y: k.y, x: k.x + phase * limb[3] * subject.swing * (foot ? 1 : 0.55) };
+    const swing = Number.isFinite(swingArg) ? swingArg : subject.swing;
+    return { ...k, z_index: z, y: k.y, x: k.x + phase * limb[3] * swing * (foot ? 1 : 0.55) };
   });
 
-const done = [0, 1, 2].every((i) => existsSync(`${OUT}/${name}-walk${i}.png`));
+const stem = `${name}${tag}`;
+const done = [0, 1, 2].every((i) => existsSync(`${OUT}/${stem}-walk${i}.png`));
 if (done && !force) {
   console.log('  · 걷기 3장 — 이미 있습니다');
 } else {
@@ -123,7 +129,7 @@ if (done && !force) {
     skeleton_keypoints: [0, 1, -1].map(poseOf),
     guidance_scale: 4.0,
   });
-  j.images.forEach((im, i) => writeFileSync(`${OUT}/${name}-walk${i}.png`, Buffer.from(im.base64, 'base64')));
+  j.images.forEach((im, i) => writeFileSync(`${OUT}/${stem}-walk${i}.png`, Buffer.from(im.base64, 'base64')));
   console.log(`✓ ${j.images.length}장`);
 }
 
