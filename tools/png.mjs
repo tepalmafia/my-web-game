@@ -214,3 +214,104 @@ export function fitInto(img, w, h) {
     small.data.copy(data, ((y + oy) * w + ox) * 4, y * iw * 4, (y + 1) * iw * 4);
   return { width: w, height: h, data };
 }
+
+/* ===========================================================================
+ *  APNG — 반복 애니메이션 한 파일
+ * ---------------------------------------------------------------------------
+ *  ★ 왜 APNG 인가. 실제 박자로 도는 것을 파일 하나로 남겨야 하는데
+ *    GIF 는 LZW 를 직접 짜야 하고 256색으로 줄어듭니다. APNG 는 이미 있는
+ *    PNG 인코더에 청크 셋(acTL·fcTL·fdAT)을 더하면 되고 색이 안 줄어듭니다.
+ *    의존성도 안 늘어납니다 (CLAUDE.md 5장).
+ *
+ *  ★ 폰과 요즘 브라우저에서 그대로 돕니다.
+ * ======================================================================== */
+
+const SIG_A = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+const CRC_A = new Int32Array(256);
+for (let n = 0; n < 256; n++) {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  CRC_A[n] = c;
+}
+function crcA(buf) {
+  let c = -1;
+  for (let i = 0; i < buf.length; i++) c = CRC_A[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+function chunkA(type, data) {
+  const out = Buffer.alloc(12 + data.length);
+  out.writeUInt32BE(data.length, 0);
+  out.write(type, 4, 'ascii');
+  data.copy(out, 8);
+  out.writeUInt32BE(crcA(out.subarray(4, 8 + data.length)), 8 + data.length);
+  return out;
+}
+/** 한 장을 IDAT 용 raw 로 (필터 없음) */
+function rawOf({ width, height, data }) {
+  const stride = width * 4;
+  const raw = Buffer.alloc(height * (stride + 1));
+  for (let y = 0; y < height; y++) {
+    raw[y * (stride + 1)] = 0;
+    data.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+  }
+  return raw;
+}
+
+/**
+ *  프레임들을 APNG 한 장으로. 모든 프레임은 크기가 같아야 합니다.
+ *
+ *  @param frames  [{ width, height, data }, …]
+ *  @param delays  프레임마다 머무는 시간(밀리초). 하나만 주면 전부 같습니다.
+ *  @param loops   0 이면 무한 반복
+ */
+export function encodeAPNG(frames, delays, loops = 0) {
+  if (!frames.length) throw new Error('프레임이 없습니다');
+  const { width, height } = frames[0];
+  for (const f of frames)
+    if (f.width !== width || f.height !== height)
+      throw new Error('APNG 은 모든 프레임 크기가 같아야 합니다');
+  const ms = Array.isArray(delays) ? delays : frames.map(() => delays);
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+
+  const actl = Buffer.alloc(8);
+  actl.writeUInt32BE(frames.length, 0);
+  actl.writeUInt32BE(loops, 4);
+
+  const parts = [SIG_A, chunkA('IHDR', ihdr), chunkA('acTL', actl)];
+  let seq = 0;
+
+  frames.forEach((frame, i) => {
+    //  ★ 지연은 분수(delay_num / delay_den)입니다. 분모를 1000 으로 두면
+    //    밀리초를 그대로 쓸 수 있습니다 — 82.5ms 같은 값이 반올림 없이 들어갑니다.
+    const fctl = Buffer.alloc(26);
+    fctl.writeUInt32BE(seq++, 0);
+    fctl.writeUInt32BE(width, 4);
+    fctl.writeUInt32BE(height, 8);
+    fctl.writeUInt32BE(0, 12);          // x
+    fctl.writeUInt32BE(0, 16);          // y
+    fctl.writeUInt16BE(Math.round(ms[i]), 20);
+    fctl.writeUInt16BE(1000, 22);
+    fctl[24] = 1;                        // dispose: 배경으로 지움
+    fctl[25] = 0;                        // blend: 덮어쓰기
+    parts.push(chunkA('fcTL', fctl));
+
+    const z = deflateSync(rawOf(frame), { level: 9 });
+    if (i === 0) {
+      parts.push(chunkA('IDAT', z));
+    } else {
+      const fdat = Buffer.alloc(4 + z.length);
+      fdat.writeUInt32BE(seq++, 0);
+      z.copy(fdat, 4);
+      parts.push(chunkA('fdAT', fdat));
+    }
+  });
+
+  parts.push(chunkA('IEND', Buffer.alloc(0)));
+  return Buffer.concat(parts);
+}
