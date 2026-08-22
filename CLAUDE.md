@@ -8,7 +8,7 @@
 | 무엇 | 어디 |
 |---|---|
 | 그리는 쪽 — 좌표 검증 · 그림자 · 앵커 · 빛 | `.claude/rules/rendering.md` |
-| 그림 파일 — 팔레트 · 윤곽선 · trim · 프레임 정렬 | `.claude/rules/sprites.md` |
+| 그림 파일 — 팔레트 · 윤곽선 · trim · 프레임 정렬 · **새 콘텐츠를 언제 이미지로 만드는가**(7절) | `.claude/rules/sprites.md` |
 | 시험 · 타입 · 빌드가 성한지 | **훅이 끝낼 때 막는다** (`.claude/hooks/verify.sh`) |
 | core · content · balance 를 지시 없이 못 고치게 | **훅이 막는다** (`.claude/hooks/guard-core.sh`) |
 
