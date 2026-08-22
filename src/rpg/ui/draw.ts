@@ -18,7 +18,7 @@ import { TILE } from '../balance';
 import { stageOf } from '../content/town';
 import { FLOOR, LIQUID, PROP, tileCenter } from '../core/world';
 import type { World } from '../types';
-import { computeView } from './view';
+import { computeView, snapView } from './view';
 import { deathProgress, drawMonster, drawPlayer } from './art/actors';
 import {
   drawCorpse,
@@ -159,14 +159,20 @@ function minimapScreenBox(width: number) {
 }
 
 export function draw(ctx: CanvasRenderingContext2D, world: World, width: number, height: number): void {
-  const view = computeView(world, width, height);
+  //  ★★ 카메라를 화면 픽셀 격자에 맞춥니다 (view.ts 의 snapView — 왜 필요한지 거기 적혀 있습니다).
+  //    dpr 은 GameScreen 이 setTransform 으로 넣어둔 배율입니다. 여기서 읽어야
+  //    두 곳이 같은 값을 봅니다.
+  const dpr = ctx.getTransform ? ctx.getTransform().a || 1 : 1;
+  const view = snapView(computeView(world, width, height), dpr);
   const art = ZONE_ART[world.map.def.theme];
 
   ctx.save();
   ctx.fillStyle = art.wallEdge;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.translate(width / 2, height / 2);
+  //  ★ 화면 한가운데도 픽셀에 맞춥니다. 폭이 홀수면 여기서 반 픽셀이 생기고,
+  //    그러면 카메라를 맞춰놔도 전체가 반 픽셀 밀립니다.
+  ctx.translate(Math.round((width / 2) * dpr) / dpr, Math.round((height / 2) * dpr) / dpr);
   ctx.scale(view.zoom, view.zoom);
   ctx.translate(-view.camX, -view.camY);
 

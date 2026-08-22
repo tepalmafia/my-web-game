@@ -192,8 +192,15 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
         const ctx = canvas.getContext('2d');
         if (ctx) {
           // 때린 순간 화면을 몇 픽셀 밀어줍니다 (world.shake 와는 별개로 그 위에 더해집니다)
+          //
+          //  ★ 미는 양도 화면 픽셀 단위로 반올림합니다. 여기서 소수가 남으면
+          //    draw() 안에서 카메라를 격자에 맞춰놔도 화면 전체가 그만큼 어긋나
+          //    스냅이 헛일이 됩니다 (view.ts 의 snapView).
           const shove = kick();
-          ctx.setTransform(ratio, 0, 0, ratio, shove.x * ratio, shove.y * ratio);
+          ctx.setTransform(ratio, 0, 0, ratio, Math.round(shove.x * ratio), Math.round(shove.y * ratio));
+          //  ★ 늘려 그릴 때 이웃 픽셀을 섞지 않습니다. 지금은 구워둔 지형과
+          //    작은 지도만 이 길을 타고, 나중에 스프라이트가 여기 얹힙니다.
+          ctx.imageSmoothingEnabled = false;
           draw(ctx, world, width, height);
         }
       }

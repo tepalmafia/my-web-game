@@ -50,6 +50,35 @@ export function computeView(world: World, width: number, height: number): View {
   return { zoom, camX, camY, width, height };
 }
 
+/**
+ *  ★★ 카메라를 화면의 실제 픽셀 격자에 맞춥니다. **스프라이트를 걸 때 여기가 자리입니다.**
+ *
+ *  ★ 왜 필요한가. 월드 한 칸이 화면에서 몇 픽셀인지는 `zoom × dpr` 인데,
+ *    이 값이 1.70 · 1.83 · 2.11 · 2.75 처럼 **언제나 정수가 아닙니다**.
+ *    그리고 카메라는 사람을 따라가는 소수라, 그리는 위치의 소수부가 **매 프레임 달라집니다.**
+ *    그러면 같은 벽 모서리가 프레임마다 다른 비율로 두 픽셀에 걸쳐 번지고,
+ *    가만히 서 있어도 선이 떨립니다.
+ *
+ *  ★ 무엇을 고치고 무엇은 못 고치는가. 배율이 정수가 아닌 것은 그대로입니다 —
+ *    그건 zoom 을 바꿔야 하는 일이고 "보이는 폭 800" 규칙을 깹니다.
+ *    여기서 고치는 것은 **소수부가 프레임마다 달라지는 것**입니다.
+ *    카메라를 화면 픽셀 한 칸 단위로만 움직이게 하면 소수부가 고정되고,
+ *    번지기는 남되 **떨림은 사라집니다.**
+ *
+ *  ★ dpr 은 `GameScreen.tsx` 가 `setTransform(ratio, …)` 로 넣어둔 값입니다.
+ *    `draw()` 가 `ctx.getTransform().a` 로 읽어 넘깁니다 — 두 곳이 다른 값을 보면
+ *    스냅이 어긋나 오히려 떨립니다.
+ */
+export function snapView(view: View, dpr: number): View {
+  const step = view.zoom * dpr;
+  if (!(step > 0)) return view;
+  return {
+    ...view,
+    camX: Math.round(view.camX * step) / step,
+    camY: Math.round(view.camY * step) / step,
+  };
+}
+
 /** 검증용 — 그리는 쪽과 검사가 같은 값을 봐야 합니다 */
 export const VIEW_LIMITS = { ...VIEW_MAX, minZoom: MIN_ZOOM };
 

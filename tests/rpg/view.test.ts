@@ -17,7 +17,7 @@ import { TILE } from '../../src/rpg/balance';
 import { mapDef } from '../../src/rpg/content/maps';
 import { createWorld } from '../../src/rpg/core/create';
 import { enterMap } from '../../src/rpg/core/world';
-import { VIEW_LIMITS, computeView, screenToWorld } from '../../src/rpg/ui/view';
+import { VIEW_LIMITS, computeView, screenToWorld, snapView } from '../../src/rpg/ui/view';
 import type { View } from '../../src/rpg/ui/view';
 import type { World } from '../../src/rpg/types';
 
@@ -201,5 +201,81 @@ describe('화면과 월드 사이', () => {
     const world = at('town');
     const view: View = computeView(world, 800, 600);
     expect(Object.keys(view).sort()).toEqual(['camX', 'camY', 'height', 'width', 'zoom']);
+  });
+});
+
+/* ===========================================================================
+ *  카메라를 화면 픽셀 격자에 맞춘다 (snapView)
+ *
+ *  ★ 지키는 것: **가만히 있는 것은 프레임마다 같은 자리에 그려진다.**
+ *    zoom × dpr 이 1.70 · 2.75 처럼 정수가 아니라, 카메라가 소수로 움직이면
+ *    같은 벽 모서리가 매 프레임 다른 비율로 두 픽셀에 번져 선이 떨립니다.
+ * ======================================================================== */
+
+describe('★ 카메라가 화면 픽셀 격자에 앉는다', () => {
+  const view = (camX: number, camY: number, zoom: number) => ({
+    zoom, camX, camY, width: 1100, height: 820,
+  });
+
+  //  폰 세로(하한) · Pro Max · 폰 가로 · 데스크톱(상한) — 실제로 나오는 배율들
+  const CASES: { name: string; zoom: number; dpr: number }[] = [
+    { name: '폰 세로', zoom: 0.85, dpr: 2 },
+    { name: 'Pro Max', zoom: 430 / 800 > 824 / 900 ? 430 / 800 : 824 / 900, dpr: 2 },
+    { name: '폰 가로', zoom: 844 / 800, dpr: 2 },
+    { name: '데스크톱', zoom: 1100 / 800, dpr: 2 },
+    { name: '데스크톱 dpr1', zoom: 1100 / 800, dpr: 1 },
+  ];
+
+  it('맞춘 카메라는 화면 픽셀의 정수 배에 앉는다', () => {
+    for (const c of CASES) {
+      for (const raw of [0, 0.1, 13.37, 512.499, 999.001]) {
+        const snapped = snapView(view(raw, raw * 1.7, c.zoom), c.dpr);
+        const step = c.zoom * c.dpr;
+        for (const v of [snapped.camX, snapped.camY]) {
+          const px = v * step;
+          expect(
+            Math.abs(px - Math.round(px)),
+            `${c.name} zoom ${c.zoom} dpr ${c.dpr} — ${v} 가 격자에서 ${px} 로 어긋납니다`,
+          ).toBeLessThan(1e-9);
+        }
+      }
+    }
+  });
+
+  it('★ 한 화면 픽셀 안에서 흔들려도 그리는 자리는 안 바뀐다 — 이것이 떨림의 원인이었다', () => {
+    for (const c of CASES) {
+      const step = c.zoom * c.dpr;
+      //  ★ 격자 위에서 출발합니다. 반 칸 경계에서 출발하면 조금만 밀어도
+      //    다음 칸으로 넘어가는 것이 맞는 동작이라, 그 자리를 고르면 시험이 거짓말을 합니다.
+      const a = snapView(view(400, 400, c.zoom), c.dpr);
+      const b = snapView(view(a.camX + 0.3 / step, a.camY + 0.3 / step, c.zoom), c.dpr);
+      expect(b.camX, `${c.name} — 같은 화면 픽셀 안인데 자리가 달라집니다`).toBeCloseTo(a.camX, 9);
+      expect(b.camY, `${c.name}`).toBeCloseTo(a.camY, 9);
+    }
+  });
+
+  it('한 칸을 넘으면 딱 한 칸만 움직인다 — 굳어버리면 안 된다', () => {
+    for (const c of CASES) {
+      const step = c.zoom * c.dpr;
+      const a = snapView(view(400, 400, c.zoom), c.dpr);
+      const b = snapView(view(400 + 1 / step, 400, c.zoom), c.dpr);
+      expect((b.camX - a.camX) * step, `${c.name}`).toBeCloseTo(1, 9);
+    }
+  });
+
+  it('맞춘 뒤에도 원래 자리에서 화면 픽셀 반 칸 넘게 안 벗어난다', () => {
+    for (const c of CASES) {
+      const step = c.zoom * c.dpr;
+      for (const raw of [0.1, 13.37, 512.499, 999.001]) {
+        const snapped = snapView(view(raw, raw, c.zoom), c.dpr);
+        expect(Math.abs(snapped.camX - raw) * step, `${c.name}`).toBeLessThanOrEqual(0.5 + 1e-9);
+      }
+    }
+  });
+
+  it('zoom 이나 dpr 이 0 이면 그냥 둔다 — 나눗셈이 터지지 않게', () => {
+    const v = view(13.37, 42.42, 0);
+    expect(snapView(v, 2)).toEqual(v);
+    expect(snapView(view(13.37, 42.42, 1.375), 0)).toEqual(view(13.37, 42.42, 1.375));
   });
 });
