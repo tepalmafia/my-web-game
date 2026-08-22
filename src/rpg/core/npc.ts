@@ -13,6 +13,7 @@
 
 import { itemDef } from '../content/items';
 import { DURIN, DURIN_NOTES } from '../content/lines';
+import { recipeDef } from '../content/recipes';
 import { nextStage, stageReady } from '../content/town';
 import { countOf } from './inventory';
 import type { World } from '../types';
@@ -62,4 +63,45 @@ function durinGuides(world: World): string {
 /** 대장장이 두린이 지금 하는 말 */
 export function durinSays(world: World): DurinLines {
   return { noted: durinNotes(world), guide: durinGuides(world) };
+}
+
+/* ===========================================================================
+ *  막다른 길을 여는 것 — 두린이 곡괭이를 내준다
+ *
+ *  ★ 곡괭이가 없고 · 살 돈도 없고 · 만들 재료도 없으면 **나갈 길이 없습니다.**
+ *    재보니 맨손(공격 1.1~3.4)으로는 들개(체력 40) 한 마리를 60분 동안 못 잡습니다.
+ *    그것은 무게가 아니라 막힘입니다 (CLAUDE.md 0장).
+ *
+ *  ★ 판단은 여기서 합니다. ui 는 물어보고 받아 그립니다 (4장 3번).
+ * ======================================================================== */
+
+/** 두린이 내주는 곡괭이 */
+export const LOAN_PICKAXE = 'worn-pickaxe';
+
+/**
+ *  지금 빌릴 수 있는가. null 이면 빌릴 수 있고, 아니면 **왜 안 되는지**입니다.
+ *  ★ 조용히 false 를 돌려주지 않습니다 (6장). 안 되는 이유가 화면에 나와야 합니다.
+ */
+export function pickaxeLoanProblem(world: World): string | null {
+  const me = world.me;
+
+  const hasPickaxe = me.backpack.some(
+    (s) => itemDef(s.defId).tool === 'pickaxe' && (s.durability ?? 0) > 0,
+  );
+  if (hasPickaxe) return DURIN.lentAlready;
+
+  const price = itemDef('pickaxe').price;
+  if (me.gold >= price) return `마르카에게 사면 되네. ${price} 골드일세 (지금 ${me.gold}).`;
+
+  const need = recipeDef('make-iron-pickaxe').needs[0]!;
+  const have = countOf(me, need.defId);
+  if (have >= need.count) {
+    return `쇠는 있잖은가. 화로에서 두드려 보게 (${itemDef(need.defId).name} ${have}/${need.count}).`;
+  }
+  return null;
+}
+
+/** 두린이 하는 말 — 빌릴 수 있으면 그 말, 아니면 왜 안 되는지 */
+export function pickaxeLoanSays(world: World): string {
+  return pickaxeLoanProblem(world) ?? DURIN.lend;
 }

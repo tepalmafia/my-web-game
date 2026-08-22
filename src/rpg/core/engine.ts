@@ -22,7 +22,7 @@ import { log, toast, vfx } from './feedback';
 import { pickUpNearby } from './loot';
 import { nextRandom, randRange } from './rng';
 import { derive } from './stats';
-import { blockedAt, enterMap, findPath, markOpened, portalId, portalProblem, slideMove, tileCenter } from './world';
+import { blockedAt, enterMap, findPath, markOpened, portalId, portalProblem, portalWarning, slideMove, tileCenter } from './world';
 import type { Monster, Seconds, World } from '../types';
 
 export function step(world: World, rawDt: number): void {
@@ -385,6 +385,13 @@ const KNOCK_AGAIN = 6;
 
 function checkPortals(world: World): void {
   const me = world.me;
+  //  ★ 문에서 멀어지면 물음을 거둡니다. 발밑에 없는 문의 확인 단추가
+  //    화면에 남아 있으면 무엇에 답하는 것인지 알 수 없습니다.
+  if (world.pendingPortal) {
+    const p = world.pendingPortal;
+    const away = Math.hypot(tileCenter(p.tx) - me.pos.x, tileCenter(p.ty) - me.pos.y) > TILE * 1.1;
+    if (away || !world.map.def.portals.includes(p)) world.pendingPortal = null;
+  }
   for (const portal of world.map.def.portals) {
     const px = tileCenter(portal.tx);
     const py = tileCenter(portal.ty);
@@ -402,6 +409,18 @@ function checkPortals(world: World): void {
         log(world, `${portal.label} — ${problem}`, 'bad');
       }
       continue;
+    }
+
+    //  ★ 되돌아갈 수 없는 문은 **여기서 절대 안 들어갑니다.** 묻기만 합니다.
+    //    들어가는 것은 사람이 commands.enterPending() 을 부를 때뿐입니다.
+    const warning = portalWarning(world, portal);
+    if (warning) {
+      if (world.pendingPortal !== portal) {
+        world.pendingPortal = portal;
+        toast(world, warning, 'bad');
+        log(world, `${portal.label} — ${warning}`, 'bad');
+      }
+      return;
     }
 
     //  ★ 한 번 연 문은 다시 안 닫힙니다 (목적지-기획안 3.2).

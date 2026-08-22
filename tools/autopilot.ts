@@ -21,7 +21,7 @@ import { RECIPE_ORDER, recipeDef } from '../src/rpg/content/recipes';
 import { veinDef } from '../src/rpg/content/veins';
 import { craftChance, nearForge, startCraft, startMining, startRepair } from '../src/rpg/core/action';
 import { gainChance } from '../src/rpg/balance';
-import { chooseTownPath, drinkBestPotion, respawnInTown } from '../src/rpg/core/commands';
+import { borrowPickaxe, chooseTownPath, drinkBestPotion, respawnInTown } from '../src/rpg/core/commands';
 import { repairQuote } from '../src/rpg/core/durability';
 import { buyItem, countOf, equip, sellItem } from '../src/rpg/core/inventory';
 import { derive, wearRatio } from '../src/rpg/core/stats';
@@ -234,9 +234,11 @@ function needsTown(world: World): boolean {
 
   // 짐이 찼다 — 녹이거나 팔면 가벼워집니다. 마을은 언제나 답이 됩니다.
   if (stats.load > stats.carry * 0.88) return true;
-  // 곡괭이가 없다 — 살 수 있을 때만 마을이 답입니다.
-  //   ★ 살 돈이 없는데도 마을로 보내면, 벌러 나가려다 말고 되돌아오기를 반복합니다.
-  if (!hasPickaxe(me) && liquidGold(world) >= itemDef('pickaxe').price) return true;
+  //  곡괭이가 없다 — **이제는 언제나 마을이 답입니다.**
+  //    ★ 전에는 "살 수 있을 때만" 이었습니다. 살 돈이 없는데 마을로 보내면
+  //      벌러 나가려다 말고 되돌아오기를 반복했기 때문입니다.
+  //      이제 두린이 이 빠진 곡괭이를 내주므로 빈손으로 가도 얻을 것이 있습니다.
+  if (!hasPickaxe(me)) return true;
   // 무기가 없거나 다 닳았다 — 고치거나, 만들거나, 살 수 있을 때만
   if (weaponSpent(world) && canFixWeapon(world)) return true;
   return false;
@@ -600,6 +602,9 @@ function doWork(world: World, pilot: Pilot): void {
     if (liquidGold(world) < itemDef('pickaxe').price && startCraft(world, 'make-iron-pickaxe', false, botTemper(pilot))) return;
     raiseGold(world, itemDef('pickaxe').price, true);
     buyItem(world, 'pickaxe', 1);
+    //  ★ 그래도 없으면 두린에게 빌립니다. 이 줄이 없으면 여기서 영원히 맴돌았습니다 —
+    //    사람도 마찬가지였습니다. 맨손으로는 들개도 못 잡습니다.
+    if (!hasPickaxe(me)) borrowPickaxe(world);
   }
   if (!me.backpack.some((s) => itemDef(s.defId).tool === 'hammer' && (s.durability ?? 0) > 0)) {
     // 망치가 없으면 광석은 그냥 무거운 돌입니다 — 팔아서라도 삽니다

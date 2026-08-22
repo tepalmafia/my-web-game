@@ -19,6 +19,7 @@ import { monsterDef } from '../../content/monsters';
 import type { Monster, MonsterShape, World } from '../../types';
 import { flinchFlash, flinchOffset } from '../flinch';
 import { MATERIAL, alpha, darken, lighten } from './palette';
+import { drawSprite, spriteFor } from './sprites';
 
 /** 한 색에서 밝은 면·기본·어두운 면을 만듭니다 */
 function shades(color: string): { light: string; base: string; dark: string } {
@@ -497,8 +498,17 @@ export function drawMonster(ctx: CanvasRenderingContext2D, world: World, monster
   if (Math.cos(monster.facing) < 0) ctx.scale(-1, 1);
 
   const tone = shades(def.color);
-  // 쓰러지는 동안에는 걷지도 숨쉬지도 않습니다
-  drawMonsterBody(ctx, def.shape, size, tone, dying === null ? walk : 0, dying === null ? world.time + monster.id : 0);
+  //  ★ 그림이 있으면 그림으로. 뒤집기·쓰러짐·번쩍임은 바깥에서 걸리므로
+  //    그림으로 바꿔도 연출이 그대로 삽니다.
+  const img = spriteFor(`monster/${monster.defId}`, `shape/${def.shape}`);
+  if (img) {
+    //  발밑이 y + size*0.78 입니다 (바로 위 drawShadow 와 같은 값).
+    //  여기서는 이미 몸 기준으로 옮겨와 있으므로 그 만큼만 내려 그립니다.
+    drawSprite(ctx, img, 0, size * 0.78, size * 3.4);
+  } else {
+    // 쓰러지는 동안에는 걷지도 숨쉬지도 않습니다
+    drawMonsterBody(ctx, def.shape, size, tone, dying === null ? walk : 0, dying === null ? world.time + monster.id : 0);
+  }
 
   ctx.restore();
 

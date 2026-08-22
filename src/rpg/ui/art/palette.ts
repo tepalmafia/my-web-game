@@ -243,4 +243,7 @@ export const MATERIAL: Record<string, string> = {
   'iron-helm': '#7c848f',
   /* --- 구리 --- */
   'copper-mail': '#b5734a',
+  /* --- 서릿쇠 --- */
+  'frost-iron-plate': '#9fb3bd',
+  'frost-iron-helm': '#8ea3ae',
 };

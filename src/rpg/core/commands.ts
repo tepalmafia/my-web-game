@@ -10,6 +10,7 @@
 
 import { GATHER, POTION_COOLDOWN, TILE } from '../balance';
 import { itemDef } from '../content/items';
+import { DURIN } from '../content/lines';
 import { monsterDef } from '../content/monsters';
 import { titleDef } from '../content/titles';
 import { nextStage, stageReady } from '../content/town';
@@ -17,12 +18,13 @@ import { veinDef } from '../content/veins';
 import { cancelAction, startCraft, startMining, startRepair } from './action';
 import { revive, takeCorpse } from './death';
 import { floater, log, toast } from './feedback';
-import { findStack, removeItem } from './inventory';
+import { addItem, findStack, removeItem } from './inventory';
 import { pickUpAt, placeItem } from './loot';
+import { LOAN_PICKAXE, pickaxeLoanProblem } from './npc';
 import { advanceTown } from './town';
 import { derive } from './stats';
 import { wearTitle } from './titles';
-import { tileCenter } from './world';
+import { enterMap, markOpened, portalProblem, tileCenter } from './world';
 import type { EquipSlot, TitleId, World } from '../types';
 import type { TemperId } from '../balance';
 
@@ -343,6 +345,27 @@ export function repair(world: World, uid: number): void {
   startRepair(world, uid);
 }
 
+/**
+ *  두린에게 곡괭이를 빌립니다.
+ *
+ *  ★ 될까/왜 안 될까는 core 가 답합니다 (pickaxeLoanProblem). ui 는 그 말을 그립니다.
+ *  ★ 못 넣으면 조용히 넘기지 않습니다 — 가방이 꽉 찼다면 그것도 이유입니다.
+ */
+export function borrowPickaxe(world: World): boolean {
+  const problem = pickaxeLoanProblem(world);
+  if (problem) {
+    toast(world, problem, 'bad');
+    return false;
+  }
+  if (!addItem(world, LOAN_PICKAXE, 1)) {
+    toast(world, '가방에 넣을 자리가 없습니다.', 'bad');
+    return false;
+  }
+  log(world, `두린이 ${itemDef(LOAN_PICKAXE).name} 를 내주었습니다`, 'good');
+  toast(world, DURIN.lend, 'good');
+  return true;
+}
+
 export function respawnInTown(world: World): void {
   revive(world);
 }
@@ -367,4 +390,40 @@ export function potionCount(world: World): number {
 export function warnIfHeavy(world: World): void {
   const stats = derive(world.me);
   if (stats.load > stats.carry * 0.9) toast(world, '짐이 무겁습니다', 'bad');
+}
+
+/* ===========================================================================
+ *  되돌아갈 수 없는 문
+ * ======================================================================== */
+
+/**
+ *  물음에 「들어간다」로 답합니다.
+ *
+ *  ★ engine 의 checkPortals 는 이 문으로 **절대 안 들어갑니다.** 들어가는 것은
+ *    여기 하나뿐이라, 모르고 지나치는 일이 구조적으로 없습니다.
+ */
+export function enterPending(world: World): boolean {
+  const portal = world.pendingPortal;
+  if (!portal) return false;
+
+  const problem = portalProblem(world, portal);
+  if (problem) {
+    toast(world, problem, 'bad');
+    return false;
+  }
+
+  //  ★ enterMap 이 world.mapId 를 바꾸므로 그 전에 적습니다.
+  markOpened(world, portal);
+  world.pendingPortal = null;
+  enterMap(world, portal.to, portal.toTx, portal.toTy);
+  log(world, `${world.map.def.name} 진입 — ${portal.label} 은 등 뒤에 있습니다`, 'epic');
+  toast(world, world.map.def.name, 'good');
+  return true;
+}
+
+/** 물음을 물립니다 — 아직 안 들어갑니다 */
+export function cancelPending(world: World): void {
+  if (!world.pendingPortal) return;
+  world.pendingPortal = null;
+  log(world, '돌아섰습니다', 'normal');
 }

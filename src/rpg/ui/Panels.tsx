@@ -15,9 +15,9 @@ import { forsaken, nextStage, openRecipes, openStock, progressOf, stageReady } f
 import { AXES, AXIS_ORDER, SKILLS, SKILL_ORDER } from '../content/skills';
 import { titleDef } from '../content/titles';
 import { canTemper, craftChance, craftFineChance, craftLoss, nearForge } from '../core/action';
-import { SLOT_LABEL, chooseTownPath, craft, dropItem, repair, useItem, wear } from '../core/commands';
-import { repairQuote } from '../core/durability';
-import { durinSays } from '../core/npc';
+import { SLOT_LABEL, borrowPickaxe, chooseTownPath, craft, dropItem, repair, useItem, wear } from '../core/commands';
+import { hasTool, repairQuote } from '../core/durability';
+import { durinSays, pickaxeLoanProblem, pickaxeLoanSays } from '../core/npc';
 import { buyItem, countOf, equip, sellItem, sellUnitPrice, unequip } from '../core/inventory';
 import { axisSpent, budgetLeft, learnBlock, lessonsFor, skillTotal } from '../core/skillgain';
 import { derive, itemName, itemSummary, wearRatio } from '../core/stats';
@@ -693,6 +693,28 @@ function CraftPanel({ world, refresh }: { world: World; refresh: () => void }) {
           </div>
         );
       })()}
+
+      {/*
+        ★ 막다른 길을 여는 단추. 곡괭이가 없을 때만 나타납니다.
+          될까/왜 안 될까는 core/npc 가 답합니다 — 여기는 그 말을 그립니다 (4장 3번).
+          맨손으로는 들개도 못 잡습니다(재봤습니다). 그래서 이 자리가 필요합니다.
+      */}
+      {!hasTool(world.me, 'pickaxe') && (
+        <div className="rounded-sm border border-[#5a3a12] bg-[#2a1c0a] p-2">
+          <p className="text-[11px] leading-snug text-[#e8b483]">{pickaxeLoanSays(world)}</p>
+          <button
+            type="button"
+            disabled={pickaxeLoanProblem(world) !== null}
+            onClick={() => {
+              borrowPickaxe(world);
+              refresh();
+            }}
+            className="btn mt-2 h-9 rounded-sm px-3 text-[11px] text-parch-200 disabled:opacity-40"
+          >
+            곡괭이를 빌린다
+          </button>
+        </div>
+      )}
 
       {!forge && (
         <p className="rounded-sm border border-[#5a3a12] bg-[#2a1c0a] p-2 text-[11px] text-[#e8b483]">

@@ -121,6 +121,7 @@ export function createWorld(name: string, templateId: string): World {
     pathTimer: 0,
     panel: null,
     pendingNpc: null,
+    pendingPortal: null,
     toast: null,
     seed: (Date.now() ^ 0x9e3779b9) | 0,
     meAnim: 0,

@@ -66,7 +66,12 @@ describe('한 바퀴', () => {
 
       expect(me.tally['iron-ore'] ?? 0, '광석을 못 캤습니다').toBeGreaterThan(0);
       expect(me.tally['iron-ingot'] ?? 0, '아무것도 못 만들었습니다').toBeGreaterThan(0);
-      expect(kills, '아무것도 못 잡았습니다').toBeGreaterThan(0);
+      //  ★ '잡았는가' 가 아니라 '싸웠는가' 를 봅니다. 검술은 swingAtMonster 에서만
+      //    오르므로 0 보다 크면 몬스터에게 휘두른 것이 확실합니다 (smith 는 검술 0 으로 시작).
+      //    처치 수로 재면 때리다 놓친 판을 "고리가 끊겼다" 로 잘못 읽습니다 —
+      //    씨앗 11(검술 5.2) · 22(검술 4.0) 가 실제로 그랬습니다. 처치는 0 이었습니다.
+      //    무엇을 잡을지는 봇의 선택이고, 그것은 지표가 아닙니다 (CLAUDE.md 8장 4번).
+      expect(me.skills.swordsmanship, `싸우지 않았습니다 (처치 ${kills})`).toBeGreaterThan(0);
       expect(me.skills.mining, '채광이 늘지 않았습니다').toBeGreaterThan(12);
       expect(me.skills.blacksmithing, '대장기술이 늘지 않았습니다').toBeGreaterThan(24);
     });

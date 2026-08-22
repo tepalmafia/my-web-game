@@ -12,11 +12,12 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { MAX_STEP } from '../balance';
-import { clickWorld, drinkBestPotion, moveTo, stopAction, takeGround, takeMyPack } from '../core/commands';
+import { cancelPending, clickWorld, drinkBestPotion, enterPending, moveTo, stopAction, takeGround, takeMyPack } from '../core/commands';
 import { startMining, veinAt } from '../core/action';
 import { GATHER } from '../balance';
 import { step } from '../core/engine';
 import { toast } from '../core/feedback';
+import { portalWarning } from '../core/world';
 import { saveWorld } from '../core/save';
 import type { World } from '../types';
 import { ActionBar, DeathOverlay, SkillPop, StatusBlock, Toast } from './Hud';
@@ -335,6 +336,37 @@ export function GameScreen({ world, onQuit }: { world: World; onQuit: () => void
           <StatusBlock world={world} />
           <SkillPop world={world} />
         </div>
+
+        {/*
+          ★ 되돌아갈 수 없는 문 앞. engine 은 이 문으로 절대 안 들어가고, 여기서만 들어갑니다.
+            무엇을 잃는지 모르는 채 잃는 것은 무게가 아니라 결함입니다 (전체설계 0장).
+          ★ 문구는 core 가 만듭니다 — ui 는 조건을 조립하지 않습니다 (CLAUDE.md 4-3).
+        */}
+        {world.pendingPortal && (
+          <div className="absolute inset-x-0 top-1/3 z-20 flex justify-center px-4">
+            <div className="card max-w-[22rem] rounded-sm border border-rust-600 bg-ink-900/95 p-3 text-center">
+              <div className="mb-2 text-[13px] leading-snug text-parch-200">
+                {portalWarning(world, world.pendingPortal)}
+              </div>
+              <div className="flex justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { enterPending(world); refresh(); }}
+                  className="btn h-10 rounded-sm px-4 text-[12px] text-rust-300"
+                >
+                  들어간다
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { cancelPending(world); refresh(); }}
+                  className="btn h-10 rounded-sm px-4 text-[12px] text-parch-300"
+                >
+                  돌아선다
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/*
           단추 줄은 화면 아래 전체를 가로지릅니다. 그대로 두면 단추 사이의 빈 곳이

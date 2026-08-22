@@ -37,6 +37,12 @@ const LIST: VeinDef[] = [
     capacity: 10, respawn: 220, toolWear: 3, color: '#9fb3bd',
   },
   {
+    //  ★ 최심부에서만 납니다. 여기 것을 들고 나가려면 반대편 끝까지 가야 합니다.
+    id: 'ember-iron', name: '불꽃쇠 광맥', difficulty: 96,
+    yields: 'ember-iron-ore', amountMin: 1, amountMax: 2,
+    capacity: 8, respawn: 260, toolWear: 2, color: '#c96a3a',
+  },
+  {
     //  ★ 2층에서만 납니다. capacity 가 낮은 것은 인색해서가 아니라,
     //    한 덩이가 25 스톤이라 여섯 번만 캐도 짐이 넘치기 때문입니다.
     id: 'dark-iron', name: '검은쇠 광맥', difficulty: 88,

@@ -20,6 +20,7 @@ import { FLOOR, LIQUID, PROP, valueNoise } from '../../core/world';
 import type { MapTheme, World } from '../../types';
 import type { View } from '../view';
 import { alpha, darken, lighten, mix, type ZoneArt } from './palette';
+import { drawSprite, spriteFor } from './sprites';
 
 /** 화면에 보이는 타일 범위 */
 export interface TileRange {
@@ -70,6 +71,19 @@ export function propKind(theme: MapTheme, art: ZoneArt, seed: number, tx: number
   const set = PROP_SETS[theme];
   return set[Math.floor(hash2(seed + 55, tx, ty) * set.length)]!;
 }
+
+/**
+ *  그림으로 그릴 때 화면에서 차지할 가로 크기 (scale 1 기준).
+ *  ★ 지금 도형이 실제로 그리는 폭에서 가져왔습니다 — 그림으로 바꿔도 크기가 안 튀게.
+ *  ★ 세로는 그림 비율대로 따라옵니다 (drawSprite).
+ */
+const PROP_WIDTH: Record<PropKind, number> = {
+  tree: 37, pine: 30, bush: 29, rock: 20,
+  boulder: 28, spire: 18, deadbush: 20,
+  beam: 30, crystal: 25,
+  stake: 10, totem: 14, bones: 28, campfire: 23,
+  shard: 18, vent: 26,
+};
 
 /** 빛을 내는 장애물인가 */
 export function isBeacon(kind: PropKind): boolean {
@@ -385,6 +399,17 @@ export function drawProp(
   ctx.beginPath();
   ctx.ellipse(cx + 3, cy + TILE * 0.34, TILE * 0.36 * scale, TILE * 0.15 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  //  ★ 그림이 있으면 그림으로, 없으면 아래 도형으로 떨어집니다.
+  //    지역별 그림이 있으면 그것을, 없으면 종류별 한 장을 씁니다.
+  const img = spriteFor(`${def.theme}/${kind}`, kind);
+  if (img) {
+    //  접지선은 타일 위에서 0.72 지점 — draw.ts 의 깊이 정렬과 같은 값입니다.
+    //  그 자리에 그림의 아래 끝을 놓아야 앞뒤가 안 뒤집힙니다.
+    drawSprite(ctx, img, cx, ty * TILE + TILE * 0.72, PROP_WIDTH[kind] * scale);
+    ctx.restore();
+    return;
+  }
 
   ctx.translate(cx, cy);
   ctx.scale(scale, scale);

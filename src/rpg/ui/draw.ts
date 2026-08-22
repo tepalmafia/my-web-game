@@ -104,6 +104,54 @@ function terrainLayer(world: World): HTMLCanvasElement | null {
 /** 작은 지도가 차지하는 자리 (화면 좌표) — 그리는 쪽과 이름표를 접는 쪽이 같은 값을 씁니다 */
 const MINIMAP = { size: 104, margin: 14, pad: 5 };
 
+/**
+ *  작은 지도의 **바닥**을 한 번만 굽습니다.
+ *
+ *  ★ 왜: 예전에는 매 프레임 지도 전체를 다시 칠했습니다. 숲이 46×36 이니
+ *    한 프레임에 fillRect 1,656 번 + 타일마다 alpha() 로 문자열 하나.
+ *    초당 60프레임이면 **초당 십만 번**입니다. 재보니 데스크톱이 15fps 였고,
+ *    한 프레임 4,240 개 명령 중 이것 하나가 40% 였습니다.
+ *
+ *  ★ 안전한 이유: map.tiles 는 buildMap 이 지은 뒤 아무도 안 고칩니다
+ *    (world.ts 의 set() 이 유일한 쓰기이고 전부 buildMap 안입니다).
+ *    바뀌는 것은 마을 단계뿐인데 그건 열쇠에 들어 있습니다 — terrainCache 와 같은 모양입니다.
+ *
+ *  ★ 몬스터·문·시체·나는 안 굽습니다. 그건 매 프레임 움직입니다.
+ */
+const minimapCache: { key: string; canvas: HTMLCanvasElement | null } = { key: '', canvas: null };
+
+function minimapLayer(world: World): HTMLCanvasElement | null {
+  const { def, tiles } = world.map;
+  const key = `${world.mapId}:${stageOf(world.me.town)}`;
+  if (minimapCache.key === key && minimapCache.canvas) return minimapCache.canvas;
+
+  const size = MINIMAP.size;
+  const scale = size / Math.max(def.width, def.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const art = ZONE_ART[def.theme];
+  //  ★ 색 문자열도 여기서 세 번만 만듭니다. 예전에는 타일마다 만들었습니다
+  const floor = alpha(art.ground[1]!, 0.85);
+  const liquid = alpha(art.liquidLight, 0.8);
+  const wall = alpha(art.wallEdge, 0.95);
+
+  for (let ty = 0; ty < def.height; ty++) {
+    for (let tx = 0; tx < def.width; tx++) {
+      const tile = tiles[ty * def.width + tx]!;
+      ctx.fillStyle = tile === FLOOR ? floor : tile === LIQUID ? liquid : wall;
+      ctx.fillRect(tx * scale, ty * scale, Math.ceil(scale), Math.ceil(scale));
+    }
+  }
+
+  minimapCache.key = key;
+  minimapCache.canvas = canvas;
+  return canvas;
+}
+
 function minimapScreenBox(width: number) {
   const x0 = width - MINIMAP.size - MINIMAP.margin - MINIMAP.pad;
   const y0 = MINIMAP.margin - MINIMAP.pad;
@@ -278,12 +326,11 @@ function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: numb
 }
 
 function drawMinimap(ctx: CanvasRenderingContext2D, world: World, width: number): void {
-  const { def, tiles } = world.map;
+  const { def } = world.map;
   const size = MINIMAP.size;
   const scale = size / Math.max(def.width, def.height);
   const originX = width - size - MINIMAP.margin;
   const originY = MINIMAP.margin;
-  const art = ZONE_ART[def.theme];
 
   ctx.save();
   // 놋쇠 테두리
@@ -295,16 +342,9 @@ function drawMinimap(ctx: CanvasRenderingContext2D, world: World, width: number)
   ctx.strokeStyle = 'rgba(0,0,0,0.6)';
   ctx.strokeRect(originX - 2.5, originY - 2.5, size + 5, size + 5);
 
-  for (let ty = 0; ty < def.height; ty++) {
-    for (let tx = 0; tx < def.width; tx++) {
-      const tile = tiles[ty * def.width + tx]!;
-      ctx.fillStyle =
-        tile === FLOOR ? alpha(art.ground[1]!, 0.85)
-        : tile === LIQUID ? alpha(art.liquidLight, 0.8)
-        : alpha(art.wallEdge, 0.95);
-      ctx.fillRect(originX + tx * scale, originY + ty * scale, Math.ceil(scale), Math.ceil(scale));
-    }
-  }
+  //  바닥은 구워둔 것을 붙입니다 (minimapLayer). 위에 얹는 것들만 매 프레임 그립니다
+  const baked = minimapLayer(world);
+  if (baked) ctx.drawImage(baked, originX, originY);
 
   for (const monster of world.monsters) {
     if (monster.state === 'dead') continue;

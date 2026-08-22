@@ -11,10 +11,13 @@ import { describe, expect, it } from 'vitest';
 import { itemDef } from '../../src/rpg/content/items';
 import { mapDef } from '../../src/rpg/content/maps';
 import { DURIN, DURIN_NOTES } from '../../src/rpg/content/lines';
+import { recipeDef } from '../../src/rpg/content/recipes';
 import { nextStage } from '../../src/rpg/content/town';
+import { borrowPickaxe } from '../../src/rpg/core/commands';
 import { createWorld } from '../../src/rpg/core/create';
+import { hasTool } from '../../src/rpg/core/durability';
 import { addItem } from '../../src/rpg/core/inventory';
-import { durinSays } from '../../src/rpg/core/npc';
+import { LOAN_PICKAXE, durinSays, pickaxeLoanProblem, pickaxeLoanSays } from '../../src/rpg/core/npc';
 import { advanceTown } from '../../src/rpg/core/town';
 import { enterMap } from '../../src/rpg/core/world';
 import type { World } from '../../src/rpg/types';
@@ -99,6 +102,14 @@ describe('대장장이 두린 — 안내', () => {
       advanceTown(done, stage.choices?.[0]?.id ?? null);
     }
     said.add(durinSays(done).guide);
+
+    //  ★ 빌려주는 두 줄은 durinSays 가 아니라 pickaxeLoanSays 가 냅니다.
+    //    표를 훑는 검사라 그쪽도 여기서 같이 걷어야 죽은 줄이 안 생깁니다.
+    const broke = fresh();
+    broke.me.backpack = [];
+    broke.me.gold = 0;
+    said.add(pickaxeLoanSays(broke));              // 곡괭이도 돈도 쇠도 없다
+    said.add(pickaxeLoanSays(withPickaxe()));      // 이미 들고 있다
 
     const unused = Object.entries(DURIN)
       .filter(([, line]) => ![...said].some((s) => s.startsWith(line)))
@@ -217,5 +228,72 @@ describe('발도르의 낡은 곡괭이', () => {
     const desc = itemDef('baldor-pickaxe').desc;
     expect(desc).toContain('발도르');
     expect(desc).toContain('누구인지는 적혀 있지 않습니다');
+  });
+});
+
+/* ===========================================================================
+ *  막다른 길 — 곡괭이가 없고 살 돈도 만들 재료도 없을 때
+ *
+ *  ★ 재본 것: 맨손은 공격 1.1~3.4 인데 들개는 체력 40 입니다.
+ *    씨앗 다섯 · 60분 동안 한 마리도 못 잡고 골드가 그대로였습니다.
+ *    나갈 길이 아예 없는 것은 무게가 아니라 막힘입니다 (CLAUDE.md 0장).
+ * ======================================================================== */
+
+describe('두린이 곡괭이를 내준다', () => {
+  /** 곡괭이도 · 돈도 · 쇠도 없는 판 */
+  function stuck(): World {
+    const world = fresh();
+    world.me.backpack = [];
+    world.me.gold = 0;
+    return world;
+  }
+
+  it('★ 막혔을 때는 빌릴 수 있다', () => {
+    const world = stuck();
+    expect(pickaxeLoanProblem(world), '막혔는데 안 빌려줍니다').toBeNull();
+    expect(borrowPickaxe(world)).toBe(true);
+    expect(hasTool(world.me, 'pickaxe'), '빌렸는데 캘 수가 없습니다').toBe(true);
+  });
+
+  it('★ 살 수 있으면 안 빌려준다 — 그리고 왜인지 숫자로 말한다', () => {
+    const world = stuck();
+    world.me.gold = itemDef('pickaxe').price;
+    const why = pickaxeLoanProblem(world);
+    expect(why).not.toBeNull();
+    expect(why, '값을 안 말합니다').toContain(String(itemDef('pickaxe').price));
+    expect(borrowPickaxe(world)).toBe(false);
+  });
+
+  it('★ 만들 수 있으면 안 빌려준다 — 그리고 몇 개 있는지 말한다', () => {
+    const world = stuck();
+    const need = recipeDef('make-iron-pickaxe').needs[0]!;
+    addItem(world, need.defId, need.count);
+    const why = pickaxeLoanProblem(world);
+    expect(why).not.toBeNull();
+    expect(why, '재료 개수를 안 말합니다').toContain(`${need.count}/${need.count}`);
+    expect(borrowPickaxe(world)).toBe(false);
+  });
+
+  it('이미 들고 있으면 또 주지 않는다', () => {
+    const world = stuck();
+    expect(borrowPickaxe(world)).toBe(true);
+    expect(borrowPickaxe(world), '두 자루째를 줍니다').toBe(false);
+  });
+
+  it('★ 다 쓰면 다시 빌릴 수 있다 — 한 번만 살려주는 것이 아니다', () => {
+    const world = stuck();
+    borrowPickaxe(world);
+    const lent = world.me.backpack.find((st) => st.defId === LOAN_PICKAXE)!;
+    lent.durability = 0;
+    expect(pickaxeLoanProblem(world), '다 썼는데 안 줍니다').toBeNull();
+  });
+
+  it('★ 팔아서 돈을 만들 수 없다 — 그 구멍이 열리면 이건 공짜가 된다', () => {
+    expect(itemDef(LOAN_PICKAXE).sell).toBe(0);
+    expect(itemDef(LOAN_PICKAXE).price).toBe(0);
+  });
+
+  it('공짜가 아니다 — 상점 곡괭이보다 훨씬 빨리 부러진다', () => {
+    expect(itemDef(LOAN_PICKAXE).durability!).toBeLessThan(itemDef('pickaxe').durability!);
   });
 });

@@ -337,6 +337,13 @@ export interface PortalNeeds {
    *    갑옷으로 채웁니다 — 한쪽만 열리면 갈림길이 아니라 함정입니다 (7.3 불변식).
    */
   gear?: number;
+  /**
+   *  들어가면 이 문으로는 못 돌아옵니다.
+   *
+   *  ★ 조용히 가두지 않습니다. `portalWarning()` 이 먼저 묻고, 사람이 답해야
+   *    들어갑니다 (전체설계 0장 — 잃는 것은 분명해야 하고 왜 잃었는지는 보여야 한다).
+   */
+  oneWay?: true;
   /** 못 열었을 때의 한 줄. 부족한 수치는 core 가 따로 붙입니다 */
   closed: string;
 }
@@ -604,6 +611,11 @@ export interface World {
 
   panel: PanelId | null;
   pendingNpc: NpcKind | null;
+  /**
+   *  들어가면 못 돌아오는 문 앞에 섰습니다 — 답을 기다립니다.
+   *  ★ 저장하지 않습니다. "지금 문 앞에 서 있다" 는 기록할 것이 아닙니다.
+   */
+  pendingPortal: Portal | null;
   toast: { text: string; tone: 'good' | 'bad' | 'epic'; life: Seconds } | null;
 
   seed: number;

@@ -44,6 +44,20 @@ const LIST: ItemDef[] = [
     desc: '내가 벼린 곡괭이. 상점 것보다 오래 갑니다. 대신 조금 무겁습니다.',
   },
   {
+    //  ★ 두린이 내주는 것. 사지도 팔지도 못합니다 (price 0 · sell 0).
+    //
+    //  ★ 왜 있나: 곡괭이가 없고 · 살 돈도 없고 · 만들 재료도 없으면
+    //    **나갈 길이 아예 없었습니다.** 재보니 맨손(공격 1.1~3.4)으로는
+    //    들개(체력 40) 한 마리를 60분 동안 못 잡습니다. 그것은 무게가 아니라 막힘입니다
+    //    (CLAUDE.md 0장 — 잃는 것은 분명해야 하고 왜 잃었는지는 보여야 한다).
+    //
+    //  ★ 공짜가 아닙니다. 내구 20 이면 스무 번입니다 — 한 번 살려주는 것뿐입니다.
+    //    팔 수 없게 해서 이것으로 돈을 만드는 구멍도 막습니다.
+    id: 'worn-pickaxe', name: '이 빠진 곡괭이', kind: 'tool', tool: 'pickaxe',
+    weight: 10, durability: 20, price: 0, sell: 0,
+    desc: '두린이 구석에서 꺼내준 것. 몇 번이나 버틸지 모르겠습니다.',
+  },
+  {
     id: 'hammer', name: '대장장이 망치', kind: 'tool', tool: 'hammer',
     weight: 8, durability: 120, price: 120, sell: 25,
     desc: '화로 앞에서 물건을 만들고 고칠 때 씁니다.',
@@ -75,11 +89,20 @@ const LIST: ItemDef[] = [
     price: 0, sell: 60, desc: '쥐면 손이 시립니다. 녹인 뒤에도 그렇습니다.',
   },
   {
+    //  ★ 최심부에서만 납니다. 여기까지 온 사람만 손에 넣습니다.
+    id: 'ember-iron-ingot', name: '불꽃쇠 주괴', kind: 'resource', weight: 1, stackable: true,
+    price: 0, sell: 90, desc: '식지 않습니다. 쥐고 있으면 손이 따뜻합니다.',
+  },
+  {
     //  ★ 3층 재료. 2층처럼 무겁지 않습니다 — 3층의 성격은 무게가 아니라
     //    **연장**입니다 (veins.ts 의 frost-iron.toolWear). 축을 겹치지 않게 둡니다.
     //    18 은 철광석(10)보다 무겁고 검은쇠(25)보다 가볍습니다.
     id: 'frost-iron-ore', name: '서릿쇠 광석', kind: 'resource', weight: 18, stackable: true,
     price: 0, sell: 48, desc: '돌째로 얼어 있습니다. 곡괭이가 먼저 상합니다.',
+  },
+  {
+    id: 'ember-iron-ore', name: '불꽃쇠 광석', kind: 'resource', weight: 22, stackable: true,
+    price: 0, sell: 70, desc: '깨진 자리가 아직 붉습니다.',
   },
   {
     //  ★ 2층의 성격이 이 숫자 하나에 걸려 있습니다 (전체설계 7.2).
@@ -147,6 +170,17 @@ const LIST: ItemDef[] = [
     defense: 26, weight: 34, durability: 180, price: 0, sell: 600,
     desc: '거미의 이빨도 잘 뚫지 못합니다.',
   },
+  {
+    //  ★ 마을 갈림길이 아닙니다 — 대장기술 난이도로만 잠깁니다.
+    //    갈림길에서 무기만 세 번 고른 사람의 빈 칸을 메우는 것이 이 물건의 몫입니다
+    //    (7.3 불변식 — 한쪽만 열리면 갈림길이 아니라 함정입니다).
+    //
+    //  ★ 무게 46 이 대가입니다. 이걸 입고는 광석을 얼마 못 지고 나옵니다.
+    //    2층의 축(무겁다)이 여기서 다시 값을 합니다.
+    id: 'frost-iron-plate', name: '서릿쇠 갑옷', kind: 'armor', slot: 'armor',
+    defense: 48, weight: 46, durability: 290, price: 0, sell: 1100,
+    desc: '차갑습니다. 입고 있으면 그 차가움이 안으로 배어듭니다.',
+  },
 
   /* --------------------------------------------------------------- 투구 */
   {
@@ -158,6 +192,13 @@ const LIST: ItemDef[] = [
     id: 'iron-helm', name: '철 투구', kind: 'helmet', slot: 'helmet',
     defense: 8, weight: 11, durability: 90, price: 0, sell: 90,
     desc: '머리를 지키는 대신 시야가 좁아집니다.',
+  },
+  {
+    //  ★ 투구가 둘뿐이라 4단계까지 간 사람도 머리가 철 투구 8 에서 멈췄습니다.
+    //    그 빈 칸이 함정의 절반이었습니다.
+    id: 'frost-iron-helm', name: '서릿쇠 투구', kind: 'helmet', slot: 'helmet',
+    defense: 20, weight: 14, durability: 200, price: 0, sell: 420,
+    desc: '숨을 쉬면 안쪽에 서리가 낍니다.',
   },
 
   /* --------------------------------------------------------------- 물약 */
